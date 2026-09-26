@@ -393,38 +393,22 @@ Config.PULSE_SHOT_FORCE_CAP_MULT = 6.0
 -- (alvo - bola). Quando o cliente mandava um ponto de mira degenerado
 -- (um caso real do log: bola em Y=-185 e alvo em Y=-298, ou seja, 113
 -- studs ABAIXO do gramado), a direção saía com Y=-0.99 e a bola
--- atravessava o chão viajando pra sempre. Estes três limites são
+-- atravessava o chão viajando pra sempre. Estes limites são
 -- aplicados em _G.PulseComputeShotTarget (BallController) ANTES de virar
 -- direção de chute:
 --   MAX_DROP: quanto o alvo pode ficar ABAIXO da bola (mira no canto
 --             inferior do gol continua valendo — o gol tem ~18 de altura).
---   MAX_RISE: quanto o alvo pode ficar ACIMA da bola (chute por cima da
---             barreira/cruzamento alto continua valendo).
---   MIN_HORIZONTAL: se depois do ajuste sobrar menos que isso de distância
---             horizontal, a mira não aponta pra lugar nenhum (o jogador
---             mirou no próprio pé) e o servidor usa a mira automática de
---             canto do gol adversário.
+--   MIN_HORIZONTAL: se sobrar menos que isso de distância horizontal, a
+--             mira não aponta pra lugar nenhum (o jogador mirou no próprio
+--             pé) e o chute sai reto pra frente do jogador.
+-- ⚠️ v86 — PEDIDO: "remova o assistente de mira da hissatsu [...] é só ir
+-- exatamente onde está apontado o mouse". Saíram o MAX_RISE (cortava a
+-- altura de uma mira alta, mudando o ângulo) e a assistência de altura do
+-- v67/v84 (PULSE_AIM_ASSIST_STRENGTH, puxava a mira pro travessão). Fica só
+-- o MAX_DROP, que nunca pega uma mira de verdade (o ponto sob o cursor está
+-- no máximo no gramado) — só barra ponto adulterado/degenerado.
 Config.PULSE_AIM_MAX_DROP = 20
-Config.PULSE_AIM_MAX_RISE = 45
 Config.PULSE_AIM_MIN_HORIZONTAL = 6
-
--- ⚠️ v67 — ASSISTÊNCIA DE MIRA DA HISSATSU, **SÓ NA ALTURA**.
--- PEDIDO: "as Hissatsus continuam subindo demais. Coloca meio que um
--- auto-aim: prioriza mirar onde você está mirando, só que corrige pra
--- direção do gol — se subir demais desce um pouco, se descer demais sobe um
--- pouco. MAS só no eixo Y. O eixo X mantém do jeito que está, porque você
--- PODE errar a Hissatsu muito pra direita ou pra esquerda."
---
--- Por isso a correção mexe SÓ no Y. Errar pro lado continua sendo erro seu e
--- a bola vai pro lado mesmo; o que deixa de acontecer é a bola sair pro céu
--- ou pro chão por causa de um pixel de diferença na mira.
---
--- ⚠️ v84: agora só vale ACIMA do travessão (ver aplicarAssistenciaDeAltura
--- no BallController) — dentro da boca do gol a mira não é mais mexida, e
--- abaixo da base ela sobe rente ao chão. STRENGTH é a fração do excesso que
--- é cortada: 0 desliga, 1 gruda no travessão. 0.6 corta 10 studs acima do
--- gol pra 4.
-Config.PULSE_AIM_ASSIST_STRENGTH = 0.6
 
 -- ⚠️ NOVO: PEDIDO — "coloque um print também, pra eu saber exatamente qual
 -- o número em cada lugar, e quanto a skill de GK ou DF tiraram, pra poder

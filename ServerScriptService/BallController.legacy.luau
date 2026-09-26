@@ -2868,6 +2868,13 @@ Remotes.KickBall.OnServerEvent:Connect(function(player, chargedForce, targetPoin
 			-- terminava. Agora é um chute no vazio: a animação toca inteira
 			-- (mesmo corte dos dribles do chute de verdade, ver o fim deste
 			-- handler), só a bola não é tocada.
+			-- ⚠️ v86 — o preparo é encerrado AQUI também, sem depender de o
+			-- UpdateKickCharging(false) ter chegado antes: com o preparo ainda
+			-- congelado na mesma prioridade (Action), o chute se misturava com
+			-- a perna parada e "não saía". O KickCharging=false é o que avisa
+			-- o AnimationGuard de cada tela pra soltar a cópia local dele.
+			player:SetAttribute("KickCharging", false)
+			stopAnimation(player, Config.ANIMATIONS.PrepareKick, 0)
 			for _, direcao in ipairs({ "Left", "Back", "Right" }) do
 				stopAnimation(player, dribbleAnimationFor(direcao), 0)
 			end
@@ -3066,6 +3073,8 @@ Remotes.KickBall.OnServerEvent:Connect(function(player, chargedForce, targetPoin
 	-- pose depois. Só que isso também faria o rabicho do drible cobrir o
 	-- chute de verdade. Cortar o drible aqui é o que deixa o chute entrar
 	-- direto, sem esperar a finta terminar de voltar pro idle.
+	player:SetAttribute("KickCharging", false) -- ⚠️ v86: solta o preparo em toda tela (ver o chute no vazio acima)
+	stopAnimation(player, Config.ANIMATIONS.PrepareKick, 0)
 	for _, direcao in ipairs({ "Left", "Back", "Right" }) do
 		stopAnimation(player, dribbleAnimationFor(direcao), 0)
 	end
@@ -3962,46 +3971,8 @@ end
 -- se os gols estiverem girados de um jeito que RightVector não siga a
 -- largura da trave, o "canto" sai errado (ainda mira em algum ponto
 -- dentro do gol, só não necessariamente no canto certo).
--- ⚠️ v67 — ASSISTÊNCIA DE MIRA NA ALTURA (só eixo Y).
--- ⚠️ v84 — REESCRITA ("as Hissatsus saem muito pra baixo").
--- A versão v67 puxava QUALQUER ponto mirado 60% em direção a uma altura fixa
--- (40% da hitbox do gol) — mesmo pontos que não estavam no gol, e mesmo uma
--- mira já certa dentro da boca do gol (mirar no ângulo virava meia-altura).
--- Junto com o ponto que vinha do chão (ver miraNoPlanoDoGol em
--- HissatsuInput.local.luau), o resultado era a bola saindo baixa.
---
--- Agora o cliente manda o ponto EXATO no plano do gol, e aqui só se corrige
--- o que está FORA da boca do gol, e só quando o ponto está no gol mesmo:
---   • dentro da altura do gol  -> intocado (a mira é sua, vai onde mirou);
---   • abaixo da base           -> sobe pra rente ao chão (a bola nunca é
---                                 mandada pra dentro do gramado);
---   • acima do travessão       -> desce uma fração (PULSE_AIM_ASSIST_STRENGTH)
---                                 em direção ao travessão (o pedido do v67:
---                                 "se subir demais desce um pouco").
--- Longe do gol (passe, lançamento): nada é mexido. X e Z nunca são mexidos.
-local function aplicarAssistenciaDeAltura(player, ponto)
-	if not player.Team then return ponto end
-
-	local enemyGoal = enemyGoalOf(player.Team.Name)
-	if not enemyGoal then return ponto end
-
-	local distanciaAteOGol = (Vector3.new(ponto.X, 0, ponto.Z) - Vector3.new(enemyGoal.Position.X, 0, enemyGoal.Position.Z)).Magnitude
-	if distanciaAteOGol > getGoalWidth(enemyGoal) then return ponto end -- não é chute no gol
-
-	local base = enemyGoal.Position.Y - enemyGoal.Size.Y / 2
-	local topo = enemyGoal.Position.Y + enemyGoal.Size.Y / 2
-	local minimo = base + 1
-	local maximo = topo - 1
-
-	if ponto.Y < minimo then
-		return Vector3.new(ponto.X, minimo, ponto.Z)
-	end
-	if ponto.Y > maximo then
-		local forca = math.clamp(Config.PULSE_AIM_ASSIST_STRENGTH or 0, 0, 1)
-		return Vector3.new(ponto.X, ponto.Y + (maximo - ponto.Y) * forca, ponto.Z)
-	end
-	return ponto
-end
+-- ⚠️ v86: a assistência de altura (v67/v84) que morava aqui saiu — ver o
+-- comentário do v86 dentro de _G.PulseComputeShotTarget logo abaixo.
 
 _G.PulseComputeShotTarget = function(player)
 	-- ⚠️ v7 PEDIDO: "a mira da Hissatsu tem que ser EXATAMENTE onde o cara
@@ -4024,34 +3995,36 @@ _G.PulseComputeShotTarget = function(player)
 	-- razoável em volta da bola e, se sobrar uma mira sem direção
 	-- horizontal nenhuma (mirou no próprio pé), cai na mira automática de
 	-- canto logo abaixo.
+	--
+	-- ⚠️ v86 — PEDIDO: "remova o assistente de mira da hissatsu, apenas faça
+	-- a mira funcionar corretamente [...] é só ir exatamente onde está
+	-- apontado o mouse".
+	-- O ponto que o cliente manda (ver computeAimPoint em HissatsuInput.
+	-- local.luau) já é EXATAMENTE o que está sob o cursor, e aqui ele passa
+	-- intocado: sem assistência de altura puxando pro travessão, sem teto de
+	-- altura cortando mira alta. Só sobram duas travas que uma mira de
+	-- verdade nunca aciona:
+	--   • ponto mais de PULSE_AIM_MAX_DROP abaixo da bola (dentro do chão —
+	--     o bug do v36) sobe até esse limite;
+	--   • mira sem direção horizontal (mirou no próprio pé) sai reta pra
+	--     frente do jogador — não mais pro canto automático do gol.
 	local aimPoint = _G.GetPulseAimPoint and _G.GetPulseAimPoint(player)
 	if typeof(aimPoint) == "Vector3" then
 		local alturaMin = ball.Position.Y - Config.PULSE_AIM_MAX_DROP
-		local alturaMax = ball.Position.Y + Config.PULSE_AIM_MAX_RISE
-		local corrigido = Vector3.new(aimPoint.X, math.clamp(aimPoint.Y, alturaMin, alturaMax), aimPoint.Z)
+		local alvo = Vector3.new(aimPoint.X, math.max(aimPoint.Y, alturaMin), aimPoint.Z)
 
-		local horizontal = Vector3.new(corrigido.X - ball.Position.X, 0, corrigido.Z - ball.Position.Z).Magnitude
+		local horizontal = Vector3.new(alvo.X - ball.Position.X, 0, alvo.Z - ball.Position.Z).Magnitude
 		if horizontal >= Config.PULSE_AIM_MIN_HORIZONTAL then
-			-- ⚠️ v67 — ASSISTÊNCIA DE MIRA, SÓ NA ALTURA.
-			-- PEDIDO: "as Hissatsus continuam subindo demais a mira. Coloca
-			-- meio que um auto-aim: ele prioriza mirar onde você está mirando,
-			-- só que corrige pra direção do gol. Se subir demais ele desce um
-			-- pouco, se descer demais ele sobe um pouco. MAS só no eixo Y de
-			-- altura — o eixo X mantém do jeito que está, porque você PODE
-			-- errar pro lado, isso é erro seu."
-			--
-			-- Então aqui o X e o Z (a direção no plano do campo) passam
-			-- INTOCADOS: mirar muito pra direita continua indo muito pra
-			-- direita. O que é puxado é só a ALTURA, em direção à altura do
-			-- gol, e só por uma fração — a mira continua sendo sua, ela só
-			-- para de mandar a bola pro céu ou pro chão.
-			corrigido = aplicarAssistenciaDeAltura(player, corrigido)
-			return corrigido
+			return alvo
 		end
 
-		warn(string.format(
-			"⚽ [Mira] mira degenerada (só %.1f studs na horizontal) — usando a mira automática de canto.",
-			horizontal))
+		local _, root = getCharacterParts(player)
+		if root then
+			local frente = Vector3.new(root.CFrame.LookVector.X, 0, root.CFrame.LookVector.Z)
+			if frente.Magnitude > 0.01 then
+				return ball.Position + frente.Unit * 50
+			end
+		end
 	end
 
 	if not player.Team then return nil end
@@ -4703,7 +4676,13 @@ _G.PulseExecuteShot = function(player, effect, rarity)
 		end
 	end
 
-	local kicked = pulsePerformKick(player, targetPoint, force, effect.CurveMult, aimMult, effect, Config.PULSE_SHOT_FORCE_CAP_MULT)
+	-- ⚠️ v86 — curva DESLIGADA no chute de Hissatsu (curveMult = nil). A curva
+	-- automática do pulsePerformKick empurra a bola pro CENTRO do gol durante
+	-- o voo — na prática uma assistência de mira, e o pedido foi "remova o
+	-- assistente de mira [...] é só ir exatamente onde está apontado o mouse".
+	-- O CurveMult continua nos dados (PulseInstinctData); pra religar, é só
+	-- voltar a passar effect.CurveMult aqui.
+	local kicked = pulsePerformKick(player, targetPoint, force, nil, aimMult, effect, Config.PULSE_SHOT_FORCE_CAP_MULT)
 
 	-- ⚠️ v11: VanishSeconds (Pulso "Sumiço", vindo de Kamikakushi/Teleport
 	-- Shot — no anime a bola SOME na frente do goleiro e reaparece perto da
@@ -4752,7 +4731,7 @@ _G.InstinctExecuteShot = function(player, effect)
 	local force = Config.KICK_MAX_FORCE * getKickForceMultiplier(player) * (effect.ForceMult or 1)
 	local aimMult = effect.AimDeviationMult
 	if aimMult == nil then aimMult = 1 end
-	return pulsePerformKick(player, targetPoint, force, effect.CurveMult, aimMult, effect, nil, true)
+	return pulsePerformKick(player, targetPoint, force, nil, aimMult, effect, nil, true) -- ⚠️ v86: sem curva, ver PulseExecuteShot
 end
 
 _G.PulseExecutePass = function(player, effect)

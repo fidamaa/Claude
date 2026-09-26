@@ -39,58 +39,37 @@ local mouse = LocalPlayer:GetMouse()
 local SEND_DEBOUNCE = 0.15
 local lastSent = 0
 
--- ⚠️ v7 PEDIDO: "a mira da Hissatsu tem que ser exatamente onde o cara
--- estiver mirando, igual o chute padrão" — MESMO cálculo do chute normal
--- (ver computeAimPoint em FootballClient.local.luau), mandado junto com
--- o UsePulse pro servidor guardar (ver PulseController.legacy.luau ->
--- _G.GetPulseAimPoint) e usar em vez da mira automática de canto.
-local AIM_PITCH_STEEP_THRESHOLD = 0.85
+-- ⚠️ v86 — MIRA REFEITA DO ZERO. PEDIDO: "remova o assistente de mira da
+-- hissatsu, apenas faça a mira funcionar corretamente, se necessário refaça o
+-- sistema de mira da hissatsu, é só ir exatamente onde está apontado o mouse".
+--
+-- COMO É AGORA: um raio só, saindo da câmera e passando pelo cursor (no
+-- mobile, pelo centro da tela), e o ponto de mira é a PRIMEIRA coisa que esse
+-- raio encontra. A Hissatsu voa reta da bola até esse ponto — ou seja, a bola
+-- vai exatamente no que estava embaixo do cursor. O servidor não mexe mais
+-- nele (a assistência de altura saiu, ver _G.PulseComputeShotTarget no
+-- BallController).
+--
+-- O QUE FOI EMBORA (tudo inventava um ponto que NÃO estava sob o cursor):
+--   • a fórmula de "câmera íngreme" (origem + frente*20 + 300*Y);
+--   • o fallback de 20 studs à frente da bola na direção da câmera;
+--   • o mouse.Hit do PC (acerta o próprio boneco e a bola) e o raycast
+--     separado do mobile — os dois usam o mesmo raycast agora.
+--
+-- O QUE CONTINUA (é mira exata, não assistência):
+--   • hitbox invisível de cálculo (CanCollide = false) é atravessada — o
+--     jogador não enxerga ela, então não é onde ele está mirando. Os gols são
+--     exceção: acertar a hitbox do gol É mirar no gol (ver o v44 abaixo);
+--   • mirando PELA BOCA do gol adversário, o ponto é onde o raio atravessa a
+--     boca — senão o raio passa pela rede e só bate no gramado lá atrás, e a
+--     reta da bola até lá sai rasteira (o bug do v84);
+--   • raio que não acerta nada (céu): ponto bem longe na direção do cursor —
+--     de longe, "bola até o ponto" e "câmera até o ponto" são a mesma direção.
 
--- ⚠️ v36 FIX — "usei uma Hissatsu que nem pula e mesmo assim ela jogou a
--- bola pra cima / pro nada, sendo que eu chutei RETO no gol".
---
--- Este computeAimPoint era uma CÓPIA da versão ANTIGA (pré-v26) do
--- FootballClient, e ficou pra trás quando o chute normal foi consertado
--- lá. O bug é o mesmo que o v26 descreve em detalhe no FootballClient:
--- a fórmula `flatLook * 20 + 300 * lookVector.Y` foi desenhada só pro
--- caso EXTREMO de pitch íngreme (câmera quase reta pra cima/baixo), mas
--- estava sendo usada também quando o raio do mouse não acerta nada
--- (`rayMissedEverything`) — e aí a câmera pode estar numa inclinação
--- totalmente normal. O log confirmou a conta exata: com lookVector.Y
--- ≈ -0.37, 300 × -0.37 = -113 studs, e o alvo saiu 19 studs à frente
--- (flatLook * 20) e 113 studs ABAIXO da bola. Como Hissatsu de chute voa
--- RETO e SEM gravidade, a direção virava Y = -0.99 e a bola atravessava o
--- gramado viajando pra sempre (mais de 1500 studs no log de voo).
---
--- Os dois casos agora ficam separados, igual no chute normal: pitch
--- íngreme de verdade mantém a fórmula de sempre; "mira não acertou nada"
--- ganha o fallback simples que aponta na direção 3D real do cursor, sem
--- multiplicador nenhum inventando altura. Também passa a usar a direção
--- do MOUSE (ScreenPointToRay) em vez do centro da tela, e a ignorar
--- hitbox invisível — as duas outras correções que o chute normal já tinha
--- e esta cópia nunca recebeu.
--- ⚠️ v44 FIX — "eu mirei exatamente no canto superior esquerdo e ela subiu
--- demais a mira."
---
--- CAUSA RAIZ (medida no Studio): a Part do gol (GolAzul / GolAmarelo) é a
--- HITBOX de gol — 18.7 x 21 x 59.7 studs plantada bem na BOCA do gol, e com
--- CanCollide = FALSE. A regra `isProbablyMathOnlyHitbox` descartava QUALQUER
--- parte não-colidível como "o raio não acertou nada", então mirar dentro da
--- boca do gol — exatamente o que se faz pra mirar num canto — caía sempre no
--- fallback, nunca no ponto real.
---
--- E o fallback tinha um viés PRA CIMA embutido: ele devolve
--- `origem + direção * 20` partindo da CINTURA do jogador, mas quem calcula a
--- direção do chute é o servidor, a partir da BOLA, uns 3 studs mais embaixo.
--- A conta fica elevação = tan(θ) + 3/(20·cos θ): uma mira de 5° virava 13°.
--- Daí "subiu demais", e daí também ser pior quanto mais reta a mira.
---
--- DUAS CORREÇÕES:
---   1) O gol é um ALVO DE MIRA VÁLIDO. Acertar a hitbox do gol é o ponto de
---      mira mais preciso que existe — usa o ponto exato, sem fallback.
---   2) Quando o raio realmente não acerta nada, o fallback parte da BOLA, não
---      da cintura. Aí a direção que o servidor calcula é idêntica à do cursor,
---      em qualquer distância, e o viés some.
+-- ⚠️ v44 — a Part do gol (GolAzul / GolAmarelo) é a HITBOX de gol, plantada
+-- na BOCA do gol e com CanCollide = FALSE. Sem esta exceção ela seria
+-- atravessada como qualquer hitbox invisível e mirar num canto do gol nunca
+-- acertaria o gol.
 local ALVOS_DE_MIRA_VALIDOS = {
 	[Config.BLUE_GOAL_NAME] = true,
 	[Config.YELLOW_GOAL_NAME] = true,
@@ -102,85 +81,55 @@ local function isProbablyMathOnlyHitbox(part)
 	return part ~= nil and part:IsA("BasePart") and part.CanCollide == false
 end
 
--- ⚠️ v54 — MIRA NO MOBILE.
--- No celular NÃO existe cursor: `mouse.X`/`mouse.Y` ficam parados na
--- posição do ÚLTIMO TOQUE, e `mouse.Target`/`mouse.Hit` apontam pra onde
--- esse toque caiu. Resultado prático: o jogador de celular não tinha como
--- mirar — o chute saía na direção de onde ele tocou pra girar a câmera (ou
--- de onde apertou um botão), não pra onde estava olhando.
---
--- A convenção de mira em terceira pessoa no mobile é o CENTRO DA TELA, que
--- é justamente pra onde a câmera aponta e o que o jogador enxerga. Então no
--- mobile a mira vira: raio pelo centro da tela + raycast de verdade pra
--- achar o ponto no mundo (não dá pra usar mouse.Hit, que segue o toque).
---
--- O caminho de PC fica IDÊNTICO ao que já estava — todo o ajuste fino de
--- mira feito até aqui (v26/v44) continua valendo sem nenhuma mudança.
+local MIRA_ALCANCE = 2000 -- até onde o raio de mira procura alguma coisa
+local MIRA_CEU = 1000     -- mirou no céu: distância do ponto na direção do cursor
+local MIRA_MAX_ATRAVESSADAS = 8 -- hitboxes invisíveis puladas por raio, no máximo
+
+-- ⚠️ v54 — MIRA NO MOBILE. No celular não existe cursor (`mouse.X`/`mouse.Y`
+-- ficam parados no último toque), então a mira é o CENTRO DA TELA — pra onde
+-- a câmera aponta e o que o jogador enxerga.
 local function ehMobile()
 	-- Mesma detecção que MobileControls.local.luau usa pra decidir se mostra
 	-- os botões, pra os dois nunca discordarem sobre o que é um celular.
 	return UserInputService.TouchEnabled and not UserInputService.MouseEnabled
 end
 
--- Ponto da TELA de onde a mira parte.
-local function pontoDeMiraNaTela()
+local function raioDeMira()
 	if ehMobile() then
 		local v = camera.ViewportSize
-		return v.X / 2, v.Y / 2
+		return camera:ViewportPointToRay(v.X / 2, v.Y / 2)
 	end
-	return mouse.X, mouse.Y
+	return camera:ScreenPointToRay(mouse.X, mouse.Y)
 end
 
--- Raycast do mobile: o equivalente ao mouse.Target/mouse.Hit do PC, só que
--- pelo centro da tela. Ignora personagens pra a mira não "grudar" em quem
--- estiver na frente.
-local paramsMiraMobile = RaycastParams.new()
-paramsMiraMobile.FilterType = Enum.RaycastFilterType.Exclude
-paramsMiraMobile.IgnoreWater = true
+local paramsMira = RaycastParams.new()
+paramsMira.FilterType = Enum.RaycastFilterType.Exclude
+paramsMira.IgnoreWater = true
 
-local function miraMobileNoMundo()
-	local x, y = pontoDeMiraNaTela()
-	local ray = camera:ScreenPointToRay(x, y)
-
+-- Primeira coisa VISÍVEL que o raio encontra. Ignora o próprio boneco, a bola
+-- e a sombra dela (estão sempre na frente da câmera e não são alvo). Outros
+-- jogadores contam: mirar num companheiro é mirar nele.
+local function primeiroPontoNoRaio(ray)
 	local excluir = {}
-	for _, p in ipairs(Players:GetPlayers()) do
-		if p.Character then table.insert(excluir, p.Character) end
-	end
+	if LocalPlayer.Character then table.insert(excluir, LocalPlayer.Character) end
+	local bola = workspace:FindFirstChild(Config.BALL_NAME)
+	if bola then table.insert(excluir, bola) end
 	local sombra = workspace:FindFirstChild("SombraDaBola")
 	if sombra then table.insert(excluir, sombra) end
-	paramsMiraMobile.FilterDescendantsInstances = excluir
 
-	local batida = workspace:Raycast(ray.Origin, ray.Direction * 2000, paramsMiraMobile)
-	if batida then
-		return batida.Instance, batida.Position
+	local direcao = ray.Direction.Unit
+	for _ = 1, MIRA_MAX_ATRAVESSADAS do
+		paramsMira.FilterDescendantsInstances = excluir
+		local batida = workspace:Raycast(ray.Origin, direcao * MIRA_ALCANCE, paramsMira)
+		if not batida then return nil, nil end
+		if not isProbablyMathOnlyHitbox(batida.Instance) then
+			return batida.Position, (batida.Position - ray.Origin).Magnitude
+		end
+		table.insert(excluir, batida.Instance)
 	end
 	return nil, nil
 end
 
-local function getMouseLookVector()
-	local ray = camera:ScreenPointToRay(pontoDeMiraNaTela())
-	local dir = ray.Direction
-	if dir.Magnitude < 0.001 then return camera.CFrame.LookVector end
-	return dir.Unit
-end
-
--- ⚠️ v84 — PEDIDO: "verifique um problema frequente que são as Hissatsus
--- saírem muito pra baixo".
---
--- CAUSA: a Hissatsu voa em LINHA RETA, sem gravidade, da bola até o ponto
--- mirado — então o que importa é a ALTURA desse ponto NA DISTÂNCIA DO GOL. Só
--- que o ponto vinha do `mouse.Hit`, que é onde o raio da câmera BATE em
--- alguma coisa. Mirando no gol, o raio quase sempre passa (a câmera está em
--- cima e atrás do jogador, olhando levemente pra baixo) e só bate no gramado
--- lá atrás do gol — às vezes centenas de studs depois. A reta da bola até
--- esse ponto no chão, na altura da trave, passa rente à grama: a mira
--- estava no meio do gol, a bola saía rasteira.
---
--- AGORA: se você está mirando pro lado do gol adversário, o ponto de mira é
--- onde o raio da sua mira CRUZA O PLANO DO GOL — exatamente o ponto que a
--- mira cobre, na distância em que o gol está. Em cima do gol, sai alta; no
--- canto baixo, sai baixa; no meio, sai no meio. Mira pra outro lugar (um
--- companheiro, o meio-campo) continua usando o ponto de sempre.
 local function acharGols()
 	local time = LocalPlayer.Team
 	if not time then return nil, nil end
@@ -195,88 +144,55 @@ local function acharGols()
 	return nil, nil
 end
 
-local function miraNoPlanoDoGol(ray)
+-- Onde o raio atravessa a BOCA do gol adversário (a face da hitbox virada pro
+-- campo), se atravessar. Fora da largura/altura do gol devolve nil — aí não é
+-- chute pela boca do gol e vale o ponto normal do raio.
+local function travessiaDaBocaDoGol(ray)
 	local golAdversario, meuGol = acharGols()
-	if not golAdversario then return nil end
+	if not golAdversario then return nil, nil end
 
 	-- eixo do campo, apontando do meu gol pro gol adversário
 	local eixo = golAdversario.Position - meuGol.Position
 	eixo = Vector3.new(eixo.X, 0, eixo.Z)
-	if eixo.Magnitude < 1 then return nil end
+	if eixo.Magnitude < 1 then return nil, nil end
 	eixo = eixo.Unit
 
 	local direcao = ray.Direction.Unit
 	local aproximacao = direcao:Dot(eixo)
-	if aproximacao < 0.2 then return nil end -- não está mirando pro lado do gol
+	if aproximacao <= 0.05 then return nil, nil end -- não está mirando pro lado do gol
 
-	local t = (golAdversario.Position - ray.Origin):Dot(eixo) / aproximacao
-	if t <= 0 then return nil end
+	local tamanho = golAdversario.Size
+	local profundidade = math.min(tamanho.X, tamanho.Z)
+	local largura = math.max(tamanho.X, tamanho.Z)
+	local boca = golAdversario.Position - eixo * (profundidade / 2)
+
+	local t = (boca - ray.Origin):Dot(eixo) / aproximacao
+	if t <= 0 then return nil, nil end
 	local ponto = ray.Origin + direcao * t
 
-	-- Muito pro lado do gol (mirou num companheiro na ponta, por exemplo):
-	-- não é chute no gol, deixa o ponto de sempre.
-	local relativo = ponto - golAdversario.Position
-	local lateral = relativo - eixo * relativo:Dot(eixo)
-	local largura = math.max(golAdversario.Size.X, golAdversario.Size.Z)
-	if Vector3.new(lateral.X, 0, lateral.Z).Magnitude > largura * 1.5 then return nil end
+	local relativo = ponto - boca
+	local lateral = Vector3.new(relativo.X, 0, relativo.Z)
+	if lateral.Magnitude > largura / 2 then return nil, nil end
+	if math.abs(ponto.Y - golAdversario.Position.Y) > tamanho.Y / 2 then return nil, nil end
 
-	return ponto
-end
-
-local function parteDePersonagem(instancia)
-	local modelo = instancia and instancia:FindFirstAncestorOfClass("Model")
-	return modelo ~= nil and modelo:FindFirstChildOfClass("Humanoid") ~= nil and modelo ~= LocalPlayer.Character
+	return ponto, t
 end
 
 local function computeAimPoint()
-	local character = LocalPlayer.Character
-	local root = character and character:FindFirstChild("HumanoidRootPart")
-	local origin = root and root.Position or camera.CFrame.Position
+	local ray = raioDeMira()
+	local ponto, distancia = primeiroPontoNoRaio(ray)
 
-	local lookVector = getMouseLookVector()
-	local steepPitch = math.abs(lookVector.Y) > AIM_PITCH_STEEP_THRESHOLD
-
-	if steepPitch then
-		local flatLook = Vector3.new(lookVector.X, 0, lookVector.Z)
-		if flatLook.Magnitude < 0.05 then
-			flatLook = root and Vector3.new(root.CFrame.LookVector.X, 0, root.CFrame.LookVector.Z) or Vector3.new(0, 0, -1)
-			if flatLook.Magnitude < 0.05 then flatLook = Vector3.new(0, 0, -1) end
-		end
-		flatLook = flatLook.Unit
-		return origin + flatLook * 20 + Vector3.new(0, 300 * lookVector.Y, 0)
-	end
-
-	-- ⚠️ v54: no mobile o alvo vem do raycast pelo centro da tela; no PC,
-	-- do mouse, exatamente como sempre foi.
-	local alvoInstancia, alvoPonto
-	if ehMobile() then
-		alvoInstancia, alvoPonto = miraMobileNoMundo()
-	else
-		alvoInstancia = mouse.Target
-		alvoPonto = mouse.Hit and mouse.Hit.Position
-	end
-
-	-- ⚠️ v84: mirando num JOGADOR (companheiro pro passe, adversário na
-	-- frente), o ponto é ele mesmo. Senão, mirando pro gol, o ponto é onde a
-	-- mira cruza o plano do gol (ver miraNoPlanoDoGol).
-	if alvoPonto and parteDePersonagem(alvoInstancia) then
-		return alvoPonto
-	end
-	local noGol = miraNoPlanoDoGol(camera:ScreenPointToRay(pontoDeMiraNaTela()))
-	if noGol then
+	-- A boca do gol vale se vier ANTES do que o raio acertou (um zagueiro na
+	-- frente do gol, por exemplo, continua sendo o alvo se estiver sob o cursor).
+	local noGol, distanciaGol = travessiaDaBocaDoGol(ray)
+	if noGol and (not distancia or distanciaGol <= distancia) then
 		return noGol
 	end
 
-	local rayMissedEverything = alvoInstancia == nil or isProbablyMathOnlyHitbox(alvoInstancia)
-	if rayMissedEverything then
-		-- ⚠️ v44: parte da BOLA, não da cintura — ver o comentário grande
-		-- acima. É isso que tira o viés pra cima do chute.
-		local bola = workspace:FindFirstChild(Config.BALL_NAME)
-		local origemDoChute = (bola and bola.Position) or origin
-		return origemDoChute + lookVector * 20
+	if ponto then
+		return ponto
 	end
-
-	return alvoPonto or (origin + lookVector * 50)
+	return ray.Origin + ray.Direction.Unit * MIRA_CEU
 end
 
 -- ⚠️ v67: exposto pro PulseInput usar a MESMA mira nos Instintos de chute
