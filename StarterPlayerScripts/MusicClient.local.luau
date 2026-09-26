@@ -1,0 +1,381 @@
+--[[
+	MusicClient (LocalScript)
+	LOCAL: StarterPlayerScripts (place Game)
+
+	Música de fundo (loop contínuo, o jogo inteiro) + música de gol (só
+	os primeiros segundos, com fade-out) — pedido: "coloque uma parte pra
+	eu colocar uma música de fundo, e outra pra gol, me diga onde é e
+	como eu coloco pra fazer funcionar".
+
+	ONDE VOCÊ MEXE: só em FootballConfig.luau (ReplicatedStorage), colando
+	os IDs dos seus áudios em Config.BACKGROUND_MUSIC_ID e
+	Config.GOAL_MUSIC_ID (ver o comentário lá pra saber como pegar o ID
+	no Creator Hub/Studio). Não precisa criar nada no Studio nem mexer
+	neste arquivo — o Sound é criado inteiramente por código, porque só
+	Scripts sincronizam pela ponte (Parts/GUI têm que ser manuais).
+
+	SOBRE O CORTE DE 5s COM FADE-OUT: "eu preciso fazer isso, ou o Roblox
+	consegue fazer também?" — o Roblox consegue, é só código (ver
+	playGoalMusic abaixo): toca o áudio normalmente, e uns segundos antes
+	do tempo configurado (Config.GOAL_MUSIC_FADE_SECONDS) começa a baixar
+	o volume suavemente (TweenService) até parar exatamente em
+	Config.GOAL_MUSIC_DURATION segundos. Não precisa editar o arquivo de
+	áudio — pode subir a música inteira, o corte é só na hora de tocar.
+
+	Toca no CLIENTE (cada jogador ouve a própria música — é o jeito padrão
+	de música ambiente no Roblox: não depende do servidor, e cada
+	SoundService já é local por jogador mesmo se fosse criado lá).
+
+	⚠️ NOVO: FADE-IN NO LOOP (pedido: "no loop do áudio normal, ele sempre
+	começa com um som mais alto do que o final do mesmo áudio, dá pra fazer
+	um fade-in que não comece no mudo, tipo começa em 60% e vai até 100%")
+	— tanto a torcida de fundo quanto a futura música secundária usam
+	Sound.DidLoop (dispara toda vez que um Sound com Looped=true termina e
+	reinicia sozinho, SEM cortar o áudio) pra reaplicar esse fade toda vez
+	que o loop reinicia, inclusive na primeira vez que tocam.
+
+	⚠️ NOVO: MÚSICA DE FUNDO SECUNDÁRIA (Config.SECONDARY_MUSIC_ID) — ainda
+	vazia, é só o "molde" pronto pra quando você escolher a música (pedido:
+	"depois eu vejo uma música legal pra colocar também e abafar um pouco a
+	torcida, mas por enquanto coloque o código da futura música pra eu só
+	inserir ela"). Com o ID vazio, nada disso roda — o jogo continua
+	exatamente como antes. Quando você colar o ID: a torcida de fundo abaixa
+	um pouco o tempo todo (Config.SECONDARY_MUSIC_CROWD_DUCK_MULT, "abafar a
+	torcida") e a música secundária abaixa ainda mais durante o gol
+	(Config.SECONDARY_MUSIC_GOAL_DUCK_MULT), porque toca o som de torcida
+	comemorando (GOAL_MUSIC_ID) por cima — e volta ao normal sozinha depois.
+]]
+
+local SoundService = game:GetService("SoundService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService = game:GetService("TweenService")
+local ContentProvider = game:GetService("ContentProvider")
+
+local Config = require(ReplicatedStorage:WaitForChild("FootballConfig"))
+local Remotes = Config.Remotes
+
+-- ⚠️ NOVO: helper genérico de fade-in de loop — usado pela torcida de fundo
+-- E pela futura música secundária. Começa em `startFraction` do volume alvo
+-- (NUNCA em 0/mudo, por pedido explícito) e sobe até `targetVolume` em
+-- `fadeSeconds`. Chamado tanto no Play() inicial quanto em todo DidLoop.
+local function applyLoopFadeIn(sound, targetVolume, startFraction, fadeSeconds)
+	if not sound then return end
+	startFraction = math.clamp(startFraction or 0.6, 0, 1)
+	fadeSeconds = math.max(fadeSeconds or 1.5, 0.01)
+	sound.Volume = targetVolume * startFraction
+	TweenService:Create(sound, TweenInfo.new(fadeSeconds, Enum.EasingStyle.Linear), { Volume = targetVolume }):Play()
+end
+
+-- ⚠️ v48 — PLAYLIST (PEDIDO: "eu vou colocar mais músicas, por enquanto
+-- deixa só essa"). A lista vem de Config.MUSIC_PLAYLIST; acrescentar uma
+-- faixa lá é tudo que você precisa fazer, nada aqui muda.
+--   1 faixa  -> toca em LOOP, com o fade-in de sempre a cada volta.
+--   2+ faixas -> loop desligado, e a próxima entra no fim de cada uma
+--                (evento .Ended), com o mesmo fade. Ao fim da lista,
+--                recomeça da primeira.
+-- Config.SECONDARY_MUSIC_ID continua aceito como faixa única, caso a
+-- playlist esteja vazia — compatibilidade, não caminho principal.
+local playlist = {}
+if typeof(Config.MUSIC_PLAYLIST) == "table" then
+	for _, id in ipairs(Config.MUSIC_PLAYLIST) do
+		if typeof(id) == "string" and id ~= "" then
+			table.insert(playlist, id)
+		end
+	end
+end
+if #playlist == 0 and typeof(Config.SECONDARY_MUSIC_ID) == "string" and Config.SECONDARY_MUSIC_ID ~= "" then
+	table.insert(playlist, Config.SECONDARY_MUSIC_ID)
+end
+
+local hasSecondaryMusic = #playlist > 0
+
+-- ===== MÚSICA DE FUNDO (torcida) =====
+local bgMusic = nil -- ⚠️ v14: hoisted (fora do if) pra PreloadAsync conseguir referenciar mais embaixo
+-- ⚠️ NOVO: enquanto a música secundária estiver ativa, a torcida toca mais
+-- baixa ("abafar um pouco a torcida") — sem música secundária, esse fator
+-- é 1 e o volume da torcida fica idêntico a antes.
+local bgTargetVolume = (Config.BACKGROUND_MUSIC_VOLUME or 0.5) * (hasSecondaryMusic and (Config.SECONDARY_MUSIC_CROWD_DUCK_MULT or 1) or 1)
+if typeof(Config.BACKGROUND_MUSIC_ID) == "string" and Config.BACKGROUND_MUSIC_ID ~= "" then
+	bgMusic = Instance.new("Sound")
+	bgMusic.Name = "BackgroundMusic"
+	bgMusic.SoundId = Config.BACKGROUND_MUSIC_ID
+	bgMusic.Looped = true
+	bgMusic.Parent = SoundService
+	applyLoopFadeIn(bgMusic, bgTargetVolume, Config.BACKGROUND_MUSIC_LOOP_FADE_START_FRACTION, Config.BACKGROUND_MUSIC_LOOP_FADE_SECONDS)
+	bgMusic:Play()
+	bgMusic.DidLoop:Connect(function()
+		applyLoopFadeIn(bgMusic, bgTargetVolume, Config.BACKGROUND_MUSIC_LOOP_FADE_START_FRACTION, Config.BACKGROUND_MUSIC_LOOP_FADE_SECONDS)
+	end)
+else
+	warn("🎵 MusicClient: Config.BACKGROUND_MUSIC_ID está vazio em FootballConfig.lua — cole o rbxassetid do seu áudio de fundo lá pra ativar a música (ver comentário no Config).")
+end
+
+-- ===== MÚSICA DE FUNDO SECUNDÁRIA (⚠️ NOVO — molde pronto, ID ainda vazio) =====
+local secondaryMusic = nil
+local secondaryTargetVolume = Config.SECONDARY_MUSIC_VOLUME or 0.35
+local secondaryDucked = false -- true durante o gol, pra DidLoop/troca de faixa saberem qual alvo usar
+
+-- Volume-alvo AGORA — uma função só, pra o fade da volta de loop, o da
+-- troca de faixa e o do gol nunca discordarem entre si.
+local function alvoDaMusica()
+	if secondaryDucked then
+		return secondaryTargetVolume * (Config.SECONDARY_MUSIC_GOAL_DUCK_MULT or 0.35)
+	end
+	return secondaryTargetVolume
+end
+
+-- ⚠️ v49 — CORTE DE CAUDA + FADE OUT NO FIM DE CADA FAIXA.
+-- PEDIDO: "todas as músicas acabam finalizando um segundo e meio antes do
+-- áudio acabar. Tira um segundo e meio do final de tudo e coloca um fade
+-- out no final de todas as músicas."
+--
+-- Nenhuma faixa usa Looped nem o evento .Ended: os dois esperariam o
+-- arquivo INTEIRO terminar, que é justamente a cauda morta que se quer
+-- pular. Em vez disso, cada faixa é agendada — toca até
+-- (duração - MUSIC_TAIL_CUT_SECONDS), desvanecendo nos últimos
+-- MUSIC_FADE_OUT_SECONDS antes desse ponto, e aí a próxima entra.
+-- Com UMA faixa só, "a próxima" é ela mesma, então o loop continua
+-- existindo — só que cortado e com fade, em vez do corte seco do Looped.
+--
+-- A "geração" existe porque a prorrogação pode interromper uma faixa no
+-- meio: qualquer agendamento antigo que acorde depois disso vê que a
+-- geração mudou e desiste, em vez de retomar a música errada por cima.
+local faixaAtual = 0
+local geracaoDaFaixa = 0
+
+local tocarFaixa -- declarada antes: agendarFimDaFaixa chama ela de volta
+
+local function agendarFimDaFaixa(minhaGeracao, inicioSegundos)
+	task.spawn(function()
+		if not esperarCarregar(secondaryMusic) then return end
+		if geracaoDaFaixa ~= minhaGeracao then return end
+
+		local corte = Config.MUSIC_TAIL_CUT_SECONDS or 1.5
+		local fade = Config.MUSIC_FADE_OUT_SECONDS or 1.5
+		-- Ponto em que a faixa deve acabar de verdade.
+		local fim = secondaryMusic.TimeLength - corte
+		local tocavel = fim - (inicioSegundos or 0)
+		if tocavel <= 0 then
+			-- Áudio mais curto que o próprio corte (ou offset maior que ele):
+			-- não dá pra cortar nada, deixa tocar inteiro.
+			tocavel = math.max(secondaryMusic.TimeLength - (inicioSegundos or 0), 0.1)
+			fade = math.min(fade, tocavel * 0.5)
+		end
+
+		local ateOFade = math.max(tocavel - fade, 0.05)
+		task.wait(ateOFade)
+		if geracaoDaFaixa ~= minhaGeracao then return end
+
+		TweenService:Create(secondaryMusic, TweenInfo.new(fade, Enum.EasingStyle.Linear), { Volume = 0 }):Play()
+		task.wait(fade)
+		if geracaoDaFaixa ~= minhaGeracao then return end
+
+		secondaryMusic:Stop()
+		tocarFaixa((faixaAtual % #playlist) + 1)
+	end)
+end
+
+-- `inicioSegundos` só é usado pela prorrogação ("a do overtime começa a
+-- partir de 50 segundos"); as faixas normais começam do zero.
+tocarFaixa = function(indice, idOverride, inicioSegundos, fadeInSegundos)
+	if not secondaryMusic then return end
+	geracaoDaFaixa += 1
+	local minhaGeracao = geracaoDaFaixa
+
+	faixaAtual = indice
+	secondaryMusic.SoundId = idOverride or playlist[indice]
+	secondaryMusic.TimePosition = inicioSegundos or 0
+
+	if fadeInSegundos and fadeInSegundos > 0 then
+		-- ⚠️ v52 — PEDIDO: "coloca um fade in no overtime também."
+		-- Aqui entra do SILÊNCIO mesmo, ao contrário do applyLoopFadeIn (que
+		-- começa em 60% de propósito, pra volta de loop não dar salto de
+		-- volume). São coisas diferentes: lá o objetivo é não chamar
+		-- atenção, aqui é justamente a virada dramática pra prorrogação.
+		secondaryMusic.Volume = 0
+		TweenService:Create(secondaryMusic, TweenInfo.new(fadeInSegundos, Enum.EasingStyle.Linear), { Volume = alvoDaMusica() }):Play()
+	else
+		applyLoopFadeIn(secondaryMusic, alvoDaMusica(), Config.SECONDARY_MUSIC_LOOP_FADE_START_FRACTION, Config.SECONDARY_MUSIC_LOOP_FADE_SECONDS)
+	end
+
+	secondaryMusic:Play()
+	-- TimePosition antes do Play() é ignorado se o áudio ainda não carregou —
+	-- reaplica depois pra garantir que o offset da prorrogação valha mesmo.
+	if (inicioSegundos or 0) > 0 then
+		secondaryMusic.TimePosition = inicioSegundos
+	end
+
+	agendarFimDaFaixa(minhaGeracao, inicioSegundos)
+end
+
+if hasSecondaryMusic then
+	secondaryMusic = Instance.new("Sound")
+	secondaryMusic.Name = "SecondaryMusic"
+	secondaryMusic.Looped = false -- ver o comentário do corte de cauda acima
+	secondaryMusic.Parent = SoundService
+
+	-- Rede de segurança. Quem troca de faixa normalmente é o agendamento
+	-- (agendarFimDaFaixa), que precisa que o áudio CARREGUE pra saber a
+	-- duração. Se um áudio não carregar (id errado, não aprovado, sem
+	-- permissão pra este jogo), esse agendamento desiste — e sem isto aqui
+	-- a música simplesmente pararia pra sempre, sem nada no Output.
+	-- `Ended` só dispara quando o som termina SOZINHO (Stop() dispara
+	-- `Stopped`, não `Ended`), então no fluxo normal isto nunca roda: o
+	-- agendamento já parou a faixa antes, na marca do corte.
+	secondaryMusic.Ended:Connect(function()
+		warn("🎵 MusicClient: a faixa terminou sozinha, sem passar pelo corte agendado — provavelmente o áudio não carregou (id errado, não aprovado, ou sem permissão pra este jogo). Pulando pra próxima.")
+		tocarFaixa((faixaAtual % #playlist) + 1)
+	end)
+
+	tocarFaixa(1)
+end
+
+-- ⚠️ v49 — TROCA PRA MÚSICA DA PRORROGAÇÃO.
+-- PEDIDO: "vai intercalando entre as músicas e no final é aquela música do
+-- overtime. Mas de um jeito que não pareça que elas vão interromper. NÃO
+-- INTERROMPA ELAS, só interrompa na hora do overtime. Coloca uma
+-- transiçãozinha, um fade out."
+--
+-- É o único ponto do jogo que corta uma faixa no meio — e por isso é o
+-- único que faz fade out antes de trocar. As faixas normais nunca se
+-- interrompem: cada uma vai até o fim do trecho tocável dela.
+local function entrarNaProrrogacao()
+	if not secondaryMusic then return end
+	local id = Config.OVERTIME_MUSIC_ID
+	if typeof(id) ~= "string" or id == "" then return end
+
+	local fade = Config.MUSIC_FADE_OUT_SECONDS or 1.5
+	geracaoDaFaixa += 1 -- cancela o agendamento da faixa que está tocando
+
+	TweenService:Create(secondaryMusic, TweenInfo.new(fade, Enum.EasingStyle.Linear), { Volume = 0 }):Play()
+	task.delay(fade, function()
+		if not secondaryMusic then return end
+		secondaryMusic:Stop()
+		tocarFaixa(
+			faixaAtual, id,
+			Config.OVERTIME_MUSIC_START_SECONDS or 0,
+			Config.OVERTIME_MUSIC_FADE_IN_SECONDS or 0
+		)
+	end)
+end
+
+if Remotes.OvertimeStarted then
+	Remotes.OvertimeStarted.OnClientEvent:Connect(entrarNaProrrogacao)
+end
+
+-- ===== MÚSICA DE GOL (curta, com fade-out) =====
+-- Fica só como MOLDE (nunca entra no SoundService sozinho) — cada gol
+-- clona este molde, toca, e destrói a cópia depois. Assim dois gols
+-- seguidos não brigam pelo mesmo Sound.
+local goalMusicTemplate = nil
+if typeof(Config.GOAL_MUSIC_ID) == "string" and Config.GOAL_MUSIC_ID ~= "" then
+	goalMusicTemplate = Instance.new("Sound")
+	goalMusicTemplate.Name = "GoalMusicTemplate"
+	goalMusicTemplate.SoundId = Config.GOAL_MUSIC_ID
+	goalMusicTemplate.Volume = Config.GOAL_MUSIC_VOLUME or 0.8
+else
+	warn("🎵 MusicClient: Config.GOAL_MUSIC_ID está vazio em FootballConfig.lua — cole o rbxassetid do seu áudio de gol lá pra ativar (ver comentário no Config).")
+end
+
+-- ⚠️ v14 FIX: "o áudio está um pouco atrasado, deu 1 segundo depois do
+-- gol, precisa ser bem na hora". O Sound:Play() só toca de verdade depois
+-- do Roblox terminar de BAIXAR o arquivo de áudio pela primeira vez — sem
+-- isso, o primeiro Play() de cada áudio (ou de cada CLONE, no caso do gol)
+-- sempre tem um atraso de carregamento (varia com o tamanho do arquivo/
+-- conexão). ContentProvider:PreloadAsync baixa o áudio ANTES, aqui no
+-- carregamento do script (bem no início da partida, sobra tempo de sobra
+-- até o primeiro gol de verdade) — assim quando o gol acontecer de
+-- verdade, o áudio já está em cache e toca instantaneamente.
+task.spawn(function()
+	local toPreload = {}
+	if bgMusic then table.insert(toPreload, bgMusic) end
+	if secondaryMusic then table.insert(toPreload, secondaryMusic) end
+	if goalMusicTemplate then table.insert(toPreload, goalMusicTemplate) end
+	if #toPreload > 0 then
+		ContentProvider:PreloadAsync(toPreload)
+	end
+end)
+
+local activeGoalSound = nil
+
+-- ⚠️ NOVO: PEDIDO — "o áudio está tocando duas vezes... repetindo quando
+-- o replay começa, isso não pode acontecer" — trava extra do lado do
+-- CLIENTE (além do aumento da janela de dedup no servidor, ver
+-- MatchController.legacy.luau/GOAL_DEDUP_WINDOW): se por QUALQUER motivo
+-- Remotes.GoalScored chegar de novo antes de um "gol de verdade" fazer
+-- sentido (cooldown = a duração inteira da música de gol), esse segundo
+-- disparo é ignorado e avisado no Output — não reinicia a música por cima
+-- da que já está tocando.
+local lastGoalMusicAt = -math.huge
+
+-- ⚠️ NOVO: abaixa a música secundária durante o gol (o som de torcida
+-- comemorando toca por cima) e devolve ela ao volume normal sozinha
+-- depois — usa os mesmos tempos do fade da própria música de gol
+-- (GOAL_MUSIC_DURATION/GOAL_MUSIC_FADE_SECONDS) pra ficar tudo sincronizado.
+local function duckSecondaryMusicForGoal()
+	if not secondaryMusic then return end
+
+	local duration = Config.GOAL_MUSIC_DURATION or 5
+	local fadeSeconds = math.clamp(Config.GOAL_MUSIC_FADE_SECONDS or 1.5, 0.01, duration)
+	secondaryDucked = true
+	TweenService:Create(secondaryMusic, TweenInfo.new(fadeSeconds, Enum.EasingStyle.Linear), { Volume = alvoDaMusica() }):Play()
+
+	task.delay(duration, function()
+		if not secondaryMusic then return end
+		secondaryDucked = false
+		TweenService:Create(secondaryMusic, TweenInfo.new(fadeSeconds, Enum.EasingStyle.Linear), { Volume = alvoDaMusica() }):Play()
+	end)
+end
+
+local function playGoalMusic()
+	if not goalMusicTemplate then return end
+
+	local duration = Config.GOAL_MUSIC_DURATION or 5
+	local now = os.clock()
+	if now - lastGoalMusicAt < duration then
+		warn(("🎵 MusicClient: Remotes.GoalScored chegou de novo %.1fs depois do último gol (dentro da janela de %.1fs da música) — IGNORADO pra não tocar a comemoração duas vezes. Se isso aparecer toda partida, o gol está sendo contado 2x no servidor (ver aviso 'duplicata detectada' em MatchController.legacy.luau)."):format(now - lastGoalMusicAt, duration))
+		return
+	end
+	lastGoalMusicAt = now
+
+	-- Gol muito seguido do outro (ou o dedup do MatchController falhando):
+	-- corta o anterior em vez de tocar os dois em cima um do outro.
+	if activeGoalSound then
+		activeGoalSound:Stop()
+		activeGoalSound:Destroy()
+		activeGoalSound = nil
+	end
+
+	local instance = goalMusicTemplate:Clone()
+	instance.Parent = SoundService
+	instance:Play()
+	activeGoalSound = instance
+
+	duckSecondaryMusicForGoal()
+
+	local duration = Config.GOAL_MUSIC_DURATION or 5
+	local fadeSeconds = math.clamp(Config.GOAL_MUSIC_FADE_SECONDS or 1.5, 0, duration)
+	local fadeStartsAt = duration - fadeSeconds
+
+	task.delay(fadeStartsAt, function()
+		if instance == activeGoalSound and instance.Parent then
+			TweenService:Create(instance, TweenInfo.new(fadeSeconds, Enum.EasingStyle.Linear), { Volume = 0 }):Play()
+		end
+	end)
+
+	task.delay(duration, function()
+		if instance == activeGoalSound then
+			activeGoalSound = nil
+		end
+		if instance.Parent then
+			instance:Stop()
+			instance:Destroy()
+		end
+	end)
+end
+
+Remotes.GoalScored.OnClientEvent:Connect(function(_scoringTeam, _scorer, _score)
+	playGoalMusic()
+end)
+
+print("✅ MusicClient carregado.")
