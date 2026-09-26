@@ -59,9 +59,44 @@ local function applyRule(track, rule)
 	if track.Looped ~= rule.Looped then track.Looped = rule.Looped end
 end
 
-local holding = {} -- [AnimationTrack] = true (HoldAtEnd tocando agora)
+-- ⚠️ v86 — PEDIDO: "se eu chutar sem a bola, a animação de chutar não sai, e
+-- a animação de chute fica paralisada".
+--
+-- CAUSA: o HoldAtEnd congela o preparo (AdjustSpeed(0)) na cópia LOCAL da
+-- track, e nada aqui soltava essa cópia depois. O servidor dava Stop, mas a
+-- cópia desta tela continuava parada na pose de perna levantada — e, como o
+-- chute está na MESMA prioridade (Action), os dois se misturavam e o chute
+-- parecia não sair. O comentário do v85 no BallController já dizia que este
+-- script encerraria o preparo quando o atributo KickCharging virasse false,
+-- mas essa parte nunca tinha sido escrita.
+--
+-- AGORA o preparo congelado é solto em três situações, o que vier primeiro:
+--   1) o atributo KickCharging do dono vira false (soltou o botão);
+--   2) começa outra animação de Action no mesmo personagem (chute,
+--      cabeceio, carrinho...) — a ação de verdade sempre substitui o preparo;
+--   3) rede de segurança: KickCharging já está false e o preparo segue
+--      preso por mais de HOLD_ORPHAN_GRACE (atributo e animação chegam por
+--      canais diferentes e podem vir fora de ordem).
+local HOLD_ORPHAN_GRACE = 0.3
+local RELEASE_FADE = 0.1
 
-local function onTrackPlayed(track)
+local holding = {} -- [AnimationTrack] = { Character = Model, Since = os.clock() }
+
+local function playerOf(character)
+	return character and Players:GetPlayerFromCharacter(character) or nil
+end
+
+local function releaseHolds(character)
+	if not character then return end
+	for track, info in pairs(holding) do
+		if info.Character == character then
+			holding[track] = nil
+			pcall(function() track:Stop(RELEASE_FADE) end)
+		end
+	end
+end
+
+local function onTrackPlayed(track, character)
 	local rule = ruleFor(track)
 	if not rule then return end
 
@@ -77,14 +112,24 @@ local function onTrackPlayed(track)
 	end
 
 	if rule.HoldAtEnd then
-		holding[track] = true
+		holding[track] = { Character = character, Since = os.clock() }
+	elseif rule.Priority == Enum.AnimationPriority.Action then
+		releaseHolds(character) -- ⚠️ v86 (2): a ação de verdade substitui o preparo
 	end
 end
 
 RunService.Heartbeat:Connect(function()
-	for track in pairs(holding) do
+	local agora = os.clock()
+	for track, info in pairs(holding) do
 		if not track.IsPlaying then
 			holding[track] = nil
+			continue
+		end
+		-- ⚠️ v86 (3): preparo órfão — o botão já foi solto e a pose segue presa
+		local dono = playerOf(info.Character)
+		if dono and dono:GetAttribute("KickCharging") == false and agora - info.Since > HOLD_ORPHAN_GRACE then
+			holding[track] = nil
+			pcall(function() track:Stop(RELEASE_FADE) end)
 			continue
 		end
 		local length = track.Length
@@ -94,10 +139,12 @@ RunService.Heartbeat:Connect(function()
 	end
 end)
 
-local function watchAnimator(animator)
-	animator.AnimationPlayed:Connect(onTrackPlayed)
+local function watchAnimator(animator, character)
+	animator.AnimationPlayed:Connect(function(track)
+		onTrackPlayed(track, character)
+	end)
 	for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
-		onTrackPlayed(track)
+		onTrackPlayed(track, character)
 	end
 end
 
@@ -107,7 +154,7 @@ local function watchCharacter(character)
 
 	local animator = humanoid:FindFirstChildOfClass("Animator")
 	if animator then
-		watchAnimator(animator)
+		watchAnimator(animator, character)
 		return
 	end
 	-- Animator pode ser criado depois (o servidor cria se faltar)
@@ -115,7 +162,7 @@ local function watchCharacter(character)
 	connection = humanoid.ChildAdded:Connect(function(child)
 		if child:IsA("Animator") then
 			connection:Disconnect()
-			watchAnimator(child)
+			watchAnimator(child, character)
 		end
 	end)
 end
@@ -125,6 +172,12 @@ local function watchPlayer(player)
 		task.spawn(watchCharacter, player.Character)
 	end
 	player.CharacterAdded:Connect(watchCharacter)
+	-- ⚠️ v86 (1): soltou o botão -> solta o preparo congelado desta tela
+	player:GetAttributeChangedSignal("KickCharging"):Connect(function()
+		if player:GetAttribute("KickCharging") ~= true then
+			releaseHolds(player.Character)
+		end
+	end)
 end
 
 for _, player in ipairs(Players:GetPlayers()) do
