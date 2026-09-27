@@ -2,11 +2,25 @@
 	DribbleInput (LocalScript)
 	LOCAL: StarterPlayer > StarterPlayerScripts
 
-	Mapeia Z (esquerda) / X (trás) / C (direita) pro remote de finta.
+	⚠️ NOVO — DRIBLE DIRECIONAL NO Q. PEDIDO: "Q será o drible direcional. A
+	direção do drible deve ser determinada pelo input de movimento no
+	momento em que Q for pressionado: W+Q frente, S+Q trás, A+Q esquerda,
+	D+Q direita, W+D+Q diagonal frente/direita, W+A+Q diagonal
+	frente/esquerda." Antes eram três teclas fixas (Z esquerda / X trás /
+	C direita).
+
+	Manda o Humanoid.MoveDirection (vetor do WASD em espaço de mundo, já
+	relativo à câmera — o mesmo que o dash/carrinho usa, ver
+	currentTackleDirection em FootballClient.local.luau) pro MESMO remote de
+	finta de sempre (AttemptDribbleMove). O servidor achata/normaliza a
+	direção e escolhe a animação de finta mais próxima (ver
+	getDribbleDirectionFromInput em BallController.legacy.luau). Q parado,
+	sem WASD, = drible pra frente.
+
 	NÃO faz nada se o jogador é GK EFETIVO (Role == "GK" E dentro da
-	própria área — ver GKAreaUtil.lua) — pra ele, essas mesmas teclas
-	viram mergulho (ver GKInput.local.luau). Goleiro FORA da área volta a
-	usar essas teclas como finta normal, igual jogador de linha.
+	própria área — ver GKAreaUtil.lua) — pra ele, Q + direção vira
+	mergulho (ver GKInput.local.luau). Goleiro FORA da área volta a usar
+	o Q como drible normal, igual jogador de linha.
 ]]
 
 local UserInputService = game:GetService("UserInputService")
@@ -18,28 +32,35 @@ local GKAreaUtil = require(ReplicatedStorage:WaitForChild("GKAreaUtil"))
 local AttemptDribbleMove = Config.Remotes.AttemptDribbleMove
 local player = Players.LocalPlayer
 
-local KEY_TO_MOVE = {
-	[Enum.KeyCode.Z] = "Left",
-	[Enum.KeyCode.X] = "Back",
-	[Enum.KeyCode.C] = "Right",
-}
+local DRIBBLE_KEY = Enum.KeyCode.Q
+
+-- Direção atual do WASD (espaço de mundo). Vector3.zero parado — o
+-- servidor trata como "pra frente do personagem".
+local function currentMoveDirection()
+	local character = player.Character
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	if not humanoid then return Vector3.zero end
+	return humanoid.MoveDirection
+end
 
 UserInputService.InputBegan:Connect(function(input, gameProcessedEvent)
 	if gameProcessedEvent then return end
-	if input.UserInputType ~= Enum.UserInputType.Keyboard then return end
-	if GKAreaUtil.IsEffectiveGK(player) then return end -- GK dentro da área: vira mergulho, ver GKInput.local.luau
+	if input.KeyCode ~= DRIBBLE_KEY then return end
+	if GKAreaUtil.IsEffectiveGK(player) then return end -- GK dentro da área: Q vira mergulho, ver GKInput.local.luau
 
-	local moveName = KEY_TO_MOVE[input.KeyCode]
-	if not moveName then return end
-
-	AttemptDribbleMove:FireServer(moveName)
+	AttemptDribbleMove:FireServer(currentMoveDirection())
 end)
 
--- ⚠️ MOBILE: exposto pro botão correspondente em MobileControls.local.luau
--- chamar direto — mesma checagem de GK de cima, sem duplicar nada.
+-- ⚠️ MOBILE: exposto pros botões de drible em MobileControls.local.luau.
+-- Com nome (Left/Back/Right) continua a finta fixa de antes; sem nome, usa
+-- a direção do joystick, igual ao Q no teclado.
 local VALID_MOVES = { Left = true, Back = true, Right = true }
 _G.MobileDribble = function(moveName)
 	if GKAreaUtil.IsEffectiveGK(player) then return end
+	if moveName == nil then
+		AttemptDribbleMove:FireServer(currentMoveDirection())
+		return
+	end
 	if not VALID_MOVES[moveName] then return end
 	AttemptDribbleMove:FireServer(moveName)
 end

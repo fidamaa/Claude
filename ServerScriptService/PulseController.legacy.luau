@@ -649,12 +649,12 @@ local function applyAlliesScale(player, def, effect)
 end
 
 -- ⚠️ v9 PEDIDO: "energia de ativação da Hissatsu... precisa ser algo
--- relacionado com o atributo Energy". Pool separado do multiplicador de
--- FORÇA que o atributo Energy já dá (ver getEnergyForceMultiplier em
--- BallController.legacy.luau) — esse aqui é "combustível" que QUALQUER
--- Pulso Hissatsu (chute/defesa/arrancada/drible) consome pra ativar, e
--- cujo TAMANHO do pool também escala com Energy (mais Energy = pool
--- maior, além de chute mais forte). Regenera sozinho, mesmo parado.
+-- relacionado com o atributo Energy". "Combustível" que QUALQUER Pulso
+-- Hissatsu (chute/defesa/arrancada/drible) consome pra ativar; o TAMANHO
+-- do pool escala com o atributo Energy. ⚠️ NOVO: é o ÚNICO efeito do
+-- atributo Energy — ele não deixa mais nenhuma Hissatsu mais forte
+-- (PEDIDO: "Energia é um RECURSO... Energia máxima 100, Hissatsu custa 30,
+-- após usar 70"). Só reenche no kickoff (ver _G.ResetPulseEnergy).
 local EnergyPool = {} -- [player] = valor atual do pool
 
 local function maxEnergyPool(player)
@@ -1069,29 +1069,32 @@ end
 -- em FootballConfig — mesma curva 0-100 -> MIN..MAX de sempre, 1.0x no
 -- default 50); Tackle (desarme) usa Physical também, mesma lógica do GK,
 -- só que na defesa.
-local function getPulsePowerScaleAttribute(def)
-	if def.RoleRequired == "GK" then return Config.PHYSICAL_ATTRIBUTE, Config.DEFAULT_PHYSICAL end
-	if def.Action == "Shot" then return Config.KICK_ATTRIBUTE, Config.DEFAULT_KICK end
-	-- ⚠️ v11: cabeçada (Cabeça de Kung Fu) é finalização, lê Força de
-	-- Chute; "Root" (Costura de Sombra) é desarme, lê Físico igual Tackle.
-	if def.Action == "Header" then return Config.KICK_ATTRIBUTE, Config.DEFAULT_KICK end
-	if def.Action == "DribbleMove" then return Config.DRIBBLE_SKILL_ATTRIBUTE, Config.DEFAULT_DRIBBLE_SKILL end
-	if def.Action == "Tackle" then return Config.PHYSICAL_ATTRIBUTE, Config.DEFAULT_PHYSICAL end
-	if def.Action == "Root" then return Config.PHYSICAL_ATTRIBUTE, Config.DEFAULT_PHYSICAL end
-	return nil, nil
+--
+-- ⚠️ NOVO — FÓRMULA POR HISSATSU. PEDIDO: "Cada Hissatsu poderá utilizar
+-- atributos diferentes para determinar sua potência... 60% Chute + 40%
+-- Técnica... 70% Físico + 30% Técnica". O atributo fixo por categoria
+-- (antigo getPulsePowerScaleAttribute) virou só o PADRÃO de quem não
+-- declara Scaling — ver Config.GetHissatsuScaling/GetHissatsuAttribute-
+-- Rating em FootballConfig. A nota (média ponderada 0-100) entra na MESMA
+-- curva de sempre, então uma Hissatsu 100% Físico continua idêntica.
+local function getPulsePowerScale(player, def)
+	local rating = Config.GetHissatsuAttributeRating(player, def)
+	if not rating then return 1 end
+	return Config.AttributeCurve(rating, Config.PULSE_EFFECT_POWER_SCALE_MIN, Config.PULSE_EFFECT_POWER_SCALE_MAX)
 end
 
-local function getPulsePowerScale(player, def)
-	local attrName, default = getPulsePowerScaleAttribute(def)
-	if not attrName then return 1 end
-	local value = player:GetAttribute(attrName)
-	if typeof(value) ~= "number" then value = default end
-	local fraction = math.clamp(value, 0, 100) / 100
-	return Config.PULSE_EFFECT_POWER_SCALE_MIN + (Config.PULSE_EFFECT_POWER_SCALE_MAX - Config.PULSE_EFFECT_POWER_SCALE_MIN) * fraction
+-- ⚠️ NOVO: multiplicador de FORÇA de chute da Hissatsu — a nota da fórmula
+-- na curva de força do Chute (KICK_FORCE_MULTIPLIER_*: 1.0x na nota 50).
+-- Entregue ao BallController em effect.AttributeForceMult (substitui o
+-- antigo Kick x Energy de _G.PulseExecuteShot).
+local function getPulseAttributeForceMult(player, def)
+	local rating = Config.GetHissatsuAttributeRating(player, def)
+	if not rating then return nil end
+	return Config.AttributeCurve(rating, Config.KICK_FORCE_MULTIPLIER_MIN, Config.KICK_FORCE_MULTIPLIER_MAX)
 end
 
 -- Chaves de TAMANHO/POTÊNCIA de efeito de área — ForceMult/CurveMult/etc
--- já têm seu próprio caminho de escala (Kick/Energy/raridade, ver
+-- já têm seu próprio caminho de escala (AttributeForceMult/raridade, ver
 -- BallController.lua), então essas aqui são só as de área/duração.
 local POWER_SCALED_EFFECT_KEYS = {
 	"FreezeRadius", "FreezeDuration",
@@ -1131,11 +1134,17 @@ end
 
 local function applyPulsePowerScale(player, def, effect)
 	local scale = getPulsePowerScale(player, def) * getElementSelfMatchScale(player, def)
-	if scale == 1 then return effect end
+	-- ⚠️ NOVO: chute de Hissatsu leva junto a força da fórmula (ver
+	-- getPulseAttributeForceMult) — só Action="Shot" lê isso.
+	local forceMult = def.Action == "Shot" and getPulseAttributeForceMult(player, def) or nil
+	if scale == 1 and not forceMult then return effect end
 	local scaled = table.clone(effect)
-	for _, key in ipairs(POWER_SCALED_EFFECT_KEYS) do
-		if scaled[key] then scaled[key] = scaled[key] * scale end
+	if scale ~= 1 then
+		for _, key in ipairs(POWER_SCALED_EFFECT_KEYS) do
+			if scaled[key] then scaled[key] = scaled[key] * scale end
+		end
 	end
+	scaled.AttributeForceMult = forceMult
 	return scaled
 end
 
@@ -1370,7 +1379,7 @@ local function resolveHissatsu(state, player, slot)
 
 	local resolvedEffect = state.Perfect and state.Def.Perfect or state.Def.Bom
 
-	-- ⚠️ v28: cada clique ALÉM do básico (os que o atributo Energy liberou)
+	-- ⚠️ v28: cada clique ALÉM do básico (os que a fórmula da Hissatsu liberou)
 	-- soma força de verdade no chute — é o que faz o atributo valer a pena
 	-- em vez de só encher a tela de alvo.
 	if state.BaseHits and state.Hits and state.Hits > state.BaseHits and resolvedEffect then
@@ -1423,14 +1432,18 @@ local function startHissatsuQTE(player, slot, def, onResolved)
 		-- é ganhar mais TRÊS clicadas, e tempo suficiente pra conseguir
 		-- clicar em todas se estiver maximizado."
 		--
-		-- Energy alto dá as duas coisas juntas, de propósito: mais cliques
+		-- Nota alta dá as duas coisas juntas, de propósito: mais cliques
 		-- disponíveis E janela maior pra alcançá-los. Se só os cliques
 		-- subissem, atributo alto viraria punição (mais alvos no mesmo
 		-- tempo). A janela cresce um pouco mais rápido que os cliques, então
 		-- quem está no máximo consegue mesmo fechar todos.
-		local energyValue = player:GetAttribute(Config.ENERGY_ATTRIBUTE)
-		if typeof(energyValue) ~= "number" then energyValue = Config.DEFAULT_ENERGY end
-		local energyFraction = math.clamp(energyValue, 0, 100) / 100
+		--
+		-- ⚠️ NOVO: a nota NÃO é mais a Energy (Energia é recurso, não
+		-- potência) — é a FÓRMULA da própria Hissatsu (Scaling). Um chute
+		-- 60% Chute + 40% Técnica ganha cliques com esses dois atributos.
+		-- Sem fórmula, nota neutra (50).
+		local rating = Config.GetHissatsuAttributeRating(player, def) or 50
+		local energyFraction = math.clamp(rating, 0, 100) / 100
 
 		local baseHits = math.max(qte.HitCount or 5, 1)
 		local bonusHits = math.floor(energyFraction * Config.HISSATSU_QTE_MAX_BONUS_HITS + 0.0001)
@@ -1791,7 +1804,11 @@ Remotes.UsePulse.OnServerEvent:Connect(function(player, slotArg, aimPointArg)
 	-- ⚠️ v27: o custo agora depende da RARIDADE (ver
 	-- Config.PULSE_ENERGY_COST_BY_RARITY) — é o que limita quantas vezes uma
 	-- Hissatsu forte cabe numa rodada, já que o pool só reenche no intervalo.
-	local energyCost = (Config.PULSE_ENERGY_COST_BY_RARITY and Config.PULSE_ENERGY_COST_BY_RARITY[def.Rarity])
+	-- ⚠️ NOVO: def.EnergyCost (opcional) — custo próprio da Hissatsu, na
+	-- frente da tabela por raridade. PEDIDO: "A Energia deve determinar o
+	-- custo para utilizar a Hissatsu, e não sua potência".
+	local energyCost = (typeof(def.EnergyCost) == "number" and def.EnergyCost)
+		or (Config.PULSE_ENERGY_COST_BY_RARITY and Config.PULSE_ENERGY_COST_BY_RARITY[def.Rarity])
 		or Config.PULSE_ENERGY_COST
 	if EnergyPool[player] < energyCost then
 		feedback(player, "NotEnoughEnergy", energyCost - EnergyPool[player])

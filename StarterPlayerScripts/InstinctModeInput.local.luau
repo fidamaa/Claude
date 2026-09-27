@@ -8,6 +8,8 @@
 	GK), G (cabeçada), F (dash de GK), LeftShift (sprint) e LeftControl
 	(shift lock) já estão todas ocupadas (ver PulseInput/GKInput/
 	DribbleInput.local.luau e FootballClient.local.luau).
+	⚠️ NOVO: o esquema mudou (Q drible, F dash, E/R Armas, T cabeçada, sem
+	sprint), mas V continua livre — nada muda aqui.
 
 	Só manda o FireServer — quem decide se o medidor está cheio de
 	verdade é sempre o servidor (InstinctController.lua); aqui só evita

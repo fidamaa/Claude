@@ -1529,14 +1529,18 @@ local function getGKAreaKickBonus(player)
 	return Config.GK_AREA_KICK_FORCE_MULT or 1
 end
 
--- ⚠️ v8: Energy entra na fórmula de força dos Pulsos de Chute junto com
--- Kick (era só o atributo base sem uso nenhum até agora — ver comentário
--- de Config.ENERGY_ATTRIBUTE). Mesma faixa/curva do Kick.
-local function getEnergyForceMultiplier(player)
-	local value = player:GetAttribute(Config.ENERGY_ATTRIBUTE)
-	if typeof(value) ~= "number" then value = Config.DEFAULT_ENERGY end
-	local fraction = math.clamp(value, 0, 100) / 100
-	return Config.ENERGY_FORCE_MULTIPLIER_MIN + (Config.ENERGY_FORCE_MULTIPLIER_MAX - Config.ENERGY_FORCE_MULTIPLIER_MIN) * fraction
+-- ⚠️ NOVO: getEnergyForceMultiplier foi REMOVIDO — PEDIDO: "Energia é um
+-- RECURSO... Não fazer 'mais Energia = Hissatsu mais forte'". A força do
+-- chute de Hissatsu agora vem da FÓRMULA da própria Hissatsu (Scaling),
+-- calculada no PulseController e entregue em effect.AttributeForceMult
+-- (ver _G.PulseExecuteShot).
+
+-- ⚠️ NOVO: TÉCNICA (0-100, bruto) — domínio, primeiro toque, recepção,
+-- bola difícil e precisão de passe (ver Config.TECHNIQUE_ATTRIBUTE).
+local function getTechnique(player)
+	local value = player:GetAttribute(Config.TECHNIQUE_ATTRIBUTE)
+	if typeof(value) ~= "number" then value = Config.DEFAULT_TECHNIQUE end
+	return math.clamp(value, 0, 100)
 end
 
 -- ⚠️ v8/NOVO: queda de força por distância (MaxRange por raridade) —
@@ -1998,9 +2002,16 @@ end
 -- redução de Pulso/Instinto (aimDeviationMult, aplicado por quem chama
 -- essa função). Pior Kick = mais desvio; adversário em cima (pressão) =
 -- mais desvio ainda.
-local function getAimDeviationDegrees(player)
-	local kickValue = player:GetAttribute(Config.KICK_ATTRIBUTE)
-	if typeof(kickValue) ~= "number" then kickValue = Config.DEFAULT_KICK end
+-- ⚠️ NOVO: isPass=true (chute mirado num companheiro) lê TÉCNICA em vez de
+-- Chute — "precisão de passes" é da Técnica. Finalização continua no Chute.
+local function getAimDeviationDegrees(player, isPass)
+	local kickValue
+	if isPass then
+		kickValue = getTechnique(player)
+	else
+		kickValue = player:GetAttribute(Config.KICK_ATTRIBUTE)
+		if typeof(kickValue) ~= "number" then kickValue = Config.DEFAULT_KICK end
+	end
 	local kickFraction = math.clamp(kickValue, 0, 100) / 100
 
 	local degrees = Config.AIM_DEVIATION_MIN_DEGREES
@@ -2208,7 +2219,12 @@ RunService.Heartbeat:Connect(function()
 	if deadBallMode then return end
 	if owner then return end
 	if ballFrozenForGuardQTE then return end -- bola "parada" pela guarda de Hissatsu não é bola solta pra ninguém pegar
-	if ball.AssemblyLinearVelocity.Magnitude > LOOSE_BALL_PICKUP_MAX_SPEED then return end
+	-- ⚠️ NOVO (Técnica — "recepção de passes / controle de bolas difíceis"):
+	-- o teto de velocidade de bola dominável agora é POR JOGADOR (Técnica
+	-- alta domina bola um pouco mais rápida). O corte global continua, só
+	-- que no teto MÁXIMO possível (Técnica 100) — acima disso ninguém pega.
+	local ballSpeed = ball.AssemblyLinearVelocity.Magnitude
+	if ballSpeed > LOOSE_BALL_PICKUP_MAX_SPEED * Config.TECHNIQUE_RECEIVE_SPEED_MULT_MAX then return end
 
 	local bestPlayer, bestDistance = nil, math.huge
 	for _, plr in ipairs(Players:GetPlayers()) do
@@ -2221,7 +2237,12 @@ RunService.Heartbeat:Connect(function()
 		local _, root = getCharacterParts(plr)
 		if not root then continue end
 
-		local radius = Config.POSSESSION_PICKUP_RADIUS
+		-- ⚠️ NOVO: Técnica escala domínio/primeiro toque (raio), recepção
+		-- (velocidade de bola aceitável) e bola aérea (altura) — 1.0x em 50.
+		local technique = getTechnique(plr)
+		if ballSpeed > LOOSE_BALL_PICKUP_MAX_SPEED * Config.AttributeCurve(technique, Config.TECHNIQUE_RECEIVE_SPEED_MULT_MIN, Config.TECHNIQUE_RECEIVE_SPEED_MULT_MAX) then continue end
+
+		local radius = Config.POSSESSION_PICKUP_RADIUS * Config.AttributeCurve(technique, Config.TECHNIQUE_PICKUP_RADIUS_MULT_MIN, Config.TECHNIQUE_PICKUP_RADIUS_MULT_MAX)
 		if _G.GetPulsePickupRadiusAdd then radius += _G.GetPulsePickupRadiusAdd(plr) end
 		if _G.CheckInstinct then
 			local opponentDistance = nearestOpponentDistance(plr)
@@ -2241,7 +2262,8 @@ RunService.Heartbeat:Connect(function()
 		if playerSpeed <= Config.AERIAL_PICKUP_MAX_PLAYER_SPEED then
 			local horizontal = (Vector3.new(ball.Position.X, 0, ball.Position.Z) - Vector3.new(root.Position.X, 0, root.Position.Z)).Magnitude
 			local vertical = math.abs(ball.Position.Y - root.Position.Y)
-			distance = (vertical <= Config.AERIAL_PICKUP_HEIGHT) and horizontal or math.huge
+			local aerialHeight = Config.AERIAL_PICKUP_HEIGHT * Config.AttributeCurve(technique, Config.TECHNIQUE_AERIAL_HEIGHT_MULT_MIN, Config.TECHNIQUE_AERIAL_HEIGHT_MULT_MAX) -- ⚠️ NOVO: Técnica
+			distance = (vertical <= aerialHeight) and horizontal or math.huge
 		else
 			distance = (root.Position - ball.Position).Magnitude
 		end
@@ -2643,6 +2665,32 @@ RunService.Heartbeat:Connect(function()
 end)
 
 -- ===== FINTA DIRECIONAL (Z esquerda / X trás / C direita) =====
+-- ⚠️ NOVO — DRIBLE DIRECIONAL (tecla Q). PEDIDO: "A direção do drible deve
+-- ser determinada pelo input de movimento no momento em que Q for
+-- pressionado. W+Q frente, S+Q trás, A+Q esquerda, D+Q direita, W+D+Q
+-- diagonal..." O cliente manda o Humanoid.MoveDirection (vetor do WASD em
+-- espaço de mundo, relativo à câmera) em vez de um nome fixo. Tratado como
+-- palpite: achatado no plano e normalizado aqui (sem finta pra cima, nem
+-- magnitude inflada). Sem input (parado) = pra frente do personagem.
+local function getDribbleDirectionFromInput(root, inputDirection)
+	local flat = Vector3.new(inputDirection.X, 0, inputDirection.Z)
+	if flat.Magnitude > 0.1 then return flat.Unit end
+	local look = Vector3.new(root.CFrame.LookVector.X, 0, root.CFrame.LookVector.Z)
+	return look.Magnitude > 0.01 and look.Unit or root.CFrame.LookVector
+end
+
+-- Qual das animações de finta existentes (Left/Back/Right) combina com a
+-- direção escolhida, RELATIVA a pra onde o personagem está virado. Lado
+-- dominante = Left/Right (inclui as diagonais); senão, Back (que também é
+-- o fallback de dribbleAnimationFor pra frente, que não tem animação própria).
+local function dribbleAnimationNameFor(root, direction)
+	local lateral = direction:Dot(root.CFrame.RightVector)
+	if math.abs(lateral) >= 0.5 then
+		return lateral > 0 and "Right" or "Left"
+	end
+	return "Back"
+end
+
 local function getSkillMoveDirectionVector(root, moveName)
 	if moveName == "Left" then
 		return -root.CFrame.RightVector
@@ -2721,10 +2769,16 @@ Remotes.AttemptDribbleMove.OnServerEvent:Connect(function(player, moveName)
 	if GKAreaUtil.IsEffectiveGK(player) then return end -- GK DENTRO da área usa AttemptGKDive (Z/X/C/E/Q viram mergulho, não finta); fora da área, finta normal
 
 	local direction
-	if typeof(moveName) == "string" then
-		local _, root = getCharacterParts(player)
-		if root then
-			direction = getSkillMoveDirectionVector(root, moveName)
+	local _, rootForDirection = getCharacterParts(player)
+	if rootForDirection then
+		if typeof(moveName) == "Vector3" then
+			-- ⚠️ NOVO: Q + WASD (ver getDribbleDirectionFromInput acima).
+			direction = getDribbleDirectionFromInput(rootForDirection, moveName)
+			moveName = dribbleAnimationNameFor(rootForDirection, direction)
+		elseif typeof(moveName) == "string" then
+			-- Nome fixo (Left/Back/Right) continua aceito: botões do mobile e
+			-- chamadas antigas.
+			direction = getSkillMoveDirectionVector(rootForDirection, moveName)
 		end
 	end
 	if not direction then return end
@@ -3043,7 +3097,7 @@ Remotes.KickBall.OnServerEvent:Connect(function(player, chargedForce, targetPoin
 	-- Pulso/Instinto (aimDeviationMult) — sem desvio em bola parada
 	-- (Instinto de Bola Parada já cobre a precisão de cobrança).
 	if kickTrigger ~= "SetPiece" then
-		local degrees = getAimDeviationDegrees(player) * aimDeviationMult
+		local degrees = getAimDeviationDegrees(player, kickTrigger == "KickAtTeammate") * aimDeviationMult -- ⚠️ NOVO: passe = Técnica
 		direction = applyAimDeviation(direction, degrees)
 	end
 
@@ -3209,7 +3263,7 @@ local function canCaptureLooseBallByTackle(player, root)
 
 	local ballSpeed = ball.AssemblyLinearVelocity.Magnitude
 	local isFastOrAerial = ballSpeed > LOOSE_BALL_PICKUP_MAX_SPEED or vertical > Config.AERIAL_PICKUP_HEIGHT
-	if isFastOrAerial and getDribbleSkill(player) < (Config.TACKLE_FAST_BALL_MIN_DRIBBLE_SKILL / 100) then
+	if isFastOrAerial and getTechnique(player) < Config.TACKLE_FAST_BALL_MIN_TECHNIQUE then -- ⚠️ NOVO: bola difícil = Técnica (era DribbleSkill)
 		return false
 	end
 
@@ -4620,14 +4674,17 @@ _G.PulseExecuteShot = function(player, effect, rarity)
 	if not targetPoint then return false end
 
 	-- ⚠️ v8 PEDIDO ("as duas coisas juntas"): multiplicador de raridade
-	-- aplicado EM CIMA de Energy+Kick, ANTES do multiplicador de tier do
+	-- aplicado EM CIMA da nota de atributo da Hissatsu, ANTES do multiplicador de tier do
 	-- QTE (effect.ForceMult, que é o Bom/Perfect do Pulso) — depois disso
 	-- ainda entra a queda de força por distância (MaxRange) e o chip do
 	-- zagueiro, os dois só pros Pulsos de Chute.
 	local rarityMult = (rarity and Config.PULSE_RARITY_POWER_MULT[rarity]) or 1
-	local kickMult = getKickForceMultiplier(player)
-	local energyMult = getEnergyForceMultiplier(player)
-	local baseForce = Config.KICK_MAX_FORCE * kickMult * energyMult * rarityMult
+	-- ⚠️ NOVO: a nota de atributo vem da FÓRMULA da Hissatsu (Scaling — ex.:
+	-- 60% Chute + 40% Técnica), já passada pela curva de força do Chute no
+	-- PulseController (effect.AttributeForceMult). Sem ela (chamada antiga
+	-- sem fórmula), cai no Chute puro. A Energy saiu daqui: é só custo.
+	local kickMult = effect.AttributeForceMult or getKickForceMultiplier(player)
+	local baseForce = Config.KICK_MAX_FORCE * kickMult * rarityMult
 	local qteTierMult = effect.ForceMult or 1
 	local force = baseForce * qteTierMult
 	local forceBeforeRangeDecay = force
@@ -4653,9 +4710,9 @@ _G.PulseExecuteShot = function(player, effect, rarity)
 	-- força sai e onde ela é cortada.
 	if Config.PULSE_FORCE_DEBUG_PRINTS then
 		print(string.format(
-			"💥 [Pulso] %s chutou (raridade %s): KickMax=%d x KickMult=%.2f x EnergyMult=%.2f x RarityMult=%.2f = base %d | x QTE=%.2f = %d | distância=%.1f/alcance %.0f -> fator=%.2f = %d | após chip do zagueiro = %d",
+			"💥 [Pulso] %s chutou (raridade %s): KickMax=%d x AtributoMult=%.2f x RarityMult=%.2f = base %d | x QTE=%.2f = %d | distância=%.1f/alcance %.0f -> fator=%.2f = %d | após chip do zagueiro = %d",
 			player.Name, tostring(rarity),
-			Config.KICK_MAX_FORCE, kickMult, energyMult, rarityMult, math.floor(baseForce),
+			Config.KICK_MAX_FORCE, kickMult, rarityMult, math.floor(baseForce),
 			qteTierMult, math.floor(forceBeforeRangeDecay),
 			originalDistance or 0, maxRange or 0, originalFactor or 1, math.floor(forceAfterRangeDecay),
 			math.floor(force)
@@ -4738,7 +4795,7 @@ _G.PulseExecuteShot = function(player, effect, rarity)
 end
 
 -- ⚠️ v8 PEDIDO: "instintos não são como o pulso" — chute de INSTINTO
--- (ex: Chute Direto) usa a força normal de Kick (sem Energy, sem
+-- (ex: Chute Direto) usa a força normal de Kick (sem fórmula de Hissatsu, sem
 -- multiplicador de raridade, sem MaxRange, sem chip do zagueiro — isso
 -- tudo é só do Pulso/Hissatsu), e vai pra pulsePerformKick com
 -- useNormalArc=true (arco com gravidade normal, sem número de força

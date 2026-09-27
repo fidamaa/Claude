@@ -496,6 +496,7 @@ local SKILL_ATTRIBUTES = {
 	Config.ENERGY_ATTRIBUTE,
 	Config.DRIBBLE_SKILL_ATTRIBUTE,
 	Config.SPEED_ATTRIBUTE,
+	Config.TECHNIQUE_ATTRIBUTE, -- ⚠️ NOVO: 7º atributo entra no "nível do campo"
 }
 
 -- ⚠️ v26: teto de força que o bot segura com MERGULHO NORMAL, sem Hissatsu.

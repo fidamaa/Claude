@@ -123,7 +123,14 @@ local POOL_MAX_BASE_STAT = 15
 -- goleiro, ver conversa de balanceamento). Por já estar na lista de
 -- SKILL_ATTRIBUTE_NAMES, migrateAttributeNames (abaixo) preenche
 -- sozinho quem já tinha personagem salvo sem Energy.
-local SKILL_ATTRIBUTE_NAMES = { "Physical", "DribbleSkill", "Speed", "Kick", "Energy" }
+-- ⚠️ NOVO: "Technique" (TÉCNICA) entra como 6º atributo de skill (7º no
+-- total, com Stamina) — domínio, primeiro toque, recepção, precisão de
+-- passe e Hissatsus com Técnica na fórmula (ver Config.TECHNIQUE_ATTRIBUTE
+-- no place Game). Estar nesta lista já faz migrateAttributeNames (abaixo)
+-- dar Técnica = meio da faixa (25) pra todo personagem salvo sem ela — sem
+-- invalidar save nenhum. ⚠️ Energy também mudou de papel: agora é só o
+-- TANQUE de energia das Hissatsus (custo), não força.
+local SKILL_ATTRIBUTE_NAMES = { "Physical", "DribbleSkill", "Speed", "Kick", "Energy", "Technique" }
 local POOL_ATTRIBUTE_NAMES = { "Stamina" }
 -- Atributos removidos do jogo (nomes antigos) cujos pontos investidos
 -- viram AttributePoints livres na migração — ver migrateAttributeNames.
@@ -177,11 +184,11 @@ local function rollSkillStat()
 	return math.random(SKILL_MIN_BASE_STAT, SKILL_MAX_BASE_STAT)
 end
 
--- Sorte 0-100 só pra exibição (estrelas) — média dos 5 atributos
--- sorteados (⚠️ agora incluindo Energy), remapeada de
+-- Sorte 0-100 só pra exibição (estrelas) — média dos 6 atributos
+-- sorteados (⚠️ agora incluindo Energy e Technique), remapeada de
 -- [SKILL_MIN_BASE_STAT, SKILL_MAX_BASE_STAT] pra [0, 100].
-local function luckFromAttributes(physical, dribble, speed, kick, energy)
-	local avg = (physical + dribble + speed + kick + energy) / 5
+local function luckFromAttributes(physical, dribble, speed, kick, energy, technique)
+	local avg = (physical + dribble + speed + kick + energy + technique) / 6
 	local span = SKILL_MAX_BASE_STAT - SKILL_MIN_BASE_STAT
 	if span <= 0 then return 50 end
 	return math.clamp(math.floor(((avg - SKILL_MIN_BASE_STAT) / span) * 100), 0, 100)
@@ -294,8 +301,9 @@ function CharacterCreator.new(slotName, role)
 	local speed = rollSkillStat()
 	local kick = rollSkillStat()
 	local energy = rollSkillStat() -- ⚠️ NOVO: alimenta o sistema de Pulsos
+	local technique = rollSkillStat() -- ⚠️ NOVO: Técnica (7º atributo)
 	local stamina = math.random(POOL_MIN_BASE_STAT, POOL_MAX_BASE_STAT)
-	local luck = luckFromAttributes(physical, dribble, speed, kick, energy)
+	local luck = luckFromAttributes(physical, dribble, speed, kick, energy, technique)
 
 	return {
 		SlotName = slotName,
@@ -319,7 +327,8 @@ function CharacterCreator.new(slotName, role)
 			DribbleSkill = dribble,
 			Speed = speed,
 			Kick = kick,
-			Energy = energy, -- ⚠️ NOVO: alimenta o sistema de Pulsos
+			Energy = energy, -- ⚠️ NOVO: tanque de energia das Hissatsus (custo, não força)
+			Technique = technique, -- ⚠️ NOVO: Técnica (domínio, recepção, passe, Hissatsus técnicas)
 			Stamina = stamina,
 			-- ⚠️ NOVO (fix "fôlego sem teto"): guarda o valor de NASCIMENTO do
 			-- Stamina separado do valor atual — LevelManager usa isso pra
@@ -348,7 +357,7 @@ end
 -- Validar Estrutura de Dados
 -- ========================================
 -- FIX: migra slots salvos com formatos antigos de atributos pro formato
--- atual (Physical/DribbleSkill/Speed/Kick/Stamina), em vez de invalidar
+-- atual (Physical/DribbleSkill/Speed/Kick/Energy/Technique/Stamina), em vez de invalidar
 -- o personagem inteiro. "Dribble" bem antigo vira DribbleSkill (mesmo
 -- conceito, só renomeado). Qualquer atributo faltando (Speed/Kick pra
 -- quem só tinha BallControl/CrossingSkill, por exemplo) ganha o valor

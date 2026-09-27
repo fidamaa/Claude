@@ -41,8 +41,13 @@
 	  • R e T valem IGUAL pra goleiro e jogador de linha. Ninguém fica com
 	    uma tecla a menos.
 
-	Teclas hoje: R = Arma slot 1 · T = Arma slot 2 · H = Pedir Passe ·
-	V = Instinct Mode · Q/E/Z/X/C = goleiro.
+	⚠️ NOVO — PEDIDO: "E ativa a primeira Arma equipada. R ativa a segunda."
+	Arma 1 foi de R pra E e Arma 2 de T pra R (T virou a cabeçada, ver
+	FootballClient.local.luau). O E ficou livre porque o goleiro não usa
+	mais E/Q fixos pra mergulhar (agora é Q + direção, ver GKInput).
+
+	Teclas hoje: E = Arma slot 1 · R = Arma slot 2 · H = Pedir Passe ·
+	V = Instinct Mode · Q = drible (goleiro na área: Q + direção = mergulho).
 ]]
 
 local Players = game:GetService("Players")
@@ -54,8 +59,8 @@ local Remotes = Config.Remotes
 
 local LocalPlayer = Players.LocalPlayer
 
-local INSTINCT_KEY = Enum.KeyCode.R -- Arma slot 1
-local INSTINCT_KEY_SLOT2 = Enum.KeyCode.T -- ⚠️ v79: Arma slot 2 (trocou de lugar com Pedir Passe, ver comentário acima)
+local INSTINCT_KEY = Enum.KeyCode.E -- ⚠️ NOVO: Arma slot 1 (era R)
+local INSTINCT_KEY_SLOT2 = Enum.KeyCode.R -- ⚠️ NOVO: Arma slot 2 (era T — T virou cabeçada)
 
 -- Só educação com a rede: evita mandar dez eventos por segundo se o
 -- jogador martelar a tecla. O cooldown de verdade é do servidor.
@@ -104,10 +109,10 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 	if agora - lastSent < SEND_DEBOUNCE then return end
 	lastSent = agora
 
-	Remotes.ActivateInstinct:FireServer(computeAimPoint(), slot) -- ⚠️ v67: manda a mira junto · v78: manda o slot (1=R, 2=T)
+	Remotes.ActivateInstinct:FireServer(computeAimPoint(), slot) -- ⚠️ v67: manda a mira junto · v78: manda o slot (1=E, 2=R)
 end)
 
--- ⚠️ MOBILE: exposto pros botões de Arma (R=slot1, T=slot2) de
+-- ⚠️ MOBILE: exposto pros botões de Arma (E=slot1, R=slot2) de
 -- MobileControls.local.luau. v78: agora recebe qual slot foi apertado
 -- (default 1, pra não quebrar quem já chamava sem argumento).
 _G.MobileActivateInstinct = function(slot)
@@ -120,4 +125,4 @@ _G.MobileActivateInstinct = function(slot)
 	Remotes.ActivateInstinct:FireServer(computeAimPoint(), (slot == 2 and 2) or 1) -- ⚠️ v67: manda a mira junto · v78: manda o slot
 end
 
-print("✅ Input de Arma carregado (R = slot 1, T = slot 2). Q e E ficaram livres pro goleiro.")
+print("✅ Input de Arma carregado (E = slot 1, R = slot 2).")

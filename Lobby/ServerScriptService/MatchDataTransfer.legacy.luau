@@ -120,6 +120,7 @@ local function gatherPlayerMatchData(player)
 				Kick = activeSlot.Attributes.Kick,
 				Stamina = activeSlot.Attributes.Stamina,
 				Energy = activeSlot.Attributes.Energy, -- ⚠️ NOVO: alimenta o sistema de Pulsos (hissatsus)
+				Technique = activeSlot.Attributes.Technique, -- ⚠️ NOVO: Técnica (7º atributo)
 			},
 
 			-- 🔥 HISSATSUS (slots vazios por enquanto)
@@ -154,13 +155,14 @@ local function gatherPlayerMatchData(player)
 	print(string.format("   💰 Dinheiro: $%d", matchData.Money))
 	print(string.format("   📊 Nível: %d (XP: %d)", matchData.Character.Level, matchData.Character.CurrentXP))
 	print(string.format("   👤 Personagem: %s (%s)", matchData.Character.SlotName, matchData.Character.Role or "sem posição preferida")) -- ⚠️ v10: Role pode vir nil agora (nenhum Pulso com posição definida) — cai no overflow normal no Game, não é erro
-	print(string.format("   ⚡ Atributos: FIS:%d DRI:%d VEL:%d CHT:%d STA:%d ENE:%d",
+	print(string.format("   ⚡ Atributos: FIS:%d DRI:%d VEL:%d CHT:%d STA:%d ENE:%d TEC:%d",
 		matchData.Character.Attributes.Physical,
 		matchData.Character.Attributes.DribbleSkill,
 		matchData.Character.Attributes.Speed,
 		matchData.Character.Attributes.Kick,
 		matchData.Character.Attributes.Stamina,
-		matchData.Character.Attributes.Energy or 0))
+		matchData.Character.Attributes.Energy or 0,
+		matchData.Character.Attributes.Technique or 0)) -- ⚠️ NOVO: Técnica
 
 	return matchData
 end

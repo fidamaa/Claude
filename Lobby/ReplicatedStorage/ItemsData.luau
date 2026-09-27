@@ -58,7 +58,7 @@ ItemsData.Buffs = {
 		Name = "Elixir Completo",
 		Description = "Todos os atributos um pouco melhores na próxima partida.",
 		Rarity = "Epic",
-		Effect = { Type = "NextMatchBuffMulti", Stats = { Physical = 1, DribbleSkill = 1, Speed = 1, Kick = 1, Energy = 1, Stamina = 1 } }, -- ⚠️ NOVO: Energy incluído
+		Effect = { Type = "NextMatchBuffMulti", Stats = { Physical = 1, DribbleSkill = 1, Speed = 1, Kick = 1, Energy = 1, Technique = 1, Stamina = 1 } }, -- ⚠️ NOVO: Energy incluído · Technique (7º atributo)
 	},
 }
 

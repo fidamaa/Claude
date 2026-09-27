@@ -216,6 +216,17 @@ Config.HALFTIME_BREAK_DURATION = 3 -- segundos de intervalo entre os tempos
 -- ===== MOVIMENTO / STAMINA =====
 Config.NORMAL_SPEED = 22
 Config.SPRINT_SPEED = 38
+-- ⚠️ NOVO — PEDIDO: "Não haverá botão de corrida/sprint. O personagem deve
+-- correr normalmente usando WASD, e sua velocidade será determinada pelo
+-- atributo Velocidade." O Shift/botão SPRINT saiu (ver PlayerSystems.
+-- legacy.luau e FootballClient.local.luau): todo movimento é corrida, na
+-- velocidade RUN_SPEED x multiplicador de Velocidade (SPEED_MULTIPLIER_*).
+-- Igual ao antigo SPRINT_SPEED de propósito — é o ritmo em que o jogo foi
+-- balanceado (drible, carrinho, animação de Run). NORMAL_SPEED continua
+-- existindo só como referência do ritmo de ANDAR da animação (ver
+-- refreshTrackSpeed em PlayerSystems). Quer o jogo mais lento? Baixe só
+-- este número.
+Config.RUN_SPEED = 38
 -- PEDIDO: menos stamina MÁXIMA base, mas recuperando bem mais rápido —
 -- em vez de aguentar sprintar por muito tempo seguido, o jogador cansa
 -- mais rápido só que volta a poder agir logo em seguida (menos "correr
@@ -223,6 +234,9 @@ Config.SPRINT_SPEED = 38
 -- ⚠️ v67 — PEDIDO: "aumente um pouco a stamina base, 20%". 45 -> 54.
 Config.BASE_STAMINA = 54            -- era 45 (+20%)
 Config.STAMINA_PER_ATTRIBUTE_POINT = 10
+-- ⚠️ NOVO: sem sprint, o Fôlego não é mais gasto correndo — só pelas AÇÕES
+-- físicas (finta, cabeçada, carrinho — ver *_STAMINA_COST). SPRINT_DRAIN_
+-- RATE ficou sem uso; mantido só pra não quebrar quem ainda leia o campo.
 Config.SPRINT_DRAIN_RATE = 20
 Config.RECOVERY_RATE = 24           -- era 15
 Config.EXHAUSTED_RECOVERY_RATE = 8  -- era 5 — junto com a recuperação base maior
@@ -258,7 +272,9 @@ Config.AERIAL_PICKUP_MAX_PLAYER_SPEED = 20   -- studs/s: acima disso (sprintando
 -- estiver no nível mínimo — abaixo disso, o carrinho erra igual sempre
 -- (não é qualquer um que controla uma bola voando rápido no peito/pé).
 Config.TACKLE_AERIAL_CAPTURE_HEIGHT = 10
-Config.TACKLE_FAST_BALL_MIN_DRIBBLE_SKILL = 60 -- 0-100: nível mínimo de DribbleSkill pra carrinhar bola rápida/no ar
+-- ⚠️ NOVO: "controle de bolas difíceis" é da TÉCNICA agora (era o
+-- DribbleSkill) — ver Config.TECHNIQUE_ATTRIBUTE. Mesmo número de corte.
+Config.TACKLE_FAST_BALL_MIN_TECHNIQUE = 60 -- 0-100: nível mínimo de Técnica pra carrinhar bola rápida/no ar
 Config.DRIBBLE_OFFSET = 1
 Config.DRIBBLE_HEIGHT_OFFSET = -2.6
 Config.DRIBBLE_CHASE_GAIN = 25
@@ -321,12 +337,111 @@ Config.DEFAULT_DRIBBLE_SKILL = 50
 -- de força), igual Kick/Physical já funcionam pros outros sistemas.
 Config.ENERGY_ATTRIBUTE = "Energy"
 Config.DEFAULT_ENERGY = 50
--- Multiplicador de força de chute a partir de Energy — mesma faixa do
--- Kick (0.85x em 0, 1.0x no default 50, 1.15x no teto), pra alimentar a
--- fórmula de força dos Pulsos de Chute junto com Kick (ver
--- getEnergyForceMultiplier em BallController.legacy.luau).
-Config.ENERGY_FORCE_MULTIPLIER_MIN = 0.85
-Config.ENERGY_FORCE_MULTIPLIER_MAX = 1.15
+-- ⚠️ NOVO — PEDIDO: "Energia é um RECURSO, e não um atributo que aumenta
+-- diretamente a potência das Hissatsus... Não fazer 'mais Energia =
+-- Hissatsu mais forte'." REMOVIDOS ENERGY_FORCE_MULTIPLIER_MIN/MAX (o
+-- atributo multiplicava a força do chute de Hissatsu) e o bônus de cliques
+-- do QTE por Energy (ver startHissatsuQTE em PulseController). O atributo
+-- Energy agora só decide o TAMANHO do tanque (PULSE_ENERGY_POOL_MIN/MAX —
+-- Energy 50 = tanque de 100) e cada Hissatsu custa energia pra usar
+-- (PULSE_ENERGY_COST_BY_RARITY, ou o EnergyCost da própria Hissatsu).
+
+-- ===== TÉCNICA (7º atributo) =====
+-- ⚠️ NOVO — PEDIDO: "Técnica representa a habilidade geral do jogador com a
+-- bola: domínio, primeiro toque, recepção de passes, controle de bolas
+-- difíceis, precisão de passes... Hissatsus que utilizem Técnica". Mesmo
+-- padrão dos outros atributos de skill (0-100, default 50 = neutro,
+-- sorteado/migrado no PlayerDataManager do Lobby, repassado via
+-- TeleportData — ver onPlayerAdded no PlayerSystems.lua). Não é mecânica
+-- nova: escala o que JÁ existia no BallController —
+--   • domínio/primeiro toque: raio de pickup da bola solta
+--     (POSSESSION_PICKUP_RADIUS);
+--   • recepção de passe / bola difícil: velocidade máxima de bola que dá
+--     pra dominar passivamente (LOOSE_BALL_PICKUP_MAX_SPEED) e altura da
+--     bola aérea dominável (AERIAL_PICKUP_HEIGHT);
+--   • bola rápida/no ar no carrinho: TACKLE_FAST_BALL_MIN_TECHNIQUE (era
+--     o Drible que decidia isso);
+--   • precisão de passe: o desvio de mira do PASSE lê Técnica em vez de
+--     Chute (hoje o desvio está zerado — ver AIM_DEVIATION_* — então só
+--     passa a valer se você religar o desvio).
+-- Todos os multiplicadores são 1.0x no default (50): quem nunca mexeu no
+-- atributo não sente diferença nenhuma.
+Config.TECHNIQUE_ATTRIBUTE = "Technique"
+Config.DEFAULT_TECHNIQUE = 50
+Config.TECHNIQUE_PICKUP_RADIUS_MULT_MIN = 0.85   -- Técnica 0
+Config.TECHNIQUE_PICKUP_RADIUS_MULT_MAX = 1.15   -- Técnica 100
+Config.TECHNIQUE_RECEIVE_SPEED_MULT_MIN = 0.85   -- bola mais rápida que dá pra dominar
+Config.TECHNIQUE_RECEIVE_SPEED_MULT_MAX = 1.15
+Config.TECHNIQUE_AERIAL_HEIGHT_MULT_MIN = 0.85   -- bola aérea mais alta que dá pra dominar
+Config.TECHNIQUE_AERIAL_HEIGHT_MULT_MAX = 1.15
+
+-- Multiplicador genérico 0-100 -> MIN..MAX (mesma curva linear de todos os
+-- atributos do jogo: 50 = meio da faixa).
+function Config.AttributeCurve(value, minMult, maxMult)
+	local fraction = math.clamp(tonumber(value) or 50, 0, 100) / 100
+	return minMult + (maxMult - minMult) * fraction
+end
+
+-- ===== ESCALA DE HISSATSU POR ATRIBUTO (fórmula própria por Hissatsu) =====
+-- ⚠️ NOVO — PEDIDO: "Cada Hissatsu poderá utilizar atributos diferentes
+-- para determinar sua potência... Hissatsu ofensiva: 60% Chute + 40%
+-- Técnica; outra: 70% Físico + 30% Técnica". Cada Hissatsu em
+-- PulseInstinctData.luau pode declarar
+--     Scaling = { Kick = 0.6, Technique = 0.4 }
+-- (nomes internos dos atributos, pesos somando 1). A POTÊNCIA BASE continua
+-- sendo o que a Hissatsu já define (ForceMult do Bom/Perfect, raridade,
+-- raios/durações do efeito) — a fórmula só decide QUAL nota de atributo
+-- (média ponderada 0-100) entra nas curvas que já existiam:
+--   • força do chute de Hissatsu: curva KICK_FORCE_MULTIPLIER_* (antes era
+--     sempre Kick x Energy);
+--   • tamanho/potência de área: curva PULSE_EFFECT_POWER_SCALE_* (antes um
+--     atributo fixo por categoria);
+--   • cliques extras e janela do QTE "Tap" (antes era a Energy).
+-- Hissatsu SEM Scaling cai no atributo da categoria, igual sempre foi
+-- (HISSATSU_DEFAULT_SCALING logo abaixo). Energy e Stamina NUNCA entram
+-- na fórmula: Energy é recurso (custo), Stamina é Fôlego (escala própria).
+Config.HISSATSU_SCALABLE_ATTRIBUTES = {
+	Physical = "DEFAULT_PHYSICAL",
+	Kick = "DEFAULT_KICK",
+	DribbleSkill = "DEFAULT_DRIBBLE_SKILL",
+	Speed = "DEFAULT_SPEED",
+	Technique = "DEFAULT_TECHNIQUE",
+}
+
+-- Fórmula padrão de quem não declara Scaling — exatamente o atributo que
+-- cada categoria já lia antes (GK/desarme/Root = Físico, chute/cabeçada =
+-- Chute, drible = Drible). Buff de linha sem categoria = sem escala.
+function Config.GetHissatsuScaling(def)
+	if type(def) ~= "table" then return nil end
+	if type(def.Scaling) == "table" then return def.Scaling end
+	if def.RoleRequired == "GK" then return { Physical = 1 } end
+	if def.Action == "Shot" or def.Action == "Header" then return { Kick = 1 } end
+	if def.Action == "DribbleMove" then return { DribbleSkill = 1 } end
+	if def.Action == "Tackle" or def.Action == "Root" then return { Physical = 1 } end
+	return nil
+end
+
+-- Nota 0-100 do jogador pra ESTA Hissatsu: média ponderada dos atributos da
+-- fórmula. Pesos são normalizados (não precisam somar exatamente 1).
+-- Devolve nil se a Hissatsu não escala com nada.
+function Config.GetHissatsuAttributeRating(player, def)
+	local scaling = Config.GetHissatsuScaling(def)
+	if not scaling then return nil end
+	local total, weightSum = 0, 0
+	for attrName, weight in pairs(scaling) do
+		local defaultKey = Config.HISSATSU_SCALABLE_ATTRIBUTES[attrName]
+		if defaultKey and typeof(weight) == "number" and weight > 0 then
+			local value = player:GetAttribute(attrName)
+			if typeof(value) ~= "number" then value = Config[defaultKey] or 50 end
+			total += math.clamp(value, 0, 100) * weight
+			weightSum += weight
+		elseif attrName == "Energy" or attrName == "Stamina" then
+			warn(("[Hissatsu] %s: '%s' não pode entrar em Scaling (Energy é custo, Stamina é Fôlego) — ignorado."):format(tostring(def.Name), attrName))
+		end
+	end
+	if weightSum <= 0 then return nil end
+	return total / weightSum
+end
 
 -- ===== v8 PEDIDO: "as duas coisas juntas" — alcance máximo (MaxRange)
 -- por raridade + multiplicador de poder por raridade pros Pulsos de
@@ -371,7 +486,8 @@ Config.PULSE_RARITY_ORDER = { "Common", "Rare", "Epic", "Legendary", "Mythic" }
 -- Pulso: goleiro (RoleRequired="GK") usa Physical, chute (Action="Shot")
 -- usa Kick, drible (Action="DribbleMove") usa DribbleSkill, desarme
 -- (Action="Tackle") usa Physical também (ainda é força física, só que na
--- defesa). Mesma curva MIN/DEFAULT/MAX de sempre (ver getKickForceMultiplier
+-- defesa). ⚠️ NOVO: isso virou só o PADRÃO — a Hissatsu que declara
+-- Scaling usa a própria fórmula (ver Config.GetHissatsuScaling). Mesma curva MIN/DEFAULT/MAX de sempre (ver getKickForceMultiplier
 -- em BallController.lua): 0.75x no atributo 0, 1.0x no default (50), 1.30x
 -- no atributo 100.
 Config.PULSE_EFFECT_POWER_SCALE_MIN = 0.75
@@ -499,8 +615,8 @@ Config.PULSE_RANGE_FALLOFF_MIN = 0.7
 -- de verdade continua editável só na seção CHUTE, mais abaixo.
 
 -- ⚠️ v9 PEDIDO: "energia de ativação da Hissatsu, relacionada ao atributo
--- Energy" — pool separado do atributo Energy (que já mexe na FORÇA do
--- chute, ver getEnergyForceMultiplier): esse aqui é um "combustível" que
+-- Energy" — ⚠️ NOVO: é o ÚNICO papel do atributo Energy agora (ele não
+-- mexe mais na força de nada, ver Config.ENERGY_ATTRIBUTE): um "combustível" que
 -- todo Pulso Hissatsu (chute/defesa/arrancada/drible) GASTA pra ativar,
 -- que também escala com o atributo Energy (mais Energy = pool maior).
 -- Mostrado na HUD (ver AbilityHUD.local.luau) e verificado em
@@ -553,10 +669,13 @@ Config.INSTINCT_COOLDOWN_BY_RARITY = {
 	Mythic = 90,
 }
 
--- ⚠️ v28 — O QTE "Tap" DA HISSATSU ESCALA COM O ATRIBUTO ENERGY.
--- MAX_BONUS_HITS: quantos alvos EXTRA o atributo pode liberar, além dos que
---   a Hissatsu já define. 3 no máximo (Energy 100), 0 no mínimo.
--- WINDOW_BONUS: quanto a janela de clique cresce no Energy 100 (+70%).
+-- ⚠️ v28 — O QTE "Tap" DA HISSATSU ESCALA COM ATRIBUTO.
+-- ⚠️ NOVO: não é mais a Energy (Energia é recurso, não potência) — é a nota
+-- da FÓRMULA da própria Hissatsu (Scaling, ver Config.GetHissatsuAttribute-
+-- Rating): um chute 60% Chute + 40% Técnica ganha cliques com esses dois.
+-- MAX_BONUS_HITS: quantos alvos EXTRA a nota pode liberar, além dos que
+--   a Hissatsu já define. 3 no máximo (nota 100), 0 no mínimo.
+-- WINDOW_BONUS: quanto a janela de clique cresce na nota 100 (+70%).
 --   Cresce mais rápido que os alvos de propósito — senão atributo alto
 --   viraria punição, com mais alvo pra clicar no mesmo tempo.
 -- BONUS_HIT_FORCE: quanto de força cada clique EXTRA acrescenta ao chute.

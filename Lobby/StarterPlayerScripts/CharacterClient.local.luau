@@ -61,10 +61,14 @@ local ELEMENT_ICONS = {
 -- ⚠️ NOVO: Energy entrou como 6º atributo (alimenta o sistema de Pulsos)
 -- — a teia agora é um HEXÁGONO em vez de pentágono (ver ATTR_ANGLES
 -- abaixo, que já usa #ATTRIBUTE_ORDER em vez de "5" fixo).
-local ATTRIBUTE_ORDER = { "Physical", "DribbleSkill", "Speed", "Kick", "Energy", "Stamina" }
+-- ⚠️ NOVO: Technique (TÉCNICA) entrou como 7º — a teia vira HEPTÁGONO
+-- sozinha (ATTR_ANGLES já deriva de #ATTRIBUTE_ORDER). Fica ao lado do
+-- Drible porque os dois são "habilidade com a bola".
+local ATTRIBUTE_ORDER = { "Physical", "DribbleSkill", "Technique", "Speed", "Kick", "Energy", "Stamina" }
 local ATTRIBUTE_LABELS = {
 	Physical = "FÍSICO",
 	DribbleSkill = "DRIBLE",
+	Technique = "TÉCNICA",
 	Speed = "VELOCIDADE",
 	Kick = "CHUTE",
 	Energy = "ENERGIA",
@@ -73,7 +77,7 @@ local ATTRIBUTE_LABELS = {
 local ATTRIBUTE_COLOR = Color3.fromRGB(90, 200, 255)
 local ATTRIBUTE_COLOR_BRIGHT = Color3.fromRGB(140, 225, 255)
 
--- ===== GEOMETRIA DA TEIA (pentágono) =====
+-- ===== GEOMETRIA DA TEIA (⚠️ NOVO: heptágono, 7 atributos) =====
 local WEB_SIZE = Vector2.new(400, 400)
 local WEB_CENTER = Vector2.new(200, 190)
 local WEB_RADIUS = 140

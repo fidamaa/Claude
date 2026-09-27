@@ -7,7 +7,7 @@
 	Customização de personagem com botão próprio) — então já funciona no
 	toque sem mudar nada. O que faltava mesmo eram as DUAS coisas que só
 	existiam como tecla: Sprint (segurar Shift) e Câmera/Shift Lock
-	(alternar Ctrl). Só isso aqui.
+	(alternar Ctrl). ⚠️ NOVO: o Sprint saiu do jogo — sobrou só a Câmera.
 
 	Só é criado em dispositivo touch "de verdade" (celular/tablet — sem
 	mouse); em PC continua tudo igual, no teclado.
@@ -62,27 +62,9 @@ local function makeButton(props)
 	return button
 end
 
--- ===== SPRINT (segurar) =====
-local sprintButton = makeButton({
-	Name = "Sprint",
-	Text = "SPRINT",
-	TextSize = 13,
-	Size = UDim2.fromOffset(76, 76),
-	AnchorPoint = Vector2.new(1, 1),
-	-- ⚠️ Deslocado pro lado (mais pra esquerda) pra não ficar em cima do
-	-- botão de PULAR nativo do Roblox, que fica no canto inferior direito.
-	Position = UDim2.new(1, -130, 1, -20),
-	Color = Color3.fromRGB(40, 110, 200),
-})
-sprintButton.MouseButton1Down:Connect(function()
-	_G.MobileSetSprinting(true)
-end)
-sprintButton.MouseButton1Up:Connect(function()
-	_G.MobileSetSprinting(false)
-end)
-sprintButton.MouseLeave:Connect(function()
-	_G.MobileSetSprinting(false)
-end)
+-- ===== SPRINT =====
+-- ⚠️ NOVO: botão SPRINT REMOVIDO — não existe mais sprint (o personagem
+-- sempre corre na velocidade do atributo Velocidade, ver StaminaManager).
 
 -- ===== CÂMERA / SHIFT LOCK (toggle) =====
 local cameraButton = makeButton({

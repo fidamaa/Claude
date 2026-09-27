@@ -13,7 +13,8 @@
 	TECLAS: "1" = slot 1 (jogador de linha E goleiro), "2" = slot 2 (só
 	jogador de linha — Q/E/Z/X/C/F/R/V/G/T já estão todos ocupados por
 	goleiro/instinto/drible/passe/sprint, então 1/2 é o par livre que
-	sobrou sem brigar com nada).
+	sobrou sem brigar com nada). ⚠️ NOVO: continua 1/2 no esquema novo
+	(Q drible, F dash, E/R Armas, T cabeçada, sem sprint).
 
 	QTE: quando o servidor manda Remotes.PulseQTEPrompt (só acontece pros
 	Pulsos com campo QTE, ver PulseInstinctData.luau), mostra a janela

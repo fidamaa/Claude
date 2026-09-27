@@ -672,8 +672,13 @@ Remotes.PossessionChanged.OnClientEvent:Connect(function(owner, has)
 	end
 end)
 
-local DRIBBLE_KEYS = { [Enum.KeyCode.Z] = true, [Enum.KeyCode.X] = true, [Enum.KeyCode.C] = true }
-local GK_DIVE_KEYS = { [Enum.KeyCode.Z] = true, [Enum.KeyCode.C] = true, [Enum.KeyCode.X] = true, [Enum.KeyCode.E] = true, [Enum.KeyCode.Q] = true }
+-- ⚠️ NOVO: esquema de teclas novo — Q = drible direcional (e, pro goleiro
+-- dentro da área, Q + direção = mergulho), F = dash/carrinho (e, pro
+-- goleiro na área, F = saída). Antes: Z/X/C finta, Z carrinho, Z/X/C/E/Q
+-- mergulho.
+local DRIBBLE_KEYS = { [Enum.KeyCode.Q] = true }
+local GK_DIVE_KEYS = { [Enum.KeyCode.Q] = true }
+local DASH_KEY = Enum.KeyCode.F
 
 UserInputService.InputBegan:Connect(function(input, gameProcessedEvent)
 	if gameProcessedEvent then return end
@@ -693,8 +698,8 @@ UserInputService.InputBegan:Connect(function(input, gameProcessedEvent)
 		return
 	end
 
-	if input.KeyCode == Enum.KeyCode.Z and not hasPossession then
-		startCooldown("Tackle", "Carrinho", Config.TACKLE_COOLDOWN)
+	if input.KeyCode == DASH_KEY and not hasPossession then
+		startCooldown("Tackle", "Dash", Config.TACKLE_COOLDOWN) -- ⚠️ NOVO: F = Dash (o carrinho)
 	end
 	if DRIBBLE_KEYS[input.KeyCode] and hasPossession then
 		startCooldown("Dribble", "Drible", Config.DRIBBLE_MOVE_COOLDOWN)

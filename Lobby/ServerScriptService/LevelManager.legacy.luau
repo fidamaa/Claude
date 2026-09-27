@@ -183,7 +183,7 @@ addAttributePointFunc.OnServerInvoke = function(player, attributeName, slotIndex
 	-- verdade — ver FootballConfig.lua no place Game). Aura/BallControl/
 	-- CrossingSkill foram removidos: Speed e Kick entraram no lugar dos
 	-- dois últimos.
-	local validAttributes = {"Physical", "DribbleSkill", "Speed", "Kick", "Energy", "Stamina"} -- ⚠️ NOVO: Energy (Pulsos)
+	local validAttributes = {"Physical", "DribbleSkill", "Speed", "Kick", "Energy", "Technique", "Stamina"} -- ⚠️ NOVO: Energy (Pulsos) · Technique (7º atributo)
 	if not table.find(validAttributes, attributeName) then
 		warn(string.format("❌ Atributo inválido: %s", attributeName))
 		return false, "Atributo inválido"

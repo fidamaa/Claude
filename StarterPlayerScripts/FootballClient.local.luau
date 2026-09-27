@@ -2,12 +2,23 @@
 	FootballClient (LocalScript)
 	LOCAL: StarterPlayerScripts
 
-	Um único LocalScript cuidando de TODO o input do jogador (sprint,
-	Shift Lock, chute/passe/voleio, carrinho, cabeçada) e da UI (barra de
+	Um único LocalScript cuidando de TODO o input do jogador (Shift Lock,
+	chute/passe/voleio, dash/carrinho, cabeçada) e da UI (barra de
 	stamina, placar, menu de troca de time, resumo pós-partida).
 
-	NOTA: o drible direcional (Z/X/C) é tratado no LocalScript separado
-	"DribbleInput", não aqui.
+	⚠️ NOVO — ESQUEMA DE CONTROLES (PEDIDO do usuário):
+		WASD            movimento (sem tecla de sprint — ver RUN_SPEED)
+		Q               drible direcional (DribbleInput.local.luau)
+		F               dash (o carrinho: dash na direção do WASD, disputa a
+		                bola se encostar no portador — ver KEYS.Dash)
+		E / R           Arma 1 / Arma 2 (PulseInput.local.luau)
+		1 / 2           Hissatsu 1 / 2 (HissatsuInput.local.luau)
+		T               cabeçada
+		Espaço          pulo (padrão do Roblox)
+		Clique esquerdo chute (voleio se a bola estiver no ar e você sem posse)
+	Mantidos por não conflitarem: Ctrl = câmera/Shift Lock, H = pedir
+	passe, V = Instinct Mode. Goleiro dentro da área: Q + direção =
+	mergulho, F = saída do gol (GKInput.local.luau).
 ]]
 
 local Players = game:GetService("Players")
@@ -46,11 +57,12 @@ end
 -- Pass foi removido: chutar mirando num companheiro já funciona como
 -- passe. Control (domínio) também foi removido: a posse de bola solta é
 -- automática por proximidade (ver BallController).
+-- ⚠️ NOVO: Sprint (Shift) SAIU — PEDIDO: "Não haverá botão de corrida/
+-- sprint". Carrinho (era Z) virou o DASH no F, e a cabeçada foi de G pra T.
 local KEYS = {
-	Sprint = Enum.KeyCode.LeftShift,
-	ShiftLock = Enum.KeyCode.LeftControl, -- Shift Lock nativo, só que na tecla Ctrl (Shift já é o sprint)
-	Tackle = Enum.KeyCode.Z,
-	Header = Enum.KeyCode.G,
+	ShiftLock = Enum.KeyCode.LeftControl, -- Shift Lock nativo, só que na tecla Ctrl
+	Dash = Enum.KeyCode.F, -- ⚠️ NOVO: era Tackle = Z (mesma ação: o dash de carrinho)
+	Header = Enum.KeyCode.T, -- ⚠️ NOVO: era G
 }
 
 -- ============================================================
@@ -292,27 +304,15 @@ local function computeAimPoint()
 end
 
 -- ===== SPRINT =====
-UserInputService.InputBegan:Connect(function(input, processed)
-	if processed then return end
-	if input.KeyCode == KEYS.Sprint then
-		Remotes.UpdateSprinting:FireServer(true)
-	end
-end)
-UserInputService.InputEnded:Connect(function(input)
-	if input.KeyCode == KEYS.Sprint then
-		Remotes.UpdateSprinting:FireServer(false)
-	end
-end)
-
--- ⚠️ MOBILE: exposto pro botão de Sprint de MobileControls.local.luau
--- chamar direto (segurar = true, soltar = false), sem duplicar nada.
-_G.MobileSetSprinting = function(sprinting)
-	Remotes.UpdateSprinting:FireServer(sprinting and true or false)
-end
+-- ⚠️ NOVO: REMOVIDO. PEDIDO: "Não haverá botão de corrida/sprint. O
+-- personagem deve correr normalmente usando WASD, e sua velocidade será
+-- determinada pelo atributo Velocidade." (ver getRunSpeed em
+-- PlayerSystems.legacy.luau). O botão SPRINT do mobile saiu junto.
 
 -- ===== SHIFT LOCK (tecla Ctrl) =====
 -- É o Shift Lock nativo do Roblox reimplementado à mão numa tecla
--- diferente (Ctrl), já que Shift está ocupado pelo sprint. Não avisa o
+-- diferente (Ctrl) — era porque Shift era o sprint (que não existe mais);
+-- continua no Ctrl pra não mudar o costume de quem já joga. Não avisa o
 -- servidor de nada, não mexe em WalkSpeed nem em nada da bola — só:
 --   1) trava o mouse no centro da tela (câmera gira livre sem precisar
 --      segurar botão nenhum, igual o Shift Lock nativo);
@@ -590,7 +590,12 @@ UserInputService.InputBegan:Connect(function(input, processed)
 	if processed then return end
 	if isShootPress(input) then
 		startCharging()
-	elseif input.KeyCode == KEYS.Tackle then
+	elseif input.KeyCode == KEYS.Dash then
+		-- ⚠️ NOVO: F = DASH. É o MESMO dash de carrinho de sempre (direção
+		-- pelo WASD, cooldown Config.TACKLE_COOLDOWN, custo de Fôlego
+		-- TACKLE_STAMINA_COST) — não é um sistema novo: sem bola, você
+		-- dispara na direção do movimento e, se encostar no portador, vira
+		-- disputa. Com a bola, o movimento especial é o Q (drible).
 		-- ⚠️ v5.4 FIX: era "Role ~= GK", travando o carrinho do goleiro
 		-- SEMPRE, mesmo fora da própria área — onde ele já devia virar
 		-- jogador de linha normal (dribla com Z/X/C, ver DribbleInput.
@@ -606,7 +611,7 @@ UserInputService.InputBegan:Connect(function(input, processed)
 	end
 end)
 
--- ⚠️ MOBILE: botões de Carrinho e Cabeçada (Z e G não existem em
+-- ⚠️ MOBILE: botões de Carrinho/Dash e Cabeçada (F e T não existem em
 -- celular). Reaproveitam exatamente a mesma checagem de cima.
 _G.MobileTackle = function()
 	if not hasPossession and not GKAreaUtil.IsEffectiveGK(player) then

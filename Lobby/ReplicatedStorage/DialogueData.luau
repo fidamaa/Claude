@@ -154,7 +154,7 @@ DialogueData.Kogamalotigo = {
 		},
 		explainAttributes = {
 			Speaker = "Kogamalotigo",
-			Text = "Resumindo: Físico segura carrinho e ganha disputa. Chute é força e alcance. Drible manda na finta. Velocidade é o quanto você corre, e Energia é quantas Hissatsus você aguenta por partida.",
+			Text = "Resumindo: Físico segura carrinho e ganha disputa. Chute é força e alcance. Drible manda na finta. Técnica é domínio, passe e primeiro toque. Velocidade é o quanto você corre, Fôlego é quantas jogadas seguidas você aguenta, e Energia é quantas Hissatsus você consegue soltar.",
 			Choices = {
 				{ Text = "Então abre aí", Next = "openCharacter" },
 				{ Text = "Entendi, valeu", Next = "farewell" },

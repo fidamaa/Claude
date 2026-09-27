@@ -218,6 +218,19 @@ local Data = {}
 --                  tabela que resolveAndExecute recebe (ver o else final
 --                  de Remotes.UsePulse). Pulso instantâneo NÃO lê
 --                  Bom/Perfect — não existe qualidade pra medir.
+--   Scaling      — ⚠️ NOVO: fórmula de POTÊNCIA da Hissatsu por atributo.
+--                  Ex.: { Kick = 0.6, Technique = 0.4 } = 60% Chute + 40%
+--                  Técnica. Atributos aceitos: Physical, Kick,
+--                  DribbleSkill, Speed, Technique (pesos somando 1).
+--                  Energy e Stamina NÃO entram: Energia é o CUSTO, não a
+--                  força (PEDIDO: "Não fazer mais Energia = Hissatsu mais
+--                  forte"). A nota ponderada escala a força do chute, o
+--                  tamanho/duração dos efeitos de área e os cliques extras
+--                  do QTE (ver Config.GetHissatsuAttributeRating). A
+--                  potência BASE continua sendo ForceMult/raridade/raios de
+--                  cada uma. Sem o campo, usa o atributo da categoria.
+--   EnergyCost   — ⚠️ NOVO (opcional): custo de energia próprio; sem ele,
+--                  Config.PULSE_ENERGY_COST_BY_RARITY[Rarity].
 --
 -- CHAVES DE EFEITO NOVAS (v11, implementadas em PulseController):
 --   CorridorStun/CorridorFreeze = { Width, Duration }
@@ -256,6 +269,7 @@ Data.Pulses = {
 		Element = "Luz",
 		Description = "Raio Um sai em menos de um segundo de preparo — o chute mais rápido do jogo, o único que dá pra soltar com um zagueiro em cima — mas é o mais fraco de todos em força.",
 		Action = "Shot",
+		Scaling = { Kick = 0.5, Technique = 0.5 }, -- ⚠️ NOVO: fórmula de potência (chute rápido e preciso)
 		Cooldown = 30,
 		QTE = { Kind = "Tap", PrepTime = 0.8, HitWindow = 1.6, HitCount = 3 },
 		Bom = { ForceMult = 1.25, AimDeviationMult = 0.9 },
@@ -272,6 +286,7 @@ Data.Pulses = {
 		Element = "Natureza",
 		Description = "Cabeça de Kung Fu para a bola no ar perto de você, te faz saltar, e solta a cabeçada com muito mais alcance que a normal quando você acerta os cliques do QTE.",
 		Action = "Header",
+		Scaling = { Kick = 0.4, Physical = 0.3, Technique = 0.3 }, -- ⚠️ NOVO: fórmula de potência (finalização aérea: força, corpo e domínio)
 		Cooldown = 30,
 		-- ⚠️ v14 PEDIDO: "não dá pra fazer uma cabeçada com o Quick Time
 		-- Event, não faz sentido... ou faz a bola paralisar no ar e rolar o
@@ -297,6 +312,7 @@ Data.Pulses = {
 		Element = "Void",
 		Description = "Sumiço faz a bola desaparecer no meio do voo e só reaparecer perto do gol — o goleiro não consegue acompanhar o que não está vendo, a menos que já esteja no canto certo por sorte.",
 		Action = "Shot",
+		Scaling = { Technique = 0.6, Kick = 0.4 }, -- ⚠️ NOVO: fórmula de potência (truque de execução, mais técnica que força)
 		Cooldown = 45,
 		QTE = { Kind = "Tap", PrepTime = 2.0, HitWindow = 2.0, HitCount = 4 },
 		Bom = { ForceMult = 1.4, VanishSeconds = 0.35, IgnoreGKChance = 0.1 },
@@ -313,6 +329,7 @@ Data.Pulses = {
 		Element = "Natureza",
 		Description = "Impulso de Maré te faz saltar numa onda e bater no ar, empurrando pra trás qualquer marcador colado em você — usada com dois marcadores em cima, os dois voam e o rebote fica seu.",
 		Action = "Shot",
+		Scaling = { Kick = 0.6, Physical = 0.4 }, -- ⚠️ NOVO: fórmula de potência (empurra marcador: força de chute + corpo)
 		Cooldown = 45,
 		-- Salto baixo: no anime ele quica pra cima da onda, não decola.
 		AirLaunchHeight = 10,
@@ -333,6 +350,7 @@ Data.Pulses = {
 		Element = "Fogo",
 		Description = "Tornado de Fogo te faz saltar, girar no ar e bater de cima, envolvendo a bola num redemoinho que queima quem estiver no CAMINHO dela (não em volta de você) — quem tentar bloquear na frente paga o preço.",
 		Action = "Shot",
+		Scaling = { Kick = 0.7, Technique = 0.3 }, -- ⚠️ NOVO: fórmula de potência (potência acima de tudo)
 		Cooldown = 60,
 		-- ⚠️ v14 PEDIDO: "o Fire Tornado é pro cara poder pular, girar e
 		-- jogar do ar". AirLaunchHeight lança o jogador no fim do preparo e
@@ -355,6 +373,7 @@ Data.Pulses = {
 		Element = "Vento",
 		Description = "Fúria Glacial congela o caminho da bola — qualquer um na linha do chute trava no lugar, e se o goleiro encostar nela, congela junto e deixa o rebote livre.",
 		Action = "Shot",
+		Scaling = { Kick = 0.6, Technique = 0.4 }, -- ⚠️ NOVO: fórmula de potência (chute pesado e mirado)
 		Cooldown = 60,
 		QTE = { Kind = "Tap", PrepTime = 2.4, HitWindow = 2.2, HitCount = 5 },
 		Bom = { ForceMult = 1.65, AimDeviationMult = 0.5, CorridorFreeze = { Width = 14, Duration = 0.6 } },
@@ -373,6 +392,7 @@ Data.Pulses = {
 		Element = "Void",
 		Description = "Zona Morta te faz subir alto e bater de cima com força que CRESCE conforme mais companheiros estiverem perto de você no momento do chute — sozinho é fraco, com dois do lado é o mais forte fora do Mítico.",
 		Action = "Shot",
+		Scaling = { Kick = 0.5, Technique = 0.5 }, -- ⚠️ NOVO: fórmula de potência (chute coordenado)
 		Cooldown = 90,
 		-- No anime são três jogadores girando no ar em formação triangular —
 		-- é a segunda maior altura do jogo, atrás só da Galáxia.
@@ -397,6 +417,7 @@ Data.Pulses = {
 		Element = "Luz",
 		Description = "Galáxia te faz subir mais alto que qualquer outra técnica e, acertando o timing, a bola atravessa o goleiro sem ele participar — só uma guarda Mítica segura isso. O preparo é o mais longo do jogo: você fica parado e exposto o tempo todo.",
 		Action = "Shot",
+		Scaling = { Kick = 0.6, Technique = 0.4 }, -- ⚠️ NOVO: fórmula de potência (exemplo do pedido: 60% Chute + 40% Técnica)
 		Cooldown = 120,
 		AirLaunchHeight = 18, -- a maior do jogo
 
@@ -419,6 +440,7 @@ Data.Pulses = {
 		Element = "Vento",
 		Description = "Residual deixa um vulto seu pra trás por um instante — nenhum carrinho te acerta nessa janela. Distância normal de drible: serve pra escapar da pressão, não pra ganhar campo.",
 		Action = "DribbleMove",
+		Scaling = { DribbleSkill = 0.7, Technique = 0.3 }, -- ⚠️ NOVO: fórmula de potência (drible de manutenção)
 		Cooldown = 30,
 		Effect = { SelfIframe = 0.8, AnkleRangeAdd = 2, DistanceMult = 1.1 },
 	},
@@ -436,6 +458,7 @@ Data.Pulses = {
 		Element = "Vento",
 		Description = "Vendaval dá um arranque curto que DEVOLVE energia em vez de gastar — é o que mantém suas outras habilidades disponíveis até o fim do jogo, já que a energia só enche de novo no intervalo.",
 		Action = "DribbleMove",
+		Scaling = { DribbleSkill = 0.6, Speed = 0.4 }, -- ⚠️ NOVO: fórmula de potência (arranque)
 		Cooldown = 45,
 		-- ⚠️ v67 — REFEITA. PEDIDO: "não está claro como o drible funciona. Ele
 		-- só dá um driblezinho e recarrega a estamina, é isso? Por que um
@@ -464,6 +487,7 @@ Data.Pulses = {
 		Element = "Void",
 		Description = "Névoa deixa uma nuvem no chão por onde você passa — qualquer perseguidor que atravessar ela fica mais lento. Você não ganha velocidade, é o perseguidor que perde.",
 		Action = "DribbleMove",
+		Scaling = { DribbleSkill = 0.6, Technique = 0.4 }, -- ⚠️ NOVO: fórmula de potência (drible de controle)
 		Cooldown = 60,
 		-- ⚠️ v67 — REFEITA. PEDIDO: "a Névoa está colocando uma área no chão,
 		-- não pode ser assim. Ela é uma área que deixa o PRÓPRIO JOGADOR
@@ -489,6 +513,7 @@ Data.Pulses = {
 		Element = "Vento",
 		Description = "Foice de Vento derruba de verdade (não é empurrão) todo mundo em volta com um corte de vento — funciona até sem ninguém marcando, então também serve só pra abrir espaço.",
 		Action = "DribbleMove",
+		Scaling = { DribbleSkill = 0.5, Physical = 0.5 }, -- ⚠️ NOVO: fórmula de potência (derruba de verdade: drible + corpo)
 		Cooldown = 90,
 		-- ⚠️ v67 — AJUSTADA. PEDIDO: "eu testei mais ou menos, não sei direito
 		-- como funciona. Não era pra empurrar os jogadores que estão na minha
@@ -526,6 +551,7 @@ Data.Pulses = {
 		-- efeitos (ver executeBuff/applyExtraEffectKeys): congela e pronto,
 		-- o deslocamento é 100% do jogador.
 		Action = "Buff",
+		Scaling = { DribbleSkill = 0.5, Technique = 0.5 }, -- ⚠️ NOVO: fórmula de potência (atravessar o campo com a bola)
 		-- Sem Action="DribbleMove", a dica de posição cairia em DF (ver
 		-- Data.GetPulsePositionHint). Ela continua sendo uma Hissatsu de
 		-- drible na identidade, então força MF.
@@ -553,6 +579,7 @@ Data.Pulses = {
 		Element = "Natureza",
 		Description = "Rasteira dá um carrinho com bem mais alcance que o normal e cooldown curto — não tem efeito especial, é a defesa de todo dia.",
 		Action = "Tackle",
+		Scaling = { Physical = 0.6, Speed = 0.4 }, -- ⚠️ NOVO: fórmula de potência (carrinho de alcance)
 		Cooldown = 30,
 		-- ⚠️ v43: TackleRangeAdd é o que faz a Rasteira ser "carrinho seco COM
 		-- BEM MAIS ALCANCE que o normal", que é a única coisa que ela promete.
@@ -575,6 +602,7 @@ Data.Pulses = {
 		Element = "Void",
 		Description = "Costura de Sombra prende os pés do adversário no chão à distância, sem precisar encostar nele — ele não se move, mas continua com a bola, então você ainda precisa ir buscar.",
 		Action = "Root",
+		Scaling = { Physical = 0.5, Technique = 0.5 }, -- ⚠️ NOVO: fórmula de potência (prende à distância)
 		Cooldown = 45,
 		Effect = { RootRadius = 46, RootDuration = 1.3 },
 	},
@@ -590,6 +618,7 @@ Data.Pulses = {
 		Element = "Natureza",
 		Description = "Teia espalha uma teia no chão por vários segundos — quem pisar nela fica lento, e quanto mais tenta correr, pior fica. Monte ela ANTES, no caminho que o atacante vai usar.",
 		Action = "Buff",
+		Scaling = { Physical = 0.5, Technique = 0.5 }, -- ⚠️ NOVO: fórmula de potência (zona de marcação)
 		Cooldown = 60,
 		Duration = 8,
 		Effect = {
@@ -610,6 +639,7 @@ Data.Pulses = {
 		Element = "Natureza",
 		Description = "Muralha Infinita levanta uma parede na frente do gol que CRESCE com companheiros perto de você — sozinho é comum, com apoio nenhum chute passa. Você fica preso no lugar enquanto ela estiver de pé.",
 		Action = "Buff",
+		Scaling = { Physical = 0.7, Technique = 0.3 }, -- ⚠️ NOVO: fórmula de potência (exemplo do pedido: 70% Físico + 30% Técnica)
 		Cooldown = 90,
 		Duration = 5,
 		FreezeSelf = true,
@@ -629,6 +659,7 @@ Data.Pulses = {
 		Element = "Fogo",
 		Description = "Investida Titânica dispara você reto pra frente atrás de qualquer adversário no caminho — alterne A/D rápido: cada acerto aumenta sua hitbox e o tempo de perseguição. Você não controla a direção depois de disparar.",
 		Action = "Tackle",
+		Scaling = { Physical = 0.7, Speed = 0.3 }, -- ⚠️ NOVO: fórmula de potência (investida de corpo)
 		Cooldown = 120,
 		QTE = { Kind = "MashAD", Duration = 2.5, RequiredAlternations = 8 },
 		Bom = { HitboxRadius = 5, ExtraPersistSeconds = 0.4, KnockbackRadius = 7, KnockbackForce = 50, RagdollRadius = 7, RagdollDuration = 1.4 },
@@ -665,6 +696,7 @@ Data.Pulses = {
 		-- rápido: serve pra você não ficar sem nada entre uma guarda e outra.
 		Description = "Soco Explosivo (só goleiro) sempre rebate a bola pro campo em vez de segurar — é a guarda mais barata e a que recarrega mais rápido, ao custo de sempre sobrar rebote.",
 		Action = "Buff",
+		Scaling = { Physical = 0.8, Kick = 0.2 }, -- ⚠️ NOVO: fórmula de potência (goleiro que soca)
 		Cooldown = 30,
 		Duration = 4,
 		QTE = { Kind = "TimingBar", Duration = 4.5, PerfectStart = 0.38, PerfectEnd = 0.62, GoodPadding = 0.16, SweepPeriod = 0.9, RequiredHits = 4, GuardSize = 0.4 },
@@ -692,6 +724,7 @@ Data.Pulses = {
 		-- lados, e sofre com bola por cima.
 		Description = "Muralha de Maré (só goleiro) levanta uma parede de água larga que cobre muito mais espaço pros lados que qualquer outra guarda — bola por cima ainda passa.",
 		Action = "Buff",
+		Scaling = { Physical = 0.7, Technique = 0.3 }, -- ⚠️ NOVO: fórmula de potência (goleiro)
 		Cooldown = 45,
 		Duration = 5,
 		QTE = { Kind = "TimingBar", Duration = 4.2, PerfectStart = 0.4, PerfectEnd = 0.6, GoodPadding = 0.14, SweepPeriod = 0.8, RequiredHits = 5, GuardSize = 0.75 },
@@ -711,6 +744,7 @@ Data.Pulses = {
 		-- é a resposta específica pra canhão de fora da área.
 		Description = "Punho Gigante (só goleiro) te transforma num gigante que soca a bola contra o chão — quanto mais longe veio o chute, mais fácil segura. Feita pra canhão de fora da área.",
 		Action = "Buff",
+		Scaling = { Physical = 0.7, Technique = 0.3 }, -- ⚠️ NOVO: fórmula de potência (goleiro)
 		Cooldown = 60,
 		Duration = 5,
 		QTE = { Kind = "TimingBar", Duration = 4.0, PerfectStart = 0.4, PerfectEnd = 0.6, GoodPadding = 0.13, SweepPeriod = 0.75, RequiredHits = 5, GuardSize = 0.55 },
@@ -727,6 +761,7 @@ Data.Pulses = {
 		RoleRequired = "GK",
 		Description = "Mão Divina (só goleiro) arma uma guarda parada na sua frente — quando o chute bater nela, começa o timing; acertando, a bola gruda na mão sem rebote nenhum.",
 		Action = "Buff",
+		Scaling = { Physical = 0.7, Technique = 0.3 }, -- ⚠️ NOVO: fórmula de potência (goleiro)
 		Cooldown = 90,
 		Duration = 5,
 		QTE = { Kind = "TimingBar", Duration = 4.0, PerfectStart = 0.4, PerfectEnd = 0.6, GoodPadding = 0.12, SweepPeriod = 0.7, RequiredHits = 5, GuardSize = 0.5 },
@@ -746,6 +781,7 @@ Data.Pulses = {
 		RoleRequired = "GK",
 		Description = "Mão do Demônio (só goleiro) é a guarda máxima — acertando o timing, NADA passa, nem a Galáxia (que normalmente ignora o goleiro). A única resposta a um chute Mítico.",
 		Action = "Buff",
+		Scaling = { Physical = 0.7, Technique = 0.3 }, -- ⚠️ NOVO: fórmula de potência (goleiro)
 		Cooldown = 120,
 		Duration = 6,
 		QTE = { Kind = "TimingBar", Duration = 3.5, PerfectStart = 0.42, PerfectEnd = 0.58, GoodPadding = 0.1, SweepPeriod = 0.65, RequiredHits = 5, GuardSize = 0.6 },

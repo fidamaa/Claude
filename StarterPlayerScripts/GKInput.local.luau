@@ -7,16 +7,20 @@
 	(incluindo o goleiro fora da área), esse script fica quieto (Z/X/C
 	viram finta normal, ver DribbleInput.local.luau).
 
-	Pro goleiro, Z/X/C/E/Q viram MERGULHO (defesa por botão, ver
-	AttemptGKDive/PulseController.GetGKDiveBonus no servidor):
-		Z = mergulho esquerda
-		C = mergulho direita
-		X = mergulho pra cima
-		E = mergulho diagonal cima-direita
-		Q = mergulho diagonal cima-esquerda
+	⚠️ NOVO — Pro goleiro, Q + DIREÇÃO (WASD) vira MERGULHO (defesa por
+	botão, ver AttemptGKDive/PulseController.GetGKDiveBonus no servidor),
+	igual ao drible direcional do jogador de linha. Antes eram Z/X/C/E/Q
+	fixas — E/Q conflitavam com o novo esquema (Q = drible, E = Arma 1):
+		A + Q        = mergulho esquerda
+		D + Q        = mergulho direita
+		Q (ou W/S+Q) = mergulho pra cima
+		W + D + Q    = mergulho diagonal cima-direita
+		W + A + Q    = mergulho diagonal cima-esquerda
+	Esquerda/direita são relativas ao CORPO do goleiro (pra onde ele está
+	virado), não à câmera — é o lado pro qual ele se joga.
 	F = dash pra frente (AttemptGKForward): rouba a bola do pé do
 	adversário se estiver muito perto, ou captura se a bola for direto
-	nele.
+	nele. (Fora da área, F é o dash/carrinho normal.)
 ]]
 
 local UserInputService = game:GetService("UserInputService")
@@ -30,13 +34,27 @@ local AttemptGKForward = Config.Remotes.AttemptGKForward
 
 local player = Players.LocalPlayer
 
-local KEY_TO_DIVE = {
-	[Enum.KeyCode.Z] = "Left",
-	[Enum.KeyCode.C] = "Right",
-	[Enum.KeyCode.X] = "Up",
-	[Enum.KeyCode.E] = "UpRight",
-	[Enum.KeyCode.Q] = "UpLeft",
-}
+local DIVE_KEY = Enum.KeyCode.Q
+
+-- Traduz o WASD atual (Humanoid.MoveDirection, espaço de mundo) nos mesmos
+-- nomes de mergulho que o servidor já conhece (Left/Right/Up/UpLeft/
+-- UpRight) — o servidor não mudou nada.
+local SIDE_THRESHOLD = 0.35
+local function diveDirectionFromInput()
+	local character = player.Character
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	if not (humanoid and root) then return "Up" end
+	local move = humanoid.MoveDirection
+	if move.Magnitude < 0.1 then return "Up" end
+	local lateral = move:Dot(root.CFrame.RightVector)
+	local forward = move:Dot(root.CFrame.LookVector)
+	if math.abs(lateral) < SIDE_THRESHOLD then return "Up" end
+	if forward > SIDE_THRESHOLD then
+		return lateral > 0 and "UpRight" or "UpLeft"
+	end
+	return lateral > 0 and "Right" or "Left"
+end
 
 UserInputService.InputBegan:Connect(function(input, gameProcessedEvent)
 	if gameProcessedEvent then return end
@@ -47,9 +65,8 @@ UserInputService.InputBegan:Connect(function(input, gameProcessedEvent)
 	-- sem querer, já que os dois LocalScripts escutam as mesmas teclas.
 	if player:GetAttribute("PulseComboActive") then return end
 
-	local diveDirection = KEY_TO_DIVE[input.KeyCode]
-	if diveDirection then
-		AttemptGKDive:FireServer(diveDirection)
+	if input.KeyCode == DIVE_KEY then
+		AttemptGKDive:FireServer(diveDirectionFromInput())
 		return
 	end
 
