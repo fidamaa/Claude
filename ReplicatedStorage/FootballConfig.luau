@@ -1318,7 +1318,7 @@ Config.GKBOT_DIVE_DURATION = 0.65 -- ⚠️ v110: 0.55 -> 0.65 (o voo agora dura
 -- ⚠️ v110: TEMPO DE REAÇÃO — o bot só mergulha depois que o chute já é ameaça há
 -- esse tempo (antes reagia no mesmo quadro). Chute forte no canto chega antes.
 Config.GKBOT_TEMPO_REACAO = 0.17 -- ⚠️ v111: era 0.22 — "tenta fazer ele acelerar um pouquinho mais... se mirar num canto e chutar, ele não pega de jeito nenhum. Tem que pegar pelo menos algumas vezes"
-Config.GKBOT_DIVE_SPEED = 44 -- ⚠️ v111: 38 -> 44 (mesmo pedido acima: chute no canto nunca era pego) -- ⚠️ v110: era 44 -- ⚠️ v110: era 52 ("o bot está muito rápido") -- ⚠️ v110: era 75 ("impossível de fazer gol, deixa ele um pouco mais fraco")
+Config.GKBOT_DIVE_SPEED = 55 -- ⚠️ v111: 44 -> 55 ("pode deixar o mergulho um pouco mais rápido") · 38 -> 44 (mesmo pedido acima: chute no canto nunca era pego) -- ⚠️ v110: era 44 -- ⚠️ v110: era 52 ("o bot está muito rápido") -- ⚠️ v110: era 75 ("impossível de fazer gol, deixa ele um pouco mais fraco")
 -- ⚠️ v109: reage a chute que vai passar até esse tanto dele SE estiver indo pro gol
 -- dele (o raio pequeno de cima continua valendo pra bola que não vai no gol)
 Config.GKBOT_SHOT_REACT_RADIUS_NO_GOL = 22.5 -- ⚠️ v111: 15 -> 22.5 (+50%) -- ⚠️ v110: era 20 ("muito difícil de errar") -- ⚠️ v110: era 28

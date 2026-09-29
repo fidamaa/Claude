@@ -2871,6 +2871,63 @@ local function updateBot(teamName, bot)
 		end
 	end
 
+	-- 1.2) ⚠️ v111 — CHUTE INDO PRO GOL: MARCADOR NO GOL. PEDIDO: "quando o cara
+	--      chutar, cria um marcador invisível pro exato local onde a bola vai
+	--      parar — na hitbox do gol — e calcula com o GK quantos studs pra
+	--      esquerda/direita dele ela vai. Se a bola for baixa, ele dá um baixo;
+	--      se for alta, um alto. Prioriza dar dives; só não dá se estiver muito
+	--      perto (3.5 studs). Se calcular que está distante, espera e dá o dive
+	--      SEM SE MEXER (mexer pode bugar a fórmula)."
+	--      Antes: bola a menos de 45 studs do gol caía no 1.5 (corria atrás dela
+	--      a pé) e nunca mergulhava — o "chuto do lado dele e ele não mergulha".
+	if not owner and not justThrew then
+		local golProprio = ownGoalOf(teamName)
+		local v = ball.AssemblyLinearVelocity
+		if golProprio then
+			local n = fieldForward(teamName) -- do gol pra dentro do campo
+			local lat = lateralAxisOf(teamName)
+			local cf, sz = golProprio.CFrame, golProprio.Size
+			local function meiaExtensao(eixo)
+				return math.abs(eixo:Dot(cf.RightVector)) * sz.X / 2 + math.abs(eixo:Dot(cf.UpVector)) * sz.Y / 2
+					+ math.abs(eixo:Dot(cf.LookVector)) * sz.Z / 2
+			end
+			local face = golProprio.Position + n * meiaExtensao(n) -- a frente da hitbox
+			local s0 = (ball.Position - face):Dot(n)
+			local vn = v:Dot(n)
+			if s0 > 0 and vn < -20 then
+				local tChegada = s0 / -vn
+				local P = predictBallPosition(tChegada) -- o MARCADOR: onde a bola cruza o gol
+				local noGolLateral = math.abs((P - golProprio.Position):Dot(lat)) <= meiaExtensao(lat) + 3
+				local noGolAltura = P.Y <= golProprio.Position.Y + meiaExtensao(Vector3.yAxis) + 2
+				if tChegada <= 3 and noGolLateral and noGolAltura then
+					if bot.Model then bot.Model:SetAttribute("MarcadorGol", P) end
+					bot.TempoAteBola = tChegada
+					local lateral = (P - root.Position):Dot(lat)
+					local altura = P.Y - root.Position.Y
+					local perto = math.abs(lateral) <= (Config.GKBOT_DIVE_PERTO or 3.5)
+						and altura < Config.GKBOT_JUMP_MIN_BALL_HEIGHT
+					if not perto then
+						-- parado, esperando a hora do mergulho
+						bot.ChaseTarget = Vector3.new(root.Position.X, root.Position.Y, root.Position.Z)
+						bot.ChaseUntil = tick() + 0.15
+						bot.AmeacaDesde = bot.AmeacaDesde or tick()
+						if tick() - bot.AmeacaDesde < (Config.GKBOT_TEMPO_REACAO or 0) then return end
+						local distMergulho = math.min(math.abs(lateral) + 1.5, Config.GKBOT_DIVE_REACH)
+						local durMergulho = math.clamp(distMergulho / (Config.GKBOT_DIVE_SPEED or 52), 0.25, 0.6)
+						if tChegada > durMergulho + 0.06 then return end -- ainda cedo: espera parado
+						bot.AmeacaDesde = nil
+						-- o alvo é o marcador trazido pra linha do goleiro (a distância
+						-- da hitbox até ele é pequena — o erro fica baixo)
+						local alvo = root.Position + lat * lateral + Vector3.new(0, altura, 0)
+						reactToBall(teamName, bot, alvo)
+						return
+					end
+					-- bem perto e baixa: não mergulha — anda até a bola (1.5 abaixo)
+				end
+			end
+		end
+	end
+
 	-- 1.5) Bola SOLTA (sem dono) dentro da própria área, perto o bastante
 	--      do bot — vai buscar sozinho, mesmo parada/lenta (cobre o caso
 	--      que o gatilho 2 abaixo não pega, porque exige velocidade

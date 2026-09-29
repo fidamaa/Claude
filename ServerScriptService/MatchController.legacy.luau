@@ -600,7 +600,20 @@ local function resetAllPlayersToFormation()
 	end
 end
 
-local rewardsDataStore = DataStoreService:GetDataStore("MatchRewards_V1")
+-- ⚠️ v111: em place NÃO publicado (ex.: aberto pelo AutoRecovery) o GetDataStore
+-- dá ERRO — e, solto aqui no topo, derrubava o MatchController inteiro: gol não
+-- contava (_G.RegisterGoal nunca existia), sem kickoff e sem bola parada. Agora
+-- falha quieto: só o salvamento das recompensas fica desligado (o SetAsync lá
+-- embaixo já está em pcall).
+local rewardsDataStore = nil
+do
+	local ok, ds = pcall(function() return DataStoreService:GetDataStore("MatchRewards_V1") end)
+	if ok then
+		rewardsDataStore = ds
+	else
+		warn("⚠️ MatchController: DataStore indisponível (place não publicado?) — recompensas não serão salvas. " .. tostring(ds))
+	end
+end
 
 local whistleSound = Instance.new("Sound")
 whistleSound.SoundId = Config.SOUNDS.Whistle
