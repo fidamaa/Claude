@@ -3264,4 +3264,213 @@ function FBa.Camera(t, rootPos)
 end
 
 
+-- ============================================================
+-- 💥 FLOW DO SHIDOU — cena de ativação (⚠️ v113)
+-- ============================================================
+-- A melhor cena dele: o BIG BANG. Agachado, aponta pro alto com o sorriso de
+-- demônio; salta dando um mortal; voleio no ar numa bola e tudo EXPLODE
+-- (esfera rosa e amarela, anéis, estrelas); cai no clarão e fecha rindo de
+-- braços abertos.
+local FS = {}
+Cutscenes.Flow_Shidou = FS
+FS.Motor = "V2"
+FS.Efeitos = "FlowShidou"
+FS.KickFoot = "Right"
+FS.Duration = 12
+FS.ImpactTime = 11.3
+FS.Explode = 6.6
+FS.ColarNoPe = false
+FS.TitleText = "FLOW · SHIDOU RYUSEI"
+FS.Tema = {
+	Titulo = { rgb(255, 250, 230), rgb(255, 110, 190), rgb(255, 230, 90) },
+	Contorno = rgb(40, 0, 25), Flash = rgb(255, 230, 245),
+	Tint = rgb(255, 245, 250), Saturation = 0.25, Contrast = 0.18, Brightness = 0,
+}
+FS.Phases = {
+	Aponta = { 0, 2 }, Rosto = { 2, 3.5 }, Salta = { 3.5, 6.1 }, Kick = { 6.1, FS.Explode }, Explode = { FS.Explode, 9 },
+	Final = { 9, 12 }, Impact = { FS.ImpactTime, FS.Duration },
+}
+local FS_ROOT = { { 0, V3(0, -0.8, 0) }, { 3.5, V3(0, -0.8, 0) }, { 3.9, V3(0, -1, 0) }, { 5.2, V3(0, 7, -2) }, { 6.6, V3(0, 8.5, -3.5) },
+	{ 8.6, V3(0, 0, -5) }, { 12, V3(0, 0, -5) } }
+local FS_PITCH = { { 0, 0 }, { 4.0, 0 }, { 5.4, 360 }, { 12, 360 } } -- mortal pra trás
+function FS.RootPosition(t) return sample(FS_ROOT, t) end
+function FS.RootCFrame(t) return CFrame.new(FS.RootPosition(t)) * CFrame.Angles(rad(sample(FS_PITCH, t)), 0, 0) end
+function FS.BallPosition(_t, s) return s or V3(0, -2.3, -1.8) end
+function FS.BallVisible(t) return t < 0.05 end
+function FS.BallSpin() return 0 end
+local FS_POSE = {
+	{ 0.00, { Root = { -20, 0, 0 }, Neck = { 30, 0, 0 }, RHip = { 60, 0, 12 }, LHip = { 60, 0, -12 },
+		RShoulder = { 170, 0, 10 }, LShoulder = { -10, 0, -30 } } }, -- agachado apontando pro alto
+	{ 2.00, { Root = { -20, 0, 0 }, Neck = { 30, 0, 0 }, RHip = { 60, 0, 12 }, LHip = { 60, 0, -12 },
+		RShoulder = { 175, 0, 8 }, LShoulder = { -10, 0, -30 } } },
+	{ 3.50, { Root = { -18, 0, 0 }, Neck = { 10, 0, 0 }, RHip = { 60, 0, 12 }, LHip = { 60, 0, -12 },
+		RShoulder = { -30, 0, 30 }, LShoulder = { -30, 0, -30 } } },
+	{ 4.20, { Root = { 0, 0, 0 }, Neck = { 20, 0, 0 }, RHip = { 80, 0, 0 }, LHip = { 80, 0, 0 },
+		RShoulder = { 60, 0, 40 }, LShoulder = { 60, 0, -40 } } }, -- grupado no mortal
+	{ 5.40, { Root = { 0, 0, 0 }, Neck = { 20, 0, 0 }, RHip = { 80, 0, 0 }, LHip = { 80, 0, 0 },
+		RShoulder = { 60, 0, 40 }, LShoulder = { 60, 0, -40 } } },
+	{ 6.10, { Root = { 20, 0, 0 }, Neck = { -10, 0, 0 }, RHip = { -50, 0, 0 }, LHip = { 60, 0, 0 },
+		RShoulder = { 20, 0, 90 }, LShoulder = { 20, 0, -90 } } }, -- arma o voleio
+	{ FS.Explode, { Root = { 25, 0, 0 }, Neck = { -15, 0, 0 }, RHip = { 115, 0, 0 }, LHip = { -20, 0, 0 },
+		RShoulder = { 20, 0, 95 }, LShoulder = { 20, 0, -95 } } }, -- BIG BANG
+	{ 8.60, { Root = { -12, 0, 0 }, Neck = { 10, 0, 0 }, RHip = { 40, 0, 10 }, LHip = { 40, 0, -10 },
+		RShoulder = { 60, 0, 70 }, LShoulder = { 60, 0, -70 } } },
+	-- rindo, braços abertos, corpo pra trás
+	{ 9.40, { Root = { 18, 0, 0 }, Neck = { 30, 0, 0 }, RHip = { -5, 0, 12 }, LHip = { -5, 0, -12 },
+		RShoulder = { 40, 0, 120 }, LShoulder = { 40, 0, -120 } } },
+	{ 12.00, { Root = { 20, 0, 0 }, Neck = { 34, 0, 0 }, RHip = { -5, 0, 12 }, LHip = { -5, 0, -12 },
+		RShoulder = { 45, 0, 125 }, LShoulder = { 45, 0, -125 } } },
+}
+function FS.Pose(t) return samplePose(FS_POSE, t) end
+function FS.Camera(t, rootPos)
+	local cabeca = rootPos + V3(0, 1.5, 0)
+	if t < 2 then
+		local u = smooth(phase(t, 0, 2))
+		return V3(2.2, -1.4, -6.5):Lerp(V3(1.8, -1.2, -5.5), u), V3(0, 0.8, 0), 55
+	elseif t < 3.5 then
+		local u = smooth(phase(t, 2, 3.5))
+		return cabeca + V3(0.35, -0.3, -4):Lerp(V3(0.25, -0.25, -3.1), u), cabeca, 38
+	elseif t < FS.Explode then
+		return V3(10, 3.5, -2), rootPos + V3(0, 0, -1), 58
+	elseif t < 9 then
+		-- aberta: a explosão inteira
+		local u = smooth(phase(t, FS.Explode, 9))
+		return V3(0, 5, -26):Lerp(V3(0, 4, -22), u), V3(0, 6, -4), 60
+	end
+	local u = smooth(phase(t, 9, 12))
+	return rootPos + V3(1.2, -1.6, -6):Lerp(V3(0.8, -1.3, -4.6), u), rootPos + V3(0, 1.3, 0), 55
+end
+
+-- ============================================================
+-- 🌹 FLOW DO SAE — cena de ativação (⚠️ v113)
+-- ============================================================
+-- A melhor cena dele: o PRODÍGIO frio. Pétalas de rosa vermelha caindo;
+-- de olhos fechados; abre os olhos (verde-água frios) e ramos com ROSAS sobem
+-- pelas pernas; o passe perfeito sem olhar — a bola vai longe num arco com
+-- rastro vermelho e rosas desabrocham no chão pelo caminho; ele vira as costas
+-- e olha por cima do ombro.
+local FSa = {}
+Cutscenes.Flow_Sae = FSa
+FSa.Motor = "V2"
+FSa.Efeitos = "FlowSae"
+FSa.KickFoot = "Right"
+FSa.Duration = 12
+FSa.ImpactTime = 11.3
+FSa.Passe = 4.4
+FSa.ColarNoPe = false
+FSa.TitleText = "FLOW · ITOSHI SAE"
+FSa.Tema = {
+	Titulo = { rgb(255, 240, 240), rgb(230, 50, 80), rgb(110, 10, 30) },
+	Contorno = rgb(40, 0, 10), Flash = rgb(255, 210, 220),
+	Tint = rgb(255, 245, 245), Saturation = 0, Contrast = 0.2, Brightness = -0.02,
+}
+FSa.Phases = {
+	Fecha = { 0, 2 }, Abre = { 2, 3.5 }, Arma = { 3.5, FSa.Passe }, Voa = { FSa.Passe, 8.2 },
+	Costas = { 8.5, 12 }, Kick = { 4.1, FSa.Passe }, Impact = { FSa.ImpactTime, FSa.Duration },
+}
+function FSa.RootPosition(_t) return V3(0, 0, 0) end
+local FSA_YAW = { { 0, 0 }, { 8.4, 0 }, { 9.4, 160 }, { 12, 160 } } -- vira as costas
+function FSa.RootCFrame(t) return CFrame.new(0, 0, 0) * CFrame.Angles(0, rad(sample(FSA_YAW, t)), 0) end
+function FSa.BallPosition(_t, s) return s or V3(0, -2.3, -1.8) end
+function FSa.BallVisible(t) return t < 0.05 end
+function FSa.BallSpin() return 0 end
+local FSA_CALMO = { Root = { 2, 0, 0 }, Neck = { -6, 0, 0 }, RShoulder = { -14, 0, 8 }, LShoulder = { -14, 0, -8 } }
+local FSA_POSE = {
+	{ 0.00, FSA_CALMO }, { 3.50, FSA_CALMO },
+	{ 4.10, { Root = { -4, 0, 0 }, Neck = { -4, 0, 0 }, RHip = { -45, 0, 0 }, RShoulder = { -20, 0, 40 }, LShoulder = { 30, 0, -45 } } },
+	{ FSa.Passe, { Root = { -8, 0, 0 }, Neck = { -2, 20, 0 }, RHip = { 75, 0, -10 }, RShoulder = { -30, 0, 45 }, LShoulder = { 40, 0, -45 } } }, -- passe sem olhar
+	{ 5.40, { Root = { -4, 0, 0 }, Neck = { 0, 20, 0 }, RHip = { 45, 0, -8 }, RShoulder = { -20, 0, 30 }, LShoulder = { 20, 0, -30 } } },
+	{ 6.40, FSA_CALMO },
+	{ 9.40, { Root = { 2, 0, 0 }, Neck = { -4, -70, 0 }, RShoulder = { -14, 0, 8 }, LShoulder = { -14, 0, -8 } } }, -- olha por cima do ombro
+	{ 12.00, { Root = { 2, 0, 0 }, Neck = { -2, -75, 0 }, RShoulder = { -14, 0, 8 }, LShoulder = { -14, 0, -8 } } },
+}
+function FSa.Pose(t) return samplePose(FSA_POSE, t) end
+function FSa.Camera(t, rootPos)
+	local cabeca = rootPos + V3(0, 1.5, 0)
+	if t < 2 then
+		local u = smooth(phase(t, 0, 2))
+		return V3(1.6, 0.4, -7):Lerp(V3(1.2, 0.3, -5.8), u), V3(0, 0.5, 0), 50
+	elseif t < 3.5 then
+		local u = smooth(phase(t, 2, 3.5))
+		return cabeca + V3(0.3, -0.2, -3.8):Lerp(V3(0.2, -0.15, -3), u), cabeca, 36
+	elseif t < FSa.Passe then
+		return V3(3.5, -1.8, -4.5), V3(0.3, -1.6, -1), 52
+	elseif t < 8.4 then
+		-- o arco da bola: de lado e aberta, acompanhando o voo
+		local u = smooth(phase(t, FSa.Passe, 8.2))
+		return V3(22, 5, -8):Lerp(V3(24, 6, -34), u), V3(0, 3, -6):Lerp(V3(0, 1, -42), u), 55
+	end
+	-- ele virou (olha pra +Z): a câmera fica atrás dele, do lado pra onde ele
+	-- vira a cabeça — as costas e o perfil olhando por cima do ombro
+	local u = smooth(phase(t, 8.4, 12))
+	return cabeca + V3(-1.6, -0.2, -4.6):Lerp(V3(-1.3, -0.15, -3.6), u), cabeca, 40
+end
+
+-- ============================================================
+-- 🌹 FLOW DO KAISER — cena de ativação (⚠️ v113)
+-- ============================================================
+-- A melhor cena dele: o IMPERADOR e o KAISER IMPACT. Braços abertos no meio
+-- das pétalas de rosa AZUL; a tatuagem da rosa azul no pescoço acende, olhos
+-- azuis; espinhos azuis sobem pela perna; o chute mais rápido do mundo — o
+-- mundo fica cinza (só o azul) e a bola sai num raio azul; fecha com a mão no
+-- rosto e o sorriso.
+local FKa = {}
+Cutscenes.Flow_Kaiser = FKa
+FKa.Motor = "V2"
+FKa.Efeitos = "FlowKaiser"
+FKa.KickFoot = "Right"
+FKa.Duration = 12
+FKa.ImpactTime = 11.3
+FKa.Impacto = 5.6
+FKa.ColarNoPe = false
+FKa.TitleText = "FLOW · MICHAEL KAISER"
+FKa.Tema = {
+	Titulo = { rgb(235, 245, 255), rgb(80, 130, 255), rgb(20, 40, 120) },
+	Contorno = rgb(0, 10, 40), Flash = rgb(210, 225, 255),
+	Tint = rgb(240, 245, 255), Saturation = 0.05, Contrast = 0.2, Brightness = -0.02,
+}
+FKa.Phases = {
+	Imperador = { 0, 2 }, Rosto = { 2, 3.5 }, Espinhos = { 3.5, 5.0 }, Kick = { 5.0, FKa.Impacto },
+	Voa = { FKa.Impacto, 8.4 }, Final = { 8.4, 12 }, Impact = { FKa.ImpactTime, FKa.Duration },
+}
+local FKA_ROOT = { { 0, V3(0, 0, 0) }, { 5.0, V3(0, 0, 0) }, { FKa.Impacto, V3(0, -0.3, -0.8) }, { 8.4, V3(0, 0, -1) }, { 12, V3(0, 0, -1) } }
+function FKa.RootPosition(t) return sample(FKA_ROOT, t) end
+function FKa.RootCFrame(t) return CFrame.new(FKa.RootPosition(t)) end
+function FKa.BallPosition(_t, s) return s or V3(0, -2.3, -1.8) end
+function FKa.BallVisible(t) return t < 0.05 end
+function FKa.BallSpin() return 0 end
+local FKA_ABERTO = { Root = { 6, 0, 0 }, Neck = { 18, 0, 0 }, RShoulder = { 30, 0, 110 }, LShoulder = { 30, 0, -110 } }
+local FKA_POSE = {
+	{ 0.00, FKA_ABERTO }, { 2.00, FKA_ABERTO },
+	{ 3.50, { Root = { 0, 0, 0 }, Neck = { 4, 0, 0 }, RShoulder = { -8, 0, 12 }, LShoulder = { -8, 0, -12 } } },
+	{ 5.00, { Root = { -6, 0, 0 }, Neck = { -6, 0, 0 }, RHip = { -60, 0, 0 }, RShoulder = { -30, 0, 55 }, LShoulder = { 45, 0, -60 } } },
+	{ FKa.Impacto, { Root = { -12, 0, 0 }, Neck = { -10, 0, 0 }, RHip = { 100, 0, 0 }, LHip = { -10, 0, 0 },
+		RShoulder = { -45, 0, 60 }, LShoulder = { 55, 0, -60 } } }, -- KAISER IMPACT
+	{ 7.00, { Root = { -8, 0, 0 }, RHip = { 70, 0, 0 }, RShoulder = { -35, 0, 55 }, LShoulder = { 45, 0, -55 } } },
+	-- mão no rosto, sorriso
+	{ 8.80, { Root = { 4, 0, 0 }, Neck = { 12, 0, 8 }, RShoulder = { 150, 0, -35 }, LShoulder = { -5, 0, -15 } } },
+	{ 12.00, { Root = { 5, 0, 0 }, Neck = { 14, 0, 10 }, RShoulder = { 152, 0, -37 }, LShoulder = { -5, 0, -15 } } },
+}
+function FKa.Pose(t) return samplePose(FKA_POSE, t) end
+function FKa.Camera(t, rootPos)
+	local cabeca = rootPos + V3(0, 1.5, 0)
+	if t < 2 then
+		local u = smooth(phase(t, 0, 2))
+		return V3(0.5, -0.6, -9):Lerp(V3(0.4, -0.4, -7.5), u), V3(0, 0.8, 0), 52
+	elseif t < 3.5 then
+		-- close no pescoço e no rosto (a tatuagem da rosa azul)
+		local u = smooth(phase(t, 2, 3.5))
+		return cabeca + V3(-1.2, -0.6, -3.4):Lerp(V3(-1, -0.5, -2.7), u), cabeca + V3(0, -0.3, 0), 38
+	elseif t < FKa.Impacto then
+		return V3(4, -1.6, -3), V3(0.3, -1.2, -0.6), 52
+	elseif t < 8.4 then
+		-- de trás e do lado: o raio azul saindo (bem atrás, o corpo tapava a bola)
+		return rootPos + V3(5.5, 1.2, 4.5), rootPos + V3(0, 0.3, -30), 50
+	end
+	-- mão no rosto: do lado esquerdo dele (o braço não tapa)
+	local u = smooth(phase(t, 8.4, 12))
+	return cabeca + V3(-1.3, -0.3, -4.4):Lerp(V3(-1, -0.25, -3.4), u), cabeca, 38
+end
+
+
 return Cutscenes

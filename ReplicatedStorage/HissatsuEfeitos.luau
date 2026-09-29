@@ -3485,7 +3485,7 @@ function E.FlowIsagi(ctx)
 	local ph = spec.Phases
 
 	-- palco escuro rente ao gramado
-	local sala = salaEscura(pasta, "SalaFlowIsagi", rgb(14, 16, 20), ctx.Inicio * CFrame.new(0, 20, -8), 130, ctx.ChaoY + 0.1 - 20)
+	local sala = salaEscura(pasta, "SalaFlowIsagi", rgb(14, 16, 20), ctx.Inicio * CFrame.new(0, 20, -8), 130, ctx.ChaoY + 0.25 - 20)
 	sala.Transparency = 0
 
 	-- preto e branco no começo (a correção de cor da cena fica na câmera e
@@ -3939,7 +3939,7 @@ function E.FlowNagi(ctx)
 	local pernaD = character:FindFirstChild("RightFoot") or character:FindFirstChild("Right Leg")
 	local ph = spec.Phases
 
-	local sala = salaEscura(pasta, "SalaFlowNagi", rgb(38, 44, 60), ctx.Inicio * CFrame.new(0, 20, -8), 140, ctx.ChaoY + 0.1 - 20)
+	local sala = salaEscura(pasta, "SalaFlowNagi", rgb(38, 44, 60), ctx.Inicio * CFrame.new(0, 20, -8), 140, ctx.ChaoY + 0.25 - 20)
 	sala.Transparency = 0
 
 	-- penas caindo (partícula achatada e girando devagar)
@@ -4255,7 +4255,9 @@ local function flowBase(ctx, op)
 	local character = ctx.Character
 	local head = character:FindFirstChild("Head")
 	local B = {}
-	local sala = salaEscura(pasta, "SalaFlow", op.Sala or rgb(14, 14, 18), ctx.Inicio * CFrame.new(0, 20, -8), 150, ctx.ChaoY + 0.1 - 20)
+	-- (chão a +0.25: as faixas do gramado têm alturas um pouco diferentes e com
+	-- +0.1 uma delas aparecia por cima do chão escuro)
+	local sala = salaEscura(pasta, "SalaFlow", op.Sala or rgb(14, 14, 18), ctx.Inicio * CFrame.new(0, 20, -8), 150, ctx.ChaoY + 0.25 - 20)
 	sala.Transparency = 0
 	B.Sala = sala
 	local contorno = Instance.new("Highlight")
@@ -4739,6 +4741,235 @@ function E.FlowBarou(ctx)
 	function efeitos.Impacto(_s)
 		ctx.Flash(rgb(255, 235, 170), 0.2, 0.4)
 		onda(pasta, ctx.Root.Position, Vector3.yAxis, OURO, 24, 0.45, 0.3)
+	end
+	return efeitos
+end
+
+
+-- 💥 FLOW DO SHIDOU (⚠️ v113): estrelas rosa/amarelas, o BIG BANG (esfera que
+-- cresce, anéis, raios de luz saindo), faíscas no mortal, olhos rosa.
+function E.FlowShidou(ctx)
+	local pasta, spec = ctx.Pasta, ctx.Spec
+	local ROSA, AMARELO, BRANCO = rgb(255, 110, 190), rgb(255, 230, 90), rgb(255, 250, 240)
+	local base = flowBase(ctx, {
+		Sala = rgb(22, 8, 22), SalaCor2 = rgb(60, 20, 45), SalaVira = { spec.Explode, spec.Explode + 0.3 },
+		Contorno = ROSA, ContornoDe = 3.5, Olhos = ROSA, OlhosDe = 2.4,
+		Aura = { AMARELO, ROSA, rgb(70, 0, 40) }, AuraDe = 8.6, Rosto = { { 2, 3.5 }, { 9, 12 } },
+		Particulas = { Textura = TEX.Faisca, Cor = cores({ { 0, AMARELO }, { 1, ROSA } }), Tamanho = numeros({ { 0, 0.35 }, { 1, 0 } }), Taxa = 45, Vel = { 0.2, 1 }, Acel = V3(0, 0, 0) },
+	})
+	local bola = bolaDeCena(ctx)
+	local nucleo = esfera(pasta, "BigBangNucleo", BRANCO)
+	local casca = esfera(pasta, "BigBangCasca", ROSA)
+	local raios = {}
+	for i = 1, 14 do raios[i] = parte(pasta, "RaioBigBang" .. i, { Color = i % 2 == 0 and AMARELO or ROSA }) end
+	local explodiu = false
+	local efeitos = {}
+	function efeitos.Quadro(t, _dt, s)
+		base.Atualizar(t)
+		-- a bola espera lá no alto, na frente dele, até o voleio
+		local ponto = ctx.Mundo(V3(0, 8.4, -5.2))
+		bola.CFrame = CFrame.new(ponto) * CFrame.Angles(t * 5, 0, 0)
+		bola.Transparency = (t >= 4.4 and t < spec.Explode) and 0 or 1
+		local k = phase(t, spec.Explode, spec.Explode + 1.4)
+		if k > 0 and k < 1 then
+			local tam = 2 + 26 * easeOut(k)
+			nucleo.Size = Vector3.one * tam * 0.45
+			nucleo.CFrame = CFrame.new(ponto)
+			nucleo.Transparency = 0.05 + 0.9 * k
+			casca.Size = Vector3.one * tam
+			casca.CFrame = CFrame.new(ponto)
+			casca.Transparency = 0.45 + 0.55 * k
+			for i, r in ipairs(raios) do
+				local a1, a2 = (i / #raios) * math.pi * 2, math.sin(i * 1.7) * 0.9
+				local dir = V3(math.cos(a1) * math.cos(a2), math.sin(a2), math.sin(a1) * math.cos(a2))
+				local comp = 30 * easeOut(k)
+				r.Size = V3(0.35, 0.35, comp)
+				r.CFrame = CFrame.lookAt(ponto + dir * comp / 2, ponto + dir * comp)
+				r.Transparency = 0.1 + 0.9 * k
+			end
+		else
+			nucleo.Transparency, casca.Transparency = 1, 1
+			for _, r in ipairs(raios) do r.Transparency = 1 end
+		end
+		if not explodiu and t >= spec.Explode then
+			explodiu = true
+			ctx.Flash(BRANCO, 0, 0.5)
+			ctx.Tremer(1.3, 0.6)
+			onda(pasta, ponto, Vector3.yAxis, ROSA, 60, 0.7, 0.8)
+			onda(pasta, ponto, ctx.Inicio.LookVector, AMARELO, 50, 0.6, 0.6)
+			anelVazado(pasta, ponto, ctx.Inicio.RightVector, BRANCO, 4, 45, 0.7, 0.5)
+		end
+	end
+	function efeitos.Impacto(_s)
+		ctx.Flash(rgb(255, 225, 240), 0.2, 0.4)
+	end
+	return efeitos
+end
+
+-- 🌹 FLOW DO SAE (⚠️ v113): pétalas vermelhas, ramos com rosas subindo pelas
+-- pernas, o passe perfeito (bola num arco com rastro vermelho) e rosas que
+-- desabrocham no chão pelo caminho; olhos verde-água frios.
+function E.FlowSae(ctx)
+	local pasta, spec = ctx.Pasta, ctx.Spec
+	local VERMELHO, VERDE, OLHO = rgb(220, 30, 60), rgb(40, 110, 50), rgb(90, 220, 200)
+	local base = flowBase(ctx, {
+		Sala = rgb(14, 6, 8), Contorno = rgb(255, 120, 140), ContornoDe = 3.5, Olhos = OLHO, OlhosDe = 2.6,
+		Aura = { rgb(255, 220, 225), VERMELHO, rgb(60, 0, 10) }, AuraDe = 8.8, Rosto = { { 2, 3.5 } },
+		Particulas = { Cor = cores({ { 0, rgb(255, 90, 110) }, { 1, VERMELHO } }), Tamanho = numeros({ { 0, 0.55 }, { 1, 0.45 } }), Taxa = 30, Achatar = 1.3 },
+	})
+	local function rosa(nome, tam)
+		local botao = esfera(pasta, nome, VERMELHO, Enum.Material.SmoothPlastic)
+		botao.Size = Vector3.one * tam
+		local folhas = {}
+		for k = 1, 2 do
+			local f = parte(pasta, nome .. "Folha" .. k, { Color = VERDE, Material = Enum.Material.SmoothPlastic })
+			f.Size = V3(tam * 0.8, 0.06, tam * 0.4)
+			folhas[k] = f
+		end
+		return { Botao = botao, Folhas = folhas, Tam = tam }
+	end
+	local function posarRosa(r, cf, a)
+		r.Botao.Size = Vector3.one * math.max(r.Tam * a, 0.05)
+		r.Botao.CFrame = cf
+		r.Botao.Transparency = a > 0.02 and 0 or 1
+		for k, f in ipairs(r.Folhas) do
+			f.CFrame = cf * CFrame.new((k == 1 and 1 or -1) * r.Tam * 0.5 * a, -r.Tam * 0.3, 0) * CFrame.Angles(0, 0, (k == 1 and -0.4 or 0.4))
+			f.Transparency = a > 0.02 and 0 or 1
+		end
+	end
+	-- ramos com rosas nas pernas
+	local ramo = {}
+	for i = 1, 6 do ramo[i] = { Rosa = rosa("RosaPerna" .. i, 0.45), Caule = parte(pasta, "Caule" .. i, { Color = VERDE, Material = Enum.Material.SmoothPlastic }) } end
+	-- rosas pelo caminho da bola
+	local caminho = {}
+	for i = 1, 8 do caminho[i] = rosa("RosaCaminho" .. i, 1.1) end
+	local bola = bolaDeCena(ctx)
+	local rastroBola = rastroDuplo(bola, 0.9, VERMELHO, rgb(255, 210, 220), 0.5)
+	local DE, PARA = V3(0.4, -2.3, -1.6), V3(0, -2.3, -44)
+	local function arco(u)
+		local p = DE:Lerp(PARA, u)
+		return p + V3(0, math.sin(u * math.pi) * 9, 0)
+	end
+	local efeitos = {}
+	function efeitos.Quadro(t, _dt, _s)
+		base.Atualizar(t)
+		-- ramos subindo pelas pernas (espiral), depois ficam
+		local sobe = smooth(phase(t, 2.4, 3.8))
+		for i, r in ipairs(ramo) do
+			local a = i * 1.3
+			local y = ctx.ChaoY + 0.3 + (i - 1) * 0.45 * sobe
+			local p = V3(math.cos(a) * 0.9, y, math.sin(a) * 0.7)
+			posarRosa(r.Rosa, ctx.Inicio * CFrame.new(p), smooth(phase(t, 2.4 + i * 0.15, 2.8 + i * 0.15)))
+			r.Caule.Size = V3(0.08, 0.5, 0.08)
+			r.Caule.CFrame = ctx.Inicio * CFrame.new(p - V3(0, 0.3, 0))
+			r.Caule.Transparency = sobe > 0.02 and 0 or 1
+		end
+		-- a bola: do pé dele no arco até longe
+		local u = easeOut(phase(t, spec.Passe, 8.2))
+		local pos = (t < spec.Passe) and DE or arco(u)
+		bola.CFrame = CFrame.new(ctx.Mundo(pos)) * CFrame.Angles(t * 6, 0, 0)
+		bola.Transparency = (t >= 3.5 and t < 8.3) and 0 or 1
+		rastroBola.Ligar(t >= spec.Passe and t < 8.3)
+		-- rosas desabrocham no chão por onde a bola passa
+		for i, r in ipairs(caminho) do
+			local ui = i / (#caminho + 1)
+			local quando = spec.Passe + (8.2 - spec.Passe) * ui * 0.8
+			local ch = arco(ui)
+			local cf = ctx.Inicio * CFrame.new(ch.X + (i % 2 == 0 and 1.5 or -1.5), ctx.ChaoY + 0.55, ch.Z)
+			posarRosa(r, cf, smooth(phase(t, quando, quando + 0.3)))
+		end
+	end
+	function efeitos.Impacto(_s)
+		ctx.Flash(rgb(255, 220, 228), 0.25, 0.4)
+	end
+	return efeitos
+end
+
+-- 🌹 FLOW DO KAISER (⚠️ v113): pétalas de rosa AZUL, a tatuagem da rosa azul
+-- no pescoço, espinhos azuis subindo pela perna, o KAISER IMPACT (mundo cinza
+-- por um instante, bola num raio azul), olhos azuis.
+function E.FlowKaiser(ctx)
+	local pasta, spec = ctx.Pasta, ctx.Spec
+	local AZUL, AZUL_CLARO = rgb(60, 110, 255), rgb(190, 215, 255)
+	local base = flowBase(ctx, {
+		Sala = rgb(6, 8, 22), Contorno = AZUL_CLARO, ContornoDe = 3.5, Olhos = AZUL, OlhosDe = 2.5,
+		Aura = { AZUL_CLARO, AZUL, rgb(0, 10, 50) }, AuraDe = 8.4, Rosto = { { 2, 3.5 }, { 8.4, 12 } },
+		Particulas = { Cor = cores({ { 0, AZUL_CLARO }, { 1, AZUL } }), Tamanho = numeros({ { 0, 0.55 }, { 1, 0.45 } }), Taxa = 30, Achatar = 1.3 },
+	})
+	local head = ctx.Character:FindFirstChild("Head")
+	local torso = ctx.Character:FindFirstChild("Torso") or ctx.Character:FindFirstChild("UpperTorso")
+	local perna = ctx.Character:FindFirstChild("Right Leg") or ctx.Character:FindFirstChild("RightLowerLeg")
+	-- tatuagem: uma rosinha azul no lado do pescoço
+	local tatuagem = esfera(pasta, "TatuagemRosa", AZUL)
+	local tatFolha = parte(pasta, "TatuagemFolha", { Color = rgb(30, 60, 160) })
+	-- espinhos na perna (cunhas azuis em espiral)
+	local espinhos = {}
+	for i = 1, 8 do
+		local w = Instance.new("WedgePart")
+		w.Name = "Espinho" .. i
+		w.Anchored, w.CanCollide, w.CanQuery, w.CanTouch, w.CastShadow = true, false, false, false, false
+		w.Material = Enum.Material.Neon
+		w.Color = AZUL
+		w.Size = V3(0.08, 0.35, 0.25)
+		w.Transparency = 1
+		w.Parent = pasta
+		espinhos[i] = w
+	end
+	local cinza = Instance.new("ColorCorrectionEffect")
+	cinza.Name = "KaiserCinza"
+	cinza.Parent = workspace.CurrentCamera
+	pasta.Destroying:Connect(function() cinza:Destroy() end)
+	local bola = bolaDeCena(ctx)
+	local rastroBola = rastroDuplo(bola, 1, AZUL, AZUL_CLARO, 0.35)
+	local raio = novoRaio(pasta, AZUL_CLARO, 0.2)
+	local bateu = false
+	local efeitos = {}
+	function efeitos.Quadro(t, _dt, s)
+		base.Atualizar(t)
+		if torso and head then
+			local tat = smooth(phase(t, 2.2, 2.6))
+			tatuagem.Size = Vector3.one * 0.26
+			tatuagem.CFrame = torso.CFrame * CFrame.new(-0.55, torso.Size.Y / 2 + 0.05, -0.2)
+			tatuagem.Transparency = tat > 0.02 and 0 or 1
+			tatFolha.Size = V3(0.3, 0.05, 0.14)
+			tatFolha.CFrame = tatuagem.CFrame * CFrame.new(0.15, -0.12, 0) * CFrame.Angles(0, 0, 0.5)
+			tatFolha.Transparency = tatuagem.Transparency
+		end
+		-- espinhos sobem pela perna
+		local sobe = smooth(phase(t, 3.5, 4.8)) * (1 - smooth(phase(t, 8.2, 8.6)))
+		if perna then
+			for i, w in ipairs(espinhos) do
+				local a = i * 1.6
+				local y = perna.Size.Y / 2 - (i / #espinhos) * perna.Size.Y
+				w.CFrame = perna.CFrame * CFrame.new(math.cos(a) * 0.55, y, math.sin(a) * 0.55) * CFrame.Angles(0, -a, 0)
+				w.Transparency = (sobe * #espinhos >= i) and 0 or 1
+			end
+		end
+		-- KAISER IMPACT: mundo cinza por um instante (só o azul fica)
+		local c = smooth(phase(t, spec.Impacto - 0.25, spec.Impacto)) * (1 - smooth(phase(t, spec.Impacto + 0.15, spec.Impacto + 0.5)))
+		cinza.Saturation = -0.9 * c
+		cinza.Contrast = 0.4 * c
+		local de = ctx.Mundo(V3(0.4, ctx.ChaoY + 0.9, -2.4))
+		local u = easeOut(phase(t, spec.Impacto, spec.Impacto + 0.5))
+		local pos = de:Lerp(ctx.Mundo(V3(0.2, 2, -90)), u)
+		bola.CFrame = CFrame.new(pos) * CFrame.Angles(t * 8, 0, 0)
+		bola.Transparency = (t >= 3.5 and t < 8.4) and 0 or 1
+		rastroBola.Ligar(t >= spec.Impacto and t < 8.4)
+		if t >= spec.Impacto and t < spec.Impacto + 0.6 then
+			raio.Desenhar(de, pos, 10, 1.2, 0.2, phase(t, spec.Impacto, spec.Impacto + 0.6))
+		else
+			raio.Apagar()
+		end
+		if not bateu and t >= spec.Impacto then
+			bateu = true
+			ctx.Flash(AZUL_CLARO, 0.15, 0.3)
+			ctx.Tremer(1.1, 0.35)
+			onda(pasta, de, ctx.Inicio.LookVector, AZUL, 26, 0.3, 0.4)
+			anelVazado(pasta, de, ctx.Inicio.LookVector, AZUL_CLARO, 1.5, 18, 0.35, 0.3)
+		end
+	end
+	function efeitos.Impacto(_s)
+		ctx.Flash(rgb(215, 228, 255), 0.25, 0.4)
 	end
 	return efeitos
 end
