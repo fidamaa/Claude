@@ -2549,6 +2549,25 @@ function E.Meteoros(ctx)
 					onda(pasta, m.Alvo + V3(0, 0.3, 0), Vector3.yAxis, LARANJA, 16, 0.35, 0.35)
 					anelVazado(pasta, m.Alvo + V3(0, 0.4, 0), Vector3.yAxis, AMARELO, 2, 20, 0.45, 0.3)
 					crateraNoChao(m.Alvo, LARANJA)
+					-- ⚠️ v113 (anime a 0,2s, 7.8-10.4s): cada meteoro levanta uma
+					-- COLUNA de fogo alta (laranja por fora, miolo amarelo)
+					for camada = 1, 2 do
+						local larg = camada == 1 and 5 or 2.6
+						local col = parte(pasta, "ColunaFogo", { Shape = Enum.PartType.Cylinder,
+							Color = camada == 1 and LARANJA or AMARELO, Transparency = camada == 1 and 0.3 or 0.1 })
+						col.Size = V3(0.5, larg, larg)
+						col.CFrame = CFrame.new(m.Alvo) * CFrame.Angles(0, 0, math.rad(90))
+						local alto = camada == 1 and 16 or 19
+						TweenService:Create(col, TweenInfo.new(0.14, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+							{ Size = V3(alto, larg, larg), CFrame = CFrame.new(m.Alvo + V3(0, alto / 2, 0)) * CFrame.Angles(0, 0, math.rad(90)) }):Play()
+						task.delay(0.14, function()
+							if col.Parent then
+								TweenService:Create(col, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
+									{ Size = V3(alto * 1.1, larg * 0.3, larg * 0.3), Transparency = 1 }):Play()
+							end
+						end)
+						game:GetService("Debris"):AddItem(col, 0.6)
+					end
 					ctx.Tremer(0.9, 0.25)
 				end
 			end
