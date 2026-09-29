@@ -462,7 +462,16 @@ local R1_ROOT = {
 	{ 0.00, V3(0, 0, 0) }, { 0.30, V3(0, 0, 0) }, { 0.62, V3(0, 1.4, -0.3) }, { 0.95, V3(0, -0.15, -0.5) },
 	{ 1.30, V3(0, 0, -0.55) }, { 1.75, V3(0, 0, -0.7) }, { R1.ImpactTime, V3(0, 0.05, -0.9) }, { 2.5, V3(0, -0.1, -1.1) },
 }
-function R1.RootPosition(t) return sample(R1_ROOT, t) end
+-- ⚠️ v113 — revisão pelo vídeo (quadros a cada 0,2s, "Inazuma 1gou"): os dois
+-- SALTAM pro chute (20.4-21.4s) e batem a bola juntos na altura da CABEÇA, no ar.
+-- Antes o chutador batia de pé, com a bola na cintura. Salto com pico no chute
+-- (o parceiro é o espelho do chutador, então salta junto).
+local R1_SALTO = 2.0
+local function r1Salto(t)
+	local u = math.clamp((t - 1.45) / 0.95, 0, 1)
+	return R1_SALTO * math.sin(math.pi * u)
+end
+function R1.RootPosition(t) return sample(R1_ROOT, t) + V3(0, r1Salto(t), 0) end
 -- tomba pro lado ESQUERDO (positivo) no voleio de direita
 local R1_ROLL = { { 0, 0 }, { 1.3, 0 }, { 1.85, 14 }, { R1.ImpactTime, 24 }, { 2.5, 26 } }
 function R1.RootCFrame(t)
@@ -471,7 +480,7 @@ function R1.RootCFrame(t)
 end
 R1.StrikeTime = 1.0 -- o raio cai
 local R1_APEX = V3(0.6, 4.4, -2.6)
-R1.KickPoint = V3(1.2, 0.05, -3.75) -- medido: pé direito em (1.61, 0.04, -2.67) no voleio
+R1.KickPoint = V3(1.2, 0.05 + 1.95, -3.75) -- medido: pé direito em (1.61, 0.04, -2.67) no voleio · v113: + o salto (~1.95 no chute)
 R1.KickContactDir = V3(-0.35, 0, -0.94).Unit
 local R1_PUSH = V3(-0.2, 0.05, -1).Unit * 1.8
 function R1.BallPosition(t, s)
@@ -586,12 +595,14 @@ function R1.Camera(t, rootPos, ballPos)
 	elseif t < R1.ImpactTime then
 		-- ⚠️ v108: DE FRENTE, os dois armando o voleio, um de cada lado da bola
 		local u = smooth(phase(t, 1.35, R1.ImpactTime))
-		local meio = V3(R1_ESPELHO_X, 0.4, -2.2)
+		local meio = V3(R1_ESPELHO_X, 0.4 + r1Salto(t), -2.2) -- ⚠️ v113: acompanha o salto
 		return meio + V3(0.3, 0.8, -9.5):Lerp(V3(0.2, 0.5, -7.5), u), meio, 60
 	end
 	-- impacto: de trás e do alto, os dois batendo juntos e a bola saindo
+	-- ⚠️ v113: mais longe e mais alto — a cabeça do chutador (agora no ar)
+	-- tampava metade da cena; aqui dá pra ver a bola sair com os raios
 	local u = easeOut(phase(t, R1.ImpactTime, R1.Duration))
-	return R1.KickPoint + V3(-1.2, 3.2, 6.5):Lerp(V3(-0.8, 2.6, 5), u), ballPos, 64 - 14 * u
+	return R1.KickPoint + V3(-3.5, 5, 10):Lerp(V3(-2.5, 4, 8), u), ballPos, 64 - 12 * u
 end
 
 -- ============================================================
