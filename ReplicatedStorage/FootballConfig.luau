@@ -1248,7 +1248,7 @@ Config.GKBOT_THROW_SPEED_REFERENCE = 30 -- studs/segundo usados pra escalar o te
 -- studs, a velocidade de pouso alvo cai até GKBOT_THROW_LONG_SPEED_MULT da
 -- normal — nunca a zero (a bola sempre continua andando um pouco, só não
 -- passa voando pelo companheiro).
-Config.GKBOT_THROW_LONG_REFERENCE_DISTANCE = 70
+Config.GKBOT_THROW_LONG_REFERENCE_DISTANCE = 84 -- ⚠️ v112: campo 20% maior ("aumenta o campo em vinte por cento, ajuste tudo")
 Config.GKBOT_THROW_LONG_SPEED_MULT = 0.55
 
 -- ⚠️ v23: quique da bola no lançamento do goleiro (Elasticity). Passe curto
@@ -1438,7 +1438,7 @@ Config.GKBOT_LOOSE_BALL_CHASE_RANGE = 20
 -- até a bola, como GKBOT_LOOSE_BALL_CHASE_RANGE acima, nem da Part
 -- GKArea_<Time>, que pode não existir/ter tamanho diferente na cena) —
 -- funciona como uma "área pequena" independente, sempre disponível.
-Config.GKBOT_SMALL_AREA_RADIUS = 56 -- ⚠️ v104: campo 25% maior (era 45)
+Config.GKBOT_SMALL_AREA_RADIUS = 67 -- ⚠️ v112: campo 20% maior ("aumenta o campo em vinte por cento, ajuste tudo") · 56 · ⚠️ v104: campo 25% maior (era 45)
 
 -- ⚠️ v5.8: PEDIDO — "às vezes quando ele vai pegar a bola, ela buga,
 -- talvez ele esteja pegando de novo depois de chutar de volta pros
@@ -1556,7 +1556,7 @@ Config.GKBOT_GUARANTEED_CATCH_BOX = Vector3.new(5.5, 7, 5.5) -- ⚠️ v110: de 
 -- desenhado no Studio. GKBOT_LATERAL_FOLLOW_RANGE_FALLBACK só é usado se
 -- essa Part não existir na cena.
 Config.GKBOT_LATERAL_FOLLOW_RANGE_MULT = 1.5
-Config.GKBOT_LATERAL_FOLLOW_RANGE_FALLBACK = 30
+Config.GKBOT_LATERAL_FOLLOW_RANGE_FALLBACK = 36 -- ⚠️ v112: 30 -> 36 (campo 20% maior)
 
 -- ⚠️ v6.3: PEDIDO — "faça o bot ficar mais no centro se o atacante estiver
 -- aos lados direita ou diagonal do gol... deixa uma brecha". Piso do fator
@@ -1580,7 +1580,7 @@ Config.GKBOT_SAFE_GOAL_OFFSET = 4
 -- real entre os 2 gols (calculada na hora, campo por campo) — esse valor
 -- aqui é só um FALLBACK (studs) pro raríssimo caso de faltar 1 dos 2 gols
 -- na cena nesse instante.
-Config.GKBOT_GOAL_KICK_MAX_RANGE_FALLBACK = 60
+Config.GKBOT_GOAL_KICK_MAX_RANGE_FALLBACK = 72 -- ⚠️ v112: 60 -> 72 (campo 20% maior)
 
 -- ⚠️ NOVO (pedir passe, tecla T): quanto tempo (segundos) o pedido de
 -- passe de um jogador fica "ativo" (Attribute WantsPass + destaque
@@ -2860,7 +2860,7 @@ Config.CUTSCENE_AIR_CAMERA_NAME = "CutsceneAirCamera"
 -- montarEncaramento em EntranceCutsceneClient.local.luau.
 -- (CUTSCENE_AIR_CAMERA_NAME acima não é mais lido — a Part pode ser apagada.)
 Config.CUTSCENE_FACEOFF_HOLD_SECONDS = 2    -- tempo parado em CADA lado
-Config.CUTSCENE_FACEOFF_RADIUS = 58         -- raio do círculo central (⚠️ v104: campo 25% maior — medido: ~58.4; era 46)
+Config.CUTSCENE_FACEOFF_RADIUS = 70 -- ⚠️ v112: 58 -> 70 (campo 20% maior)         -- raio do círculo central (⚠️ v104: campo 25% maior — medido: ~58.4; era 46)
 Config.CUTSCENE_FACEOFF_SPACING = 11        -- distância entre um jogador e o próximo na fila
 Config.CUTSCENE_FACEOFF_CAMERA_DISTANCE = 42 -- o quanto a câmera fica ATRÁS da fila
 Config.CUTSCENE_FACEOFF_CAMERA_HEIGHT = 13   -- altura da câmera
@@ -3010,7 +3010,7 @@ Config.CROWD_AREA_NAME_PREFIX = "CrowdArea" -- Parts em workspace com nome come�
 Config.CROWD_SEAT_WIDTH = 13    -- studs entre um torcedor e o próximo (colunas, ao longo do Size.X da Part)
 -- ⚠️ v104: campo 25% maior — os degraus das arquibancadas (workspace.Arquibancadas,
 -- só no Studio) ficaram 25% mais fundos: 7 -> 8.75. TEM que bater com o degrau.
-Config.CROWD_ROW_DEPTH = 8.75   -- studs entre uma fileira e a próxima (linhas, ao longo do Size.Z da Part)
+Config.CROWD_ROW_DEPTH = 10.5 -- ⚠️ v112: 8.75 x 1.2 (degraus 20% mais fundos com o campo)   -- studs entre uma fileira e a próxima (linhas, ao longo do Size.Z da Part)
 Config.CROWD_ROW_RISE = 4.5    -- quanto cada fileira sobe em Y (efeito "degrau" de arquibancada de verdade)
 
 -- ⚠️ v30: quanto o torcedor recua DENTRO da própria fileira, pra ficar em
@@ -3018,7 +3018,7 @@ Config.CROWD_ROW_RISE = 4.5    -- quanto cada fileira sobe em Y (efeito "degrau"
 -- CrowdClient.local.luau). Tem que acompanhar onde o banco foi construído
 -- na geometria das arquibancadas: hoje o banco está a 0.78 da profundidade
 -- da fileira, ou seja 7 * 0.78 = 5.46.
-Config.CROWD_SEAT_BACK_OFFSET = 6.375 -- ⚠️ v104: 5.1 * 1.25 (campo/arquibancada 25% maiores)
+Config.CROWD_SEAT_BACK_OFFSET = 7.65 -- ⚠️ v112: 6.375 x 1.2 -- ⚠️ v104: 5.1 * 1.25 (campo/arquibancada 25% maiores)
 -- ⚠️ PEDIDO: "pode preencher o espaço da crowd toda, a arquibancada é a
 -- area selecionada, não tem problema, se estiver travando, a gente
 -- remove" — com isso true, CROWD_MAX_SEATS_PER_AREA (mais abaixo) é

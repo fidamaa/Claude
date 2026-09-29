@@ -1288,7 +1288,7 @@ Data.Instincts = {
 		Posicao = "FW", -- ⚠️ v110: posição da Arma (2 por raridade em cada posição)
 		Rarity = "Common",
 		Cor = Color3.fromRGB(245, 200, 66),
-		Description = "Zona de Ouro dá mira quase perfeita e +15% de força quando você chuta a gol a ~124 studs de distância, num ângulo de ~40° — fora dessa posição exata, você é um jogador normal.",
+		Description = "Zona de Ouro dá mira quase perfeita e +15% de força quando você chuta a gol a ~149 studs de distância, num ângulo de ~40° — fora dessa posição exata, você é um jogador normal.",
 		-- ⚠️ v21 — PEDIDO: "ela tá dentro da área do goleiro, literalmente
 		-- área pequena. Não é pra ser ali — é pra ser dentro da área LONGA,
 		-- então mais distante do gol." 34 studs caía na pequena; 62 põe os
@@ -1296,11 +1296,11 @@ Data.Instincts = {
 		-- atacante realmente arma o chute colocado. Se ainda ficar perto
 		-- demais, é só subir este número (e o da tolerância pra abrir a
 		-- faixa) — nada mais precisa mudar, a marca no chão se move junto.
-		Passiva = "Chute a gol a ~124 studs de distância e num ângulo de ~40° em relação ao gol: mira quase perfeita e +15% de força.",
+		Passiva = "Chute a gol a ~149 studs de distância e num ângulo de ~40° em relação ao gol: mira quase perfeita e +15% de força.",
 		Trigger = "KickAtGoal",
 		Condition = {
-			GoldenZoneDistance = 124,
-			GoldenZoneDistanceTolerance = 20,
+			GoldenZoneDistance = 149, -- ⚠️ v112: 124 -> 149 (campo 20% maior)
+			GoldenZoneDistanceTolerance = 24,
 			GoldenZoneAngle = 40,
 			GoldenZoneAngleTolerance = 20,
 		},
@@ -1455,7 +1455,7 @@ Data.Instincts = {
 		Trigger = "KickAtGoal",
 		-- ⚠️ v5.5: 200 studs era longe demais (pedido: diminuir pra 100).
 		-- ⚠️ v5.6: pedido: diminuir mais uma vez, pra 80.
-		Condition = { MinDistanceToGoal = 14, MaxDistanceToGoal = 80, RequireOutsideEnemyArea = true, RequireMaxCharge = true },
+		Condition = { MinDistanceToGoal = 14, MaxDistanceToGoal = 96, RequireOutsideEnemyArea = true, RequireMaxCharge = true }, -- ⚠️ v112: 80 -> 96 (campo 20% maior)
 		Effect = { ForceMult = 1.30, AimDeviationMult = 0.2 },
 	},
 
@@ -1937,10 +1937,10 @@ Data.Instincts = {
 		Rarity = "Legendary",
 		Cor = Color3.fromRGB(255, 200, 80),
 		RoleRequired = "GK",
-		Description = "Paredão (só goleiro): chute de perto (bola a até 45 studs do seu gol) — seu mergulho ganha +7 de alcance. Na cara do gol, você fecha tudo.",
-		Passiva = "Mergulho com a bola a até 45 studs do seu gol: +7 de alcance.",
+		Description = "Paredão (só goleiro): chute de perto (bola a até 54 studs do seu gol) — seu mergulho ganha +7 de alcance. Na cara do gol, você fecha tudo.",
+		Passiva = "Mergulho com a bola a até 54 studs do seu gol: +7 de alcance.",
 		Trigger = "Dive",
-		Condition = { MaxDistanceToGoal = 45 },
+		Condition = { MaxDistanceToGoal = 54 }, -- ⚠️ v112: 45 -> 54 (campo 20% maior)
 		Effect = { DiveRadiusAdd = 7 },
 	},
 	{
