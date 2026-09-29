@@ -1035,6 +1035,10 @@ local function setOwner(player)
 end
 
 local function releaseOwner()
+	-- ⚠️ v113 (depuração): workspace.RastrearPosse = true escreve no log QUEM soltou a posse
+	if owner and workspace:GetAttribute("RastrearPosse") then
+		warn("[RastrearPosse] soltou a bola de " .. owner.Name .. string.char(10) .. debug.traceback("", 2))
+	end
 	if owner then
 		-- ⚠️ v105: largou a bola — sai das mãos do goleiro
 		owner:SetAttribute("BolaNaMao", nil)
@@ -5604,8 +5608,27 @@ _G.PulseExecuteShot = function(player, effect, rarity)
 	if kicked and effect.VanishSeconds and effect.VanishSeconds > 0 then
 		local vanishing = ball
 		local duration = effect.VanishSeconds
-		task.delay(0.25, function()
-			if not vanishing or not vanishing.Parent then return end
+		-- ⚠️ v113 — revisão pelo vídeo (Inazuma Eleven 3, "Teleport Shot/Kamikakushi",
+		-- quadros a cada 0,2s): a bola some NA FRENTE DO GOLEIRO (30.0s), aparece um
+		-- TORII com névoa roxa e um redemoinho em que ela gira (30.6-33.8s) e ela
+		-- volta coberta de energia roxa (34.2s). Antes sumia 0.25s depois do chute,
+		-- ainda perto do pé, e sem torii nenhum. Agora espera a bola chegar a ~38
+		-- studs do gol (no máximo 1.2s de voo) e o torii aparece ali, pra todo mundo.
+		local golAlvo = player.Team and enemyGoalOf(player.Team.Name)
+		task.spawn(function()
+			local t0 = tick()
+			task.wait(0.15)
+			while vanishing.Parent and tick() - t0 < 1.2 do
+				if golAlvo and (vanishing.Position - golAlvo.Position).Magnitude < 38 then break end
+				if owner then return end
+				RunService.Heartbeat:Wait()
+			end
+			if owner or not vanishing or not vanishing.Parent then return end
+			local dirVoo = vanishing.AssemblyLinearVelocity.Magnitude > 1 and vanishing.AssemblyLinearVelocity.Unit or Vector3.new(0, 0, -1)
+			if player.Character then
+				Config.DispararVFX("HissatsuVFX", player.Character, "Sumiço@torii", nil,
+					{ Posicao = vanishing.Position, Dir = dirVoo, Duracao = duration })
+			end
 			local originals = { [vanishing] = vanishing.Transparency }
 			vanishing.Transparency = 1
 			for _, descendant in ipairs(vanishing:GetDescendants()) do
@@ -5619,6 +5642,10 @@ _G.PulseExecuteShot = function(player, effect, rarity)
 					if instance and instance.Parent then
 						instance.Transparency = transparency
 					end
+				end
+				-- reaparece coberta de energia roxa (34.2s do vídeo)
+				if player.Character and vanishing.Parent then
+					Config.DispararVFX("HissatsuVFX", player.Character, "Sumiço@volta", nil, { Posicao = vanishing.Position })
 				end
 			end)
 		end)

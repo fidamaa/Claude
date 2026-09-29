@@ -1162,6 +1162,66 @@ end
 
 -- (a Chuva de Meteoros agora é cutscene — HissatsuCutscenes.ChuvaDeMeteoros)
 
+-- ⚠️ v113 — SUMIÇO NO VOO (Kamikakushi, pelo vídeo do Inazuma Eleven 3): onde a
+-- bola some, na frente do goleiro, sobe um TORII vermelho no meio de uma névoa
+-- roxa, com um redemoinho girando por dentro dele; some quando a bola volta.
+VFX["Sumiço@torii"] = function(ch, root, dados)
+	if not dados or typeof(dados.Posicao) ~= "Vector3" then return end
+	local ROXO, ESCURO, VERMELHO = rgb(170, 70, 255), rgb(45, 0, 70), rgb(200, 30, 25)
+	local dur = math.max(tonumber(dados.Duracao) or 0.5, 0.35) + 0.35
+	local dir = typeof(dados.Dir) == "Vector3" and V3(dados.Dir.X, 0, dados.Dir.Z) or V3(0, 0, -1)
+	dir = dir.Magnitude > 0.05 and dir.Unit or V3(0, 0, -1)
+	local base = noChao(dados.Posicao + dir * 4, 0)
+	local cf = CFrame.lookAt(base, base + dir)
+	-- torii: 2 pilares, a viga de cima (kasagi, mais larga) e a de baixo (nuki)
+	local pecas = {}
+	local function peca(tam, rel, cor)
+		local p = parte({ Size = tam, CFrame = cf * rel, Color = cor, Material = Enum.Material.SmoothPlastic, Transparency = 1 })
+		table.insert(pecas, p)
+		return p
+	end
+	peca(V3(1.1, 11, 1.1), CFrame.new(-5, 5.5, 0), VERMELHO)
+	peca(V3(1.1, 11, 1.1), CFrame.new(5, 5.5, 0), VERMELHO)
+	peca(V3(15, 1, 1.6), CFrame.new(0, 11.4, 0), rgb(40, 20, 20))
+	peca(V3(13.5, 0.8, 1.3), CFrame.new(0, 10.6, 0), VERMELHO)
+	peca(V3(11, 0.6, 0.8), CFrame.new(0, 8.6, 0), VERMELHO)
+	-- redemoinho: disco roxo girando dentro do portal + anéis sugando
+	-- ForceField: o próprio material já tem o padrão girando (o redemoinho do vídeo)
+	local disco = parte({ Shape = Enum.PartType.Cylinder, Size = V3(0.2, 9, 9), Color = rgb(150, 60, 255), Transparency = 1,
+		Material = Enum.Material.ForceField,
+		CFrame = cf * CFrame.new(0, 5, 0) * CFrame.Angles(0, math.rad(90), 0) })
+	local miolo = parte({ Shape = Enum.PartType.Cylinder, Size = V3(0.25, 3, 3), Color = ESCURO, Transparency = 1,
+		CFrame = cf * CFrame.new(0, 5, -0.1) * CFrame.Angles(0, math.rad(90), 0) })
+	fumaca(base + V3(0, 1, 0), cores({ { 0, rgb(110, 40, 170) }, { 1, rgb(30, 0, 50) } }), 26, 5, 5)
+	faiscas(dados.Posicao, rgb(230, 190, 255), 30, 18)
+	local proxAnel = 0
+	durante(dur, function(t)
+		local entra = math.clamp(t / 0.15, 0, 1)
+		local sai = math.clamp((dur - t) / 0.2, 0, 1)
+		local a = entra * sai
+		for _, p in ipairs(pecas) do p.Transparency = 1 - a end
+		disco.Transparency = 1 - a
+		miolo.Transparency = 1 - a * 0.9
+		disco.CFrame = cf * CFrame.new(0, 5, 0) * CFrame.Angles(0, math.rad(90), 0) * CFrame.Angles(t * 9, 0, 0)
+		if t >= proxAnel and a > 0.3 then
+			proxAnel = t + 0.1
+			anel((cf * CFrame.new(0, 5, 0.2)).Position, cf.LookVector, rgb(230, 170, 255), 9, 1.5, 0.3, 0.25)
+		end
+	end, function()
+		for _, p in ipairs(pecas) do p:Destroy() end
+		disco:Destroy()
+		miolo:Destroy()
+	end)
+end
+VFX["Sumiço@volta"] = function(ch, root, dados)
+	if not dados or typeof(dados.Posicao) ~= "Vector3" then return end
+	local ROXO = rgb(170, 70, 255)
+	local p = parte({ Shape = Enum.PartType.Ball, Size = V3(2, 2, 2), Color = rgb(235, 190, 255), Transparency = 0.1, CFrame = CFrame.new(dados.Posicao) })
+	sumir(p, 0.35, { Size = V3(9, 9, 9) })
+	faiscas(dados.Posicao, ROXO, 40, 24)
+	anel(dados.Posicao, Vector3.yAxis, ROXO, 2, 12, 0.4, 0.3)
+end
+
 local function aoHissatsuVFX(character, nome, elemento, dados)
 	if typeof(character) ~= "Instance" or not character:IsA("Model") then return end
 	local root = character:FindFirstChild("HumanoidRootPart")
