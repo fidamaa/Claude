@@ -1860,8 +1860,14 @@ function E.LaminaMeteoro(ctx)
 	local raiosE = {}
 	for i = 1, 10 do raiosE[i] = parte(pasta, "RaioEsfera" .. i, { Color = i % 2 == 0 and ROSA or AZUL }) end
 	local anelFecha = parte(pasta, "AnelFecha", { Shape = Enum.PartType.Cylinder, Color = ROXO, Material = Enum.Material.ForceField })
-	local estrela = esfera(pasta, "EstrelaLamina", rgb(255, 245, 200))
-	local reflexo = parte(pasta, "Reflexo", { Color = rgb(255, 240, 200) })
+	-- ⚠️ v113 (revisão a 0,2s): o "sol" era uma esfera quase branca de 9 studs
+	-- que tampava a tela inteira com o estádio atrás. No vídeo (4.3-5.8s) é um
+	-- SOL DOURADO com halo e um reflexo horizontal, num fundo de ESPAÇO escuro.
+	local estrela = esfera(pasta, "EstrelaLamina", rgb(255, 205, 90))
+	local haloSol = esfera(pasta, "HaloSol", rgb(255, 180, 70))
+	local reflexo = parte(pasta, "Reflexo", { Color = rgb(255, 230, 160) })
+	local espacoLamina = salaEscura(pasta, "EspacoLamina", rgb(10, 4, 26),
+		CFrame.new(mundo(spec.PontoEstrela)) * ctx.Inicio.Rotation, 150, ctx.ChaoY + 0.1 - spec.PontoEstrela.Y) -- chão da sala rente ao gramado
 	local luzE = luz(esferaE, ROXO, 0, 6)
 	local efeitos = {}
 	function efeitos.Quadro(t, _dt, s)
@@ -1906,9 +1912,15 @@ function E.LaminaMeteoro(ctx)
 		end
 		-- o SOL dourado com o reflexo horizontal
 		local sol = smooth(phase(t, ph.Estrela[1], ph.Estrela[1] + 0.25)) * (1 - smooth(phase(t, ph.Clarao[1] + 0.05, ph.Clarao[2])))
-		estrela.Size = Vector3.one * math.max(9 * sol * (1 + 0.08 * math.sin(t * 40)), 0.1)
+		estrela.Size = Vector3.one * math.max(4.2 * sol * (1 + 0.08 * math.sin(t * 40)), 0.1)
 		estrela.CFrame = CFrame.new(centro)
 		estrela.Transparency = sol > 0.02 and 0 or 1
+		haloSol.Size = Vector3.one * math.max(6.2 * sol * (1 + 0.12 * math.sin(t * 25)), 0.1)
+		haloSol.CFrame = CFrame.new(centro)
+		haloSol.Transparency = sol > 0.02 and 0.82 or 1
+		-- espaço escuro do anel fechando até o clarão
+		local escuro = smooth(phase(t, ph.Colapso[1] - 0.1, ph.Colapso[1] + 0.1)) * (1 - smooth(phase(t, ph.Clarao[1], ph.Clarao[1] + 0.1)))
+		espacoLamina.Transparency = 1 - escuro
 		reflexo.Size = V3(math.max(46 * sol, 0.1), 0.35 * sol + 0.05, 0.35 * sol + 0.05)
 		reflexo.CFrame = CFrame.lookAt(centro, centro + frente) * CFrame.new(0, 0, -0.5)
 		reflexo.Transparency = sol > 0.02 and 0.1 or 1
