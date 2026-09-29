@@ -1698,39 +1698,83 @@ local ESCALA_MAO = { MaoDivina = 2.1, MaoDemonio = 1.8, PunhoGigante = 1.55, Pun
 -- das posições dela), enrolando em volta dele; cabeça maior com olhos
 -- vermelhos. Azul até o chute, FOGO depois (a wiki: "o dragão azul vira um
 -- dragão de fogo"). O chutador sobe dentro de um tornado de fogo.
+-- ⚠️ v113 — revisão pelo anime a 0,2s (0-2.4s: a bola sobe dentro de um DRAGÃO
+-- azul, corpo de serpente, cabeça com chifres). Antes: blocos Neon seguindo o
+-- histórico por QUADRO (dependia do FPS e, parado, encolhia tudo num bolo em
+-- cima da bola). Agora o histórico é por TEMPO (cada gomo fica X segundos
+-- atrás da bola), o corpo é de esferas afinando até a cauda, e a cabeça tem
+-- focinho, dois chifres e olhos vermelhos.
 local function correnteDragao(pastaAlvo, n)
 	local segs = {}
 	for i = 1, n do
-		segs[i] = parte(pastaAlvo, "Dragao" .. i, { Color = rgb(70, 140, 255) })
+		segs[i] = parte(pastaAlvo, "Dragao" .. i, { Shape = Enum.PartType.Ball, Color = rgb(70, 140, 255) })
 	end
+	local focinho = parte(pastaAlvo, "DragaoFocinho", { Color = rgb(70, 140, 255) })
+	local chifres = { parte(pastaAlvo, "DragaoChifreE", { Color = rgb(220, 240, 255) }), parte(pastaAlvo, "DragaoChifreD", { Color = rgb(220, 240, 255) }) }
 	local olhos = { parte(pastaAlvo, "OlhoDragaoE", { Color = rgb(255, 40, 40) }), parte(pastaAlvo, "OlhoDragaoD", { Color = rgb(255, 40, 40) }) }
-	local hist = {}
+	local hist = {} -- { t, p }, mais novo primeiro
+	local PASSO = 0.03 -- segundos entre um gomo e o próximo
+	local function naHora(tt)
+		if #hist == 0 then return nil end
+		if tt >= hist[1].t then return hist[1].p end
+		for k = 1, #hist - 1 do
+			local a, b = hist[k], hist[k + 1]
+			if tt <= a.t and tt >= b.t then
+				local u = (a.t - tt) / math.max(a.t - b.t, 1e-4)
+				return a.p:Lerp(b.p, u)
+			end
+		end
+		return hist[#hist].p
+	end
 	local d = {}
 	function d.Atualizar(posBola, cor, alfa, tempo)
-		table.insert(hist, 1, posBola)
-		if #hist > n * 2 + 2 then table.remove(hist) end
+		-- voltou no tempo (depuração): recomeça o histórico
+		if hist[1] and tempo < hist[1].t - 0.05 then table.clear(hist) end
+		if not hist[1] or tempo > hist[1].t + 1e-4 then
+			table.insert(hist, 1, { t = tempo, p = posBola })
+			while #hist > 2 and hist[#hist].t < tempo - (n + 2) * PASSO do table.remove(hist) end
+		else
+			hist[1].p = posBola
+		end
+		local cabecaCF = nil
 		for i, s in ipairs(segs) do
-			local p = hist[math.min(i * 2 - 1, #hist)]
+			local p = naHora(tempo - (i - 1) * PASSO)
+			local prox = naHora(tempo - i * PASSO) or p
 			if p and alfa > 0.02 then
-				local ang = tempo * 5 + i * 0.55
-				local off = V3(math.cos(ang) * 2.2, math.sin(ang * 0.7) * 1.2, math.sin(ang) * 2.2)
-				local tam = math.max(2.4 - i * 0.11, 0.5)
-				s.Size = V3(tam, tam, tam * 1.4)
-				local prox = hist[math.min(i * 2 + 1, #hist)] or p
-				local pos = p + off * math.min(i / 3, 1)
-				s.CFrame = CFrame.lookAt(pos, pos + (p - prox) + V3(0, 0.001, 0))
+				local ang = tempo * 5 + i * 0.5
+				local off = V3(math.cos(ang) * 1.6, math.sin(ang * 0.7) * 0.9, math.sin(ang) * 1.6) * math.min((i - 1) / 4, 1)
+				local tam = math.max(2.6 - (i - 1) * 0.13, 0.45)
+				local pos = p + off
+				local dir = p - prox
+				if dir.Magnitude < 0.01 then dir = V3(0, 1, 0) end
+				s.Size = Vector3.one * tam
+				s.CFrame = CFrame.lookAt(pos, pos + dir + V3(0, 0.001, 0))
 				s.Color = cor
 				s.Transparency = 1 - alfa * 0.85
+				if i == 1 then cabecaCF = s.CFrame end
 			else
 				s.Transparency = 1
 			end
 		end
-		local cabeca = segs[1]
-		for j, o in ipairs(olhos) do
-			o.Size = V3(0.35, 0.35, 0.35)
-			o.CFrame = cabeca.CFrame * CFrame.new(j == 1 and -0.5 or 0.5, 0.45, -0.9)
-			o.Transparency = cabeca.Transparency
+		local vis = cabecaCF and alfa > 0.02
+		if vis then
+			focinho.Size = V3(1.5, 1.0, 2.0)
+			focinho.CFrame = cabecaCF * CFrame.new(0, -0.25, -1.5)
+			focinho.Color = cor
+			for j, c in ipairs(chifres) do
+				local lado = j == 1 and -1 or 1
+				c.Size = V3(0.3, 0.3, 2.2)
+				c.CFrame = cabecaCF * CFrame.new(lado * 0.7, 0.9, 0.6) * CFrame.Angles(math.rad(35), lado * math.rad(20), 0)
+			end
+			for j, o in ipairs(olhos) do
+				o.Size = V3(0.4, 0.4, 0.4)
+				o.CFrame = cabecaCF * CFrame.new(j == 1 and -0.6 or 0.6, 0.45, -1.0)
+			end
 		end
+		local transp = vis and (1 - alfa * 0.85) or 1
+		focinho.Transparency = transp
+		for _, c in ipairs(chifres) do c.Transparency = transp end
+		for _, o in ipairs(olhos) do o.Transparency = vis and (1 - alfa) or 1 end
 	end
 	return d
 end

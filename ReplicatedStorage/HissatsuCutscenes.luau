@@ -1454,12 +1454,15 @@ DT.Clones = {
 	end,
 }
 function DT.Camera(t, rootPos, ballPos)
-	if t < 0.45 then
-		-- de frente e aberta: os dois, o parceiro chutando pro alto
-		return V3(3.5, 0.5, -11), V3(-1.5, 0.2, 0.8):Lerp(ballPos, 0.3 * phase(t, 0.22, 0.45)), 62
+	-- ⚠️ v113 (anime a 0,2s, 0-2.4s): o parceiro chuta e a bola sobe dentro de um
+	-- DRAGÃO AZUL. De frente, o chutador tampava o parceiro e o dragão saía do
+	-- quadro logo. Agora: de lado com os dois à vista; depois de perfil, junto da
+	-- bola, o corpo do dragão subindo atrás dela.
+	if t < 0.3 then
+		return V3(-10, 0.3, -4), V3(-1.7, -0.3, 1.2), 60
 	elseif t < 0.72 then
-		-- do chão, o dragão azul subindo com a bola
-		return V3(1, -1.8, 6), ballPos, 60
+		local u = smooth(phase(t, 0.3, 0.72))
+		return ballPos + V3(-12, -3 + 2 * u, 3), ballPos + V3(0, -2.5 * (1 - u), 0), 62
 	end
 	return FT.Camera(t, rootPos, ballPos)
 end
