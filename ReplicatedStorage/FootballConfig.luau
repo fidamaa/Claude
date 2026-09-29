@@ -1164,8 +1164,11 @@ Config.HIGHLIGHT_OUTLINE_TRANSPARENCY = 0.35
 -- encolhe ao se aproximar). Está assim porque foi pedido assim, e
 -- confirmado no pedido. Se um dia quiser o comportamento físico, basta
 -- trocar MIN_SIZE por MAX_SIZE aqui — o script não precisa mudar.
-Config.BALL_SHADOW_MIN_SIZE = 3     -- bola no alto (círculo pequeno)
-Config.BALL_SHADOW_MAX_SIZE = 9     -- bola rente ao chão (círculo grande)
+-- ⚠️ v112 — PEDIDO: "a sombra da bola pode aparecer sempre... coloca um tamanho
+-- mínimo; mesmo muito distante ela não pode sumir, só fica no tamanho certo, pro
+-- cara ter uma ideia mínima de onde vai cair a bola". Mínimo 3 -> 4 e nunca some.
+Config.BALL_SHADOW_MIN_SIZE = 4     -- bola no alto (círculo pequeno — nunca menor que isso)
+Config.BALL_SHADOW_MAX_SIZE = 10    -- bola rente ao chão (círculo grande)
 -- Altura (studs) em que a sombra já está no tamanho MÍNIMO. Acima disso
 -- não encolhe mais.
 Config.BALL_SHADOW_MAX_HEIGHT = 45
@@ -1177,7 +1180,12 @@ Config.BALL_SHADOW_MAX_HEIGHT = 45
 -- cliente sabe por Remotes.PossessionChanged.
 Config.BALL_SHADOW_MIN_HEIGHT = 3
 -- Transparência da marca: mais apagada com a bola alta, mais escura perto.
-Config.BALL_SHADOW_MAX_TRANSPARENCY = 0.82 -- bola no alto
+Config.BALL_SHADOW_MAX_TRANSPARENCY = 0.82 -- (v112: não usado — ver BALL_SHADOW_MIN_ALPHA)
+-- ⚠️ v112: opacidade mínima da marca com a bola bem alta (0 = some, 1 = cheia)
+Config.BALL_SHADOW_MIN_ALPHA = 0.7
+-- ⚠️ v112: até onde procura o chão embaixo da bola (antes era 1.5 x MAX_HEIGHT = 67
+-- studs — bola mais alta que isso não achava o chão e a sombra sumia)
+Config.BALL_SHADOW_RAY_LENGTH = 600
 Config.BALL_SHADOW_MIN_TRANSPARENCY = 0.35 -- bola rente ao chão
 -- ⚠️ v51: a textura foi REMOVIDA. PEDIDO: "arruma a sombra, ela tá muito
 -- estranha, parece que é uma skin. Ela tem que ser um círculo embaixo da

@@ -71,33 +71,79 @@ if not bola then
 end
 
 -- ===== A MARCA =====
--- CanCollide/CanQuery/CanTouch desligados: ela
--- não pode nem empurrar a bola, nem aparecer no raycast da própria sombra,
--- nem ser confundida com alvo de mira pelo computeAimPoint do chute (foi
--- exatamente esse tipo de hitbox invisível que já causou bug de mira
--- antes — ver isProbablyMathOnlyHitbox em FootballClient).
--- Cylinder achatado = círculo perfeito visto de cima (ver o comentário do
--- cabeçalho sobre por que não é mais uma Decal com textura).
--- ATENÇÃO à convenção do Roblox: num Part com Shape = Cylinder, as tampas
--- redondas ficam no eixo X. Então Size é (espessura, diâmetro, diâmetro), e
--- quem tem que apontar pra cima é o eixo X — não o Y, como seria num bloco.
+-- ⚠️ v112 — PEDIDO (com print de referência): "a sombra pode aparecer sempre,
+-- com um tamanho mínimo — mesmo muito distante ela não pode sumir" + o visual
+-- da referência: ANÉIS CONCÊNTRICOS no chão (miolo escuro com contorno claro,
+-- faixa escura translúcida e um anel claro por fora).
+-- Agora é uma plaquinha invisível deitada no gramado com uma SurfaceGui em
+-- cima: os anéis são Frames redondos (UICorner) com UIStroke — círculos
+-- perfeitos e nítidos em qualquer tamanho, sem imagem nem asset (continua
+-- valendo o motivo do v51: textura vira "skin").
+-- CanCollide/CanQuery/CanTouch desligados: não empurra a bola, não entra no
+-- raycast da própria sombra e não vira alvo de mira (ver
+-- isProbablyMathOnlyHitbox em FootballClient).
 local marca = Instance.new("Part")
 marca.Name = "SombraDaBola"
-marca.Shape = Enum.PartType.Cylinder
 marca.Material = Enum.Material.SmoothPlastic
-marca.Color = Color3.fromRGB(0, 0, 0)
 marca.Anchored = true
 marca.CanCollide = false
 marca.CanQuery = false
 marca.CanTouch = false
 marca.CastShadow = false
 marca.Transparency = 1
-marca.Size = Vector3.new(
-	Config.BALL_SHADOW_THICKNESS,
-	Config.BALL_SHADOW_MAX_SIZE,
-	Config.BALL_SHADOW_MAX_SIZE
-)
+marca.Size = Vector3.new(Config.BALL_SHADOW_MAX_SIZE, 0.05, Config.BALL_SHADOW_MAX_SIZE)
 marca.Parent = workspace
+
+local superficie = Instance.new("SurfaceGui")
+superficie.Name = "Aneis"
+superficie.Face = Enum.NormalId.Top
+superficie.CanvasSize = Vector2.new(512, 512)
+superficie.LightInfluence = 0
+superficie.Brightness = 1
+superficie.Enabled = false
+superficie.Parent = marca
+
+-- { tamanho relativo, cor do fundo, transparência do fundo, cor do anel,
+--   transparência do anel, espessura do anel (px do canvas) }
+local CAMADAS = {
+	{ 1.00, Color3.new(1, 1, 1), 0.9,  Color3.new(1, 1, 1), 0.5,  10 }, -- anel claro de fora
+	{ 0.72, Color3.new(0, 0, 0), 0.78, Color3.new(1, 1, 1), 0.7,  5 },  -- faixa escura + anel fino
+	{ 0.40, Color3.new(0, 0, 0), 0.35, Color3.new(1, 1, 1), 0.2,  6 },  -- miolo escuro com contorno
+}
+local aneis = {}
+for i, c in ipairs(CAMADAS) do
+	local f = Instance.new("Frame")
+	f.Name = "Anel" .. i
+	f.AnchorPoint = Vector2.new(0.5, 0.5)
+	f.Position = UDim2.fromScale(0.5, 0.5)
+	f.Size = UDim2.fromScale(c[1] * 0.96, c[1] * 0.96)
+	f.BackgroundColor3 = c[2]
+	f.BorderSizePixel = 0
+	f.ZIndex = i
+	f.Parent = superficie
+	local canto = Instance.new("UICorner")
+	canto.CornerRadius = UDim.new(0.5, 0)
+	canto.Parent = f
+	local traco = Instance.new("UIStroke")
+	traco.Color = c[4]
+	traco.Thickness = c[6]
+	traco.Parent = f
+	aneis[i] = { Frame = f, Traco = traco, Base = c }
+end
+
+local function aplicarOpacidade(alfa, respira)
+	-- alfa 1 = como desenhado; menor = mais apagado (bola alta), nunca some
+	for i, a in ipairs(aneis) do
+		local c = a.Base
+		a.Frame.BackgroundTransparency = 1 - (1 - c[3]) * alfa
+		a.Traco.Transparency = 1 - (1 - c[5]) * alfa
+		if i == 1 then
+			-- o anel de fora "respira" devagar, chamando o olho pro ponto
+			local s = c[1] * (0.9 + 0.06 * respira)
+			a.Frame.Size = UDim2.fromScale(s, s)
+		end
+	end
+end
 
 local filtro = RaycastParams.new()
 filtro.FilterType = Enum.RaycastFilterType.Exclude
@@ -118,13 +164,21 @@ atualizarFiltro()
 -- ⚠️ v51: quem está com a bola. Mesmo listener que AbilityHUD,
 -- FootballClient e InstinctTrajectorySight já usam — não precisa de remote
 -- novo. Basta saber se EXISTE dono, não quem é.
-local bolaTemDono = false
-Remotes.PossessionChanged.OnClientEvent:Connect(function(_, ganhou)
-	bolaTemDono = ganhou and true or false
+-- ⚠️ v112 FIX: guardava só o ÚLTIMO aviso ("alguém ganhou/perdeu"). Se o
+-- "fulano soltou" chegasse DEPOIS do "ciclano pegou", ficava "sem dono" com a
+-- bola no pé de alguém — e a sombra aparecia embaixo dele. Agora guarda QUEM é
+-- o dono e só limpa se quem soltou for ele mesmo.
+local donoDaBola = nil
+Remotes.PossessionChanged.OnClientEvent:Connect(function(quem, ganhou)
+	if ganhou then
+		donoDaBola = quem or true
+	elseif donoDaBola == quem or quem == nil then
+		donoDaBola = nil
+	end
 end)
 
 local function esconder()
-	marca.Transparency = 1
+	superficie.Enabled = false
 end
 
 RunService.Heartbeat:Connect(function()
@@ -141,14 +195,16 @@ RunService.Heartbeat:Connect(function()
 
 	-- ⚠️ v51, CONDIÇÃO 1: bola no pé de alguém NUNCA tem sombra — nem
 	-- parada, nem em movimento, nem se a pessoa jogar ela pra cima.
-	if bolaTemDono then
+	if donoDaBola then
 		esconder()
 		return
 	end
 
+	-- ⚠️ v112: procura o chão bem mais longe (antes 67 studs — bola mais alta
+	-- que isso ficava sem sombra)
 	local batida = workspace:Raycast(
 		bola.Position,
-		Vector3.new(0, -Config.BALL_SHADOW_MAX_HEIGHT * 1.5, 0),
+		Vector3.new(0, -(Config.BALL_SHADOW_RAY_LENGTH or 600), 0),
 		filtro
 	)
 	if not batida then
@@ -158,41 +214,31 @@ RunService.Heartbeat:Connect(function()
 
 	local altura = bola.Position.Y - batida.Position.Y
 
-	-- ⚠️ v51, CONDIÇÃO 2: tem que estar NO AR. Antes a checagem era por
-	-- VELOCIDADE, e por isso bola rolando pelo gramado também marcava
-	-- sombra — que é justamente o que não faz sentido.
+	-- ⚠️ v51, CONDIÇÃO 2: tem que estar NO AR (bola rolando não marca).
 	if altura < Config.BALL_SHADOW_MIN_HEIGHT then
 		esconder()
 		return
 	end
 
-	-- Perto do chão = 1 (círculo grande), na altura máxima = 0 (pequeno).
+	-- Perto do chão = 1 (grande), na altura máxima ou acima = 0 (tamanho
+	-- MÍNIMO — ⚠️ v112: dali pra cima não encolhe nem some mais).
 	local proximidade = 1 - math.clamp(altura / Config.BALL_SHADOW_MAX_HEIGHT, 0, 1)
 	local tamanho = Config.BALL_SHADOW_MIN_SIZE
 		+ (Config.BALL_SHADOW_MAX_SIZE - Config.BALL_SHADOW_MIN_SIZE) * proximidade
 
-	marca.Size = Vector3.new(Config.BALL_SHADOW_THICKNESS, tamanho, tamanho)
-	-- Colada no chão e alinhada com a inclinação dele (a normal da batida),
-	-- pra não atravessar nem flutuar em nenhuma parte do gramado.
-	-- CFrame.fromMatrix(posição, eixoX, eixoY): o eixo X recebe a normal do
-	-- chão, que é o eixo das tampas redondas do Cylinder — é isso que deixa
-	-- o círculo deitado no gramado. `apoio` é só um vetor qualquer
-	-- perpendicular à normal pra fechar a base (a rotação do disco em torno
-	-- do próprio eixo não importa: um círculo é igual de qualquer ângulo).
+	marca.Size = Vector3.new(tamanho, 0.05, tamanho)
+	-- Deitada no chão e alinhada com a inclinação dele (a normal da batida):
+	-- o eixo Y da plaquinha (face Top, onde está a SurfaceGui) = a normal.
 	local normal = batida.Normal
 	local apoio = normal:Cross(Vector3.new(0, 0, 1))
 	if apoio.Magnitude < 0.01 then
 		apoio = normal:Cross(Vector3.new(1, 0, 0))
 	end
-	marca.CFrame = CFrame.fromMatrix(
-		batida.Position + normal * (Config.BALL_SHADOW_THICKNESS / 2 + 0.02),
-		normal,
-		apoio.Unit
-	)
+	marca.CFrame = CFrame.fromMatrix(batida.Position + normal * 0.06, apoio.Unit, normal)
 
-	-- Bola muito alta fica quase translúcida; chegando perto, escurece.
-	marca.Transparency = Config.BALL_SHADOW_MAX_TRANSPARENCY
-		- (Config.BALL_SHADOW_MAX_TRANSPARENCY - Config.BALL_SHADOW_MIN_TRANSPARENCY) * proximidade
+	local minimo = Config.BALL_SHADOW_MIN_ALPHA or 0.7
+	aplicarOpacidade(minimo + (1 - minimo) * proximidade, (math.sin(agora * 5) + 1) / 2)
+	superficie.Enabled = true
 end)
 
 print("✅ BallShadowClient carregado.")
