@@ -3066,4 +3066,202 @@ function FRe.Camera(t, rootPos)
 end
 
 
+-- ============================================================
+-- 👻 FLOW DO AIKU — cena de ativação (⚠️ v113)
+-- ============================================================
+-- A melhor cena dele: o FANTASMA da defesa. Na névoa, agachado em guarda de
+-- olhos fechados; abre os olhos (claros); um atacante (sombra vermelha) vem
+-- conduzindo; ele SOME, deixa rastros de imagem e reaparece do lado, dá o
+-- bote e sai com a bola; fecha calmo com a bola no pé.
+local FA = {}
+Cutscenes.Flow_Aiku = FA
+FA.Motor = "V2"
+FA.Efeitos = "FlowAiku"
+FA.KickFoot = "Right"
+FA.Duration = 12
+FA.ImpactTime = 11.3
+FA.ColarNoPe = false
+FA.TitleText = "FLOW · AIKU OLIVER"
+FA.Tema = {
+	Titulo = { rgb(240, 245, 255), rgb(170, 180, 215), rgb(70, 70, 110) },
+	Contorno = rgb(15, 15, 30), Flash = rgb(225, 230, 255),
+	Tint = rgb(235, 238, 250), Saturation = -0.25, Contrast = 0.2, Brightness = -0.02,
+}
+FA.Phases = {
+	Guarda = { 0, 2 }, Olhos = { 2, 3.5 }, Vem = { 3.5, 5.2 }, Some = { 5.2, 6.4 }, Bote = { 6.4, 7.6 },
+	Final = { 8.5, 12 }, Kick = { 11, FA.ImpactTime }, Impact = { FA.ImpactTime, FA.Duration },
+}
+local FA_ROOT = {
+	{ 0, V3(0, -0.7, 0) }, { 3.5, V3(0, -0.7, 0) }, { 5.2, V3(0, -0.7, 0) },
+	{ 6.3, V3(-3.5, -0.4, -5.5) }, -- reaparece do lado do atacante
+	{ 7.0, V3(-1.2, -1.3, -6.8) }, -- bote rasteiro
+	{ 7.6, V3(0, -1.2, -7.8) }, { 8.5, V3(0, 0, -9.5) }, { 12, V3(0, 0, -9.5) },
+}
+local FA_YAW = { { 0, 0 }, { 5.2, 0 }, { 6.3, -60 }, { 7.0, -30 }, { 8.5, 0 }, { 12, 0 } }
+function FA.RootPosition(t) return sample(FA_ROOT, t) end
+function FA.RootCFrame(t) return CFrame.new(FA.RootPosition(t)) * CFrame.Angles(0, rad(sample(FA_YAW, t)), 0) end
+function FA.BallPosition(_t, s) return s or V3(0, -2.3, -1.8) end
+function FA.BallVisible(t) return t < 0.05 end
+function FA.BallSpin() return 0 end
+local FA_GUARDA = { Root = { -25, 0, 0 }, Neck = { 15, 0, 0 }, RHip = { 55, 0, 14 }, LHip = { 55, 0, -14 },
+	RShoulder = { 20, 0, 50 }, LShoulder = { 20, 0, -50 } }
+local FA_CALMO = { Root = { 0, 0, 0 }, Neck = { 6, 0, 0 }, RHip = { 25, 0, 0 }, RShoulder = { -5, 0, 10 }, LShoulder = { -5, 0, -10 } }
+local FA_POSE = {
+	{ 0.00, FA_GUARDA }, { 5.20, FA_GUARDA },
+	{ 6.30, { Root = { -30, 0, 0 }, Neck = { 20, 0, 0 }, RHip = { 45, 0, 10 }, LHip = { 20, 0, -10 },
+		RShoulder = { 30, 0, 60 }, LShoulder = { 30, 0, -60 } } },
+	-- bote: carrinho curto, perna direita esticada
+	{ 7.00, { Root = { 55, 0, 0 }, Neck = { -30, 0, 0 }, RHip = { 40, 0, 0 }, LHip = { 80, 0, 0 },
+		RShoulder = { -20, 0, 40 }, LShoulder = { 80, 0, -30 } } },
+	{ 7.60, { Root = { 20, 0, 0 }, Neck = { -10, 0, 0 }, RHip = { 45, 0, 0 }, LHip = { 50, 0, 0 },
+		RShoulder = { -10, 0, 30 }, LShoulder = { 40, 0, -30 } } },
+	{ 8.50, FA_CALMO }, { 12.00, FA_CALMO },
+}
+function FA.Pose(t) return samplePose(FA_POSE, t) end
+-- 1 = o atacante (vermelho, conduzindo); 2-4 = rastros de imagem dele
+FA.Clones = {
+	Quantidade = 4,
+	Cor = rgb(170, 180, 215),
+	CFrame = function(i, t)
+		if i == 1 then
+			local vem = smooth(phase(t, 3.5, 6.8))
+			local p = V3(-2, 0, -14):Lerp(V3(-2, 0, -7), vem)
+			local cai = smooth(phase(t, 7.0, 7.6))
+			return CFrame.new(p + V3(-1.2 * cai, -0.9 * cai, 0)) * CFrame.Angles(0, math.pi, 0) * CFrame.Angles(rad(-35 * cai), 0, rad(30 * cai))
+		end
+		-- rastros: onde ele esteve um pouco antes
+		local atras = (i - 1) * 0.12
+		local tt = math.max(t - atras, 0)
+		return CFrame.new(FA.RootPosition(tt)) * CFrame.Angles(0, rad(sample(FA_YAW, tt)), 0)
+	end,
+	Pose = function(i, t)
+		if i == 1 then
+			local w = math.sin(t * 9)
+			local cai = smooth(phase(t, 7.0, 7.6))
+			return { Root = { -10 * (1 - cai), 0, 0 }, RHip = { 35 * w * (1 - cai), 0, 0 }, LHip = { -35 * w * (1 - cai), 0, 0 },
+				RShoulder = { -30 * w + 60 * cai, 0, 15 + 40 * cai }, LShoulder = { 30 * w + 60 * cai, 0, -15 - 40 * cai } }
+		end
+		return FA.Pose(math.max(t - (i - 1) * 0.12, 0))
+	end,
+	Alpha = function(i, t)
+		if i == 1 then
+			if t < 3.5 then return 0 end
+			if t < 3.8 then return smooth(phase(t, 3.5, 3.8)) end
+			if t < 9 then return 1 end
+			return 1 - smooth(phase(t, 9, 9.4))
+		end
+		-- rastros só no sumiço/bote
+		local a = smooth(phase(t, 5.2, 5.5)) * (1 - smooth(phase(t, 7.4, 7.9)))
+		return a * (0.55 - (i - 2) * 0.15)
+	end,
+}
+function FA.Camera(t, rootPos)
+	local cabeca = rootPos + V3(0, 1.5, 0)
+	if t < 2 then
+		local u = smooth(phase(t, 0, 2))
+		return V3(3, 0.5, -7.5):Lerp(V3(2.4, 0.2, -6.2), u), V3(0, -0.3, 0), 52
+	elseif t < 3.5 then
+		local u = smooth(phase(t, 2, 3.5))
+		return cabeca + V3(0.35, -0.3, -4):Lerp(V3(0.25, -0.25, -3.2), u), cabeca, 38
+	elseif t < 8.5 then
+		-- de lado e aberta: o atacante vindo, ele sumindo e o bote
+		return V3(11, 1.5, -6), V3(-1, 0, -6.5), 55
+	end
+	local u = smooth(phase(t, 8.5, 12))
+	return cabeca + V3(0.8, -0.8, -5.5):Lerp(V3(0.5, -0.6, -4.2), u), cabeca + V3(0, -0.5, 0), 42
+end
+
+-- ============================================================
+-- 👑 FLOW DO BAROU — cena de ativação (⚠️ v113)
+-- ============================================================
+-- A melhor cena dele: o REI. Sentado num trono dourado no escuro; a COROA
+-- aparece na cabeça, olhos dourados; levanta, o trono se desfaz; um marcador
+-- (sombra) vem e ele o tira no ombro — voa longe; fecha com a pose de rei,
+-- queixo pra cima, braços cruzados.
+local FBa = {}
+Cutscenes.Flow_Barou = FBa
+FBa.Motor = "V2"
+FBa.Efeitos = "FlowBarou"
+FBa.KickFoot = "Right"
+FBa.Duration = 12
+FBa.ImpactTime = 11.3
+FBa.ColarNoPe = false
+FBa.TitleText = "FLOW · BAROU SHOEI"
+FBa.Tema = {
+	Titulo = { rgb(255, 250, 220), rgb(255, 205, 60), rgb(120, 80, 10) },
+	Contorno = rgb(30, 20, 0), Flash = rgb(255, 235, 170),
+	Tint = rgb(255, 248, 230), Saturation = 0.15, Contrast = 0.22, Brightness = -0.02,
+}
+FBa.Phases = {
+	Trono = { 0, 2.5 }, Coroa = { 2.5, 4 }, Levanta = { 4, 6 }, Ombro = { 6, 8.5 },
+	Rei = { 8.5, 12 }, Kick = { 11, FBa.ImpactTime }, Impact = { FBa.ImpactTime, FBa.Duration },
+}
+local FBA_ROOT = { { 0, V3(0, -1.3, 0.8) }, { 4, V3(0, -1.3, 0.8) }, { 4.8, V3(0, 0, -0.2) }, { 6, V3(0, 0, -3.5) },
+	{ 6.9, V3(0, -0.2, -5) }, { 8.5, V3(0, 0, -5.4) }, { 12, V3(0, 0, -5.4) } }
+function FBa.RootPosition(t) return sample(FBA_ROOT, t) end
+function FBa.RootCFrame(t) return CFrame.new(FBa.RootPosition(t)) end
+function FBa.BallPosition(_t, s) return s or V3(0, -2.3, -1.8) end
+function FBa.BallVisible(t) return t < 0.05 end
+function FBa.BallSpin() return 0 end
+local FBA_SENTADO = { Root = { 0, 0, 0 }, Neck = { -5, 0, 0 }, RHip = { 88, 0, 8 }, LHip = { 88, 0, -8 },
+	RShoulder = { 25, 0, 25 }, LShoulder = { 25, 0, -25 } }
+local FBA_REI = { Root = { 6, 0, 0 }, Neck = { 14, 0, 0 }, RHip = { 0, 0, 10 }, LHip = { 0, 0, -10 },
+	RShoulder = { 80, 0, -48 }, LShoulder = { 80, 0, 48 } } -- braços cruzados
+local FBA_POSE = {
+	{ 0.00, FBA_SENTADO }, { 4.00, FBA_SENTADO },
+	{ 4.80, { Root = { -10, 0, 0 }, Neck = { 5, 0, 0 }, RShoulder = { -8, 0, 14 }, LShoulder = { -8, 0, -14 } } },
+	-- (4.8-6: anda devagar, calculado abaixo)
+	{ 6.30, { Root = { -8, 0, 0 }, Waist = { 0, -25, 0 }, Neck = { 5, 0, 0 }, RShoulder = { 10, 0, 30 }, LShoulder = { 10, 0, -30 } } },
+	{ 6.90, { Root = { -14, 0, 0 }, Waist = { 0, 30, 0 }, Neck = { 0, 0, 0 }, RHip = { 20, 0, 0 }, LHip = { -20, 0, 0 },
+		RShoulder = { -30, 0, 70 }, LShoulder = { 20, 0, -20 } } }, -- o ombro
+	{ 8.50, FBA_REI }, { 12.00, FBA_REI },
+}
+function FBa.Pose(t)
+	if t >= 4.8 and t < 6.1 then
+		local w = math.sin((t - 4.8) * math.pi * 2 * 1.1)
+		return { Root = { -4, 0, 0 }, Neck = { 8, 0, 0 }, RHip = { 25 * w, 0, 0 }, LHip = { -25 * w, 0, 0 },
+			RShoulder = { -18 * w, 0, 12 }, LShoulder = { 18 * w, 0, -12 } }
+	end
+	return samplePose(FBA_POSE, t)
+end
+-- o marcador que ele tira no ombro
+FBa.Clones = {
+	Quantidade = 1,
+	Cor = rgb(90, 80, 70),
+	CFrame = function(_i, t)
+		local voa = easeOut(phase(t, 6.9, 7.9))
+		local p = V3(0.6, 0, -8.5):Lerp(V3(-1.5, 0, -7), smooth(phase(t, 5.6, 6.9)))
+		p = p + V3(-7 * voa, 3 * math.sin(voa * math.pi) - 1.2 * voa, -3 * voa)
+		return CFrame.new(p) * CFrame.Angles(0, math.pi, 0) * CFrame.Angles(rad(-60 * voa), 0, rad(-80 * voa))
+	end,
+	Pose = function(_i, t)
+		local voa = smooth(phase(t, 6.9, 7.4))
+		return { Root = { -10, 0, 0 }, RShoulder = { 30 + 60 * voa, 0, 20 + 60 * voa }, LShoulder = { 30 + 60 * voa, 0, -20 - 60 * voa },
+			RHip = { 20 * voa, 0, 0 }, LHip = { -20 * voa, 0, 0 } }
+	end,
+	Alpha = function(_i, t)
+		if t < 5.6 then return 0 end
+		if t < 5.9 then return smooth(phase(t, 5.6, 5.9)) end
+		if t < 8 then return 1 end
+		return 1 - smooth(phase(t, 8, 8.4))
+	end,
+}
+function FBa.Camera(t, rootPos)
+	local cabeca = rootPos + V3(0, 1.5, 0)
+	if t < 2.5 then
+		-- de frente e baixa: o rei no trono
+		local u = smooth(phase(t, 0, 2.5))
+		return V3(0.8, -1.2, -9):Lerp(V3(0.6, -1, -7.5), u), V3(0, 0.6, 0.8), 50
+	elseif t < 4 then
+		local u = smooth(phase(t, 2.5, 4))
+		return cabeca + V3(0.35, -0.2, -4.2):Lerp(V3(0.25, 0, -3.3), u), cabeca + V3(0, 0.4, 0), 40
+	elseif t < 8.5 then
+		return rootPos + V3(7, 0.8, -5), rootPos + V3(-1, 0.4, -1.5), 55
+	end
+	-- o rei, de baixo
+	local u = smooth(phase(t, 8.5, 12))
+	return rootPos + V3(1.2, -2.6, -6.2):Lerp(V3(0.8, -2.2, -4.8), u), rootPos + V3(0, 1.4, 0), 55
+end
+
+
 return Cutscenes

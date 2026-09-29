@@ -4600,4 +4600,148 @@ function E.FlowReo(ctx)
 end
 
 
+-- 👻 FLOW DO AIKU (⚠️ v113): névoa rente ao chão, o atacante vermelho com uma
+-- bola de cena, ele fica quase invisível no sumiço (rastros de imagem são as
+-- sombras 2-4), rouba a bola; olhos claros.
+function E.FlowAiku(ctx)
+	local pasta, spec = ctx.Pasta, ctx.Spec
+	local CINZA, CLARO = rgb(170, 180, 215), rgb(235, 240, 255)
+	local base = flowBase(ctx, {
+		Sala = rgb(16, 17, 24), Contorno = CINZA, ContornoDe = 0, Olhos = CLARO, OlhosDe = 2.6,
+		Aura = { CLARO, CINZA, rgb(40, 40, 60) }, AuraDe = 8.5, Rosto = { { 2, 3.5 }, { 8.5, 12 } },
+	})
+	-- névoa rente ao chão
+	local chao = parte(pasta, "NevoaAiku")
+	chao.Size = V3(40, 1, 40)
+	chao.CFrame = ctx.Inicio * CFrame.new(0, ctx.ChaoY + 0.6, -6)
+	local nevoa = emissor(chao, {
+		Textura = TEX.Fumaca, Cor = rgb(170, 175, 200), Brilho = 0.1, Tamanho = numeros({ { 0, 5 }, { 1, 10 } }),
+		Transp = numeros({ { 0, 1 }, { 0.3, 0.75 }, { 1, 1 } }), Vida = { 2, 3 }, Vel = { 0.3, 1 }, Taxa = 14,
+		Forma = Enum.ParticleEmitterShape.Box, Estilo = Enum.ParticleEmitterShapeStyle.Volume,
+	})
+	-- o atacante é vermelho escuro
+	local atacante = ctx.Clones and ctx.Clones[1]
+	if atacante and atacante.Modelo and not atacante.Real then
+		for _, d in ipairs(atacante.Modelo:GetDescendants()) do
+			if d:IsA("BasePart") then d.Color = rgb(90, 15, 20)
+			elseif d:IsA("Highlight") then d.FillColor = rgb(200, 40, 50); d.OutlineColor = rgb(255, 140, 140) end
+		end
+	end
+	local bola = bolaDeCena(ctx)
+	-- ele some (só pra este cliente; volta no fim)
+	local partesDele = {}
+	for _, d in ipairs(ctx.Character:GetDescendants()) do
+		if d:IsA("BasePart") and d.Name ~= "HumanoidRootPart" then table.insert(partesDele, d) end
+	end
+	pasta.Destroying:Connect(function()
+		for _, p in ipairs(partesDele) do if p.Parent then p.LocalTransparencyModifier = 0 end end
+	end)
+	local sumiu = false
+	local efeitos = {}
+	function efeitos.Quadro(t, _dt, s)
+		base.Atualizar(t)
+		local some = smooth(phase(t, 5.2, 5.45)) * (1 - smooth(phase(t, 6.1, 6.35)))
+		for _, p in ipairs(partesDele) do p.LocalTransparencyModifier = 0.85 * some end
+		if not sumiu and t >= 5.2 then
+			sumiu = true
+			anelVazado(pasta, ctx.Root.Position, Vector3.yAxis, CINZA, 1, 10, 0.4, 0.25)
+		end
+		-- a bola: no pé do atacante até o bote, depois no pé dele
+		local pos
+		local at = atacante and atacante.Root
+		if t < 7.0 and at then
+			pos = at.CFrame:PointToWorldSpace(V3(0.3, -2.3 + (ctx.TamanhoBola or 1.7) / 2 - 0.55, -1.4))
+		else
+			pos = ctx.Mundo(s.RootLocal + V3(0.4, ctx.ChaoY - s.RootLocal.Y + (ctx.TamanhoBola or 1.7) / 2, -1.5))
+		end
+		bola.CFrame = CFrame.new(pos) * CFrame.Angles(t * 5, 0, 0)
+		bola.Transparency = (t >= 3.5) and 0 or 1
+	end
+	function efeitos.Impacto(_s)
+		ctx.Flash(CLARO, 0.25, 0.4)
+	end
+	return efeitos
+end
+
+-- 👑 FLOW DO BAROU (⚠️ v113): o TRONO dourado (assento, encosto, braços,
+-- pontas), a COROA de pontas douradas que aparece na cabeça e fica, poeira
+-- dourada, olhos dourados, aura preta e dourada.
+function E.FlowBarou(ctx)
+	local pasta, spec = ctx.Pasta, ctx.Spec
+	local OURO, ESCURO = rgb(255, 200, 60), rgb(40, 28, 8)
+	local base = flowBase(ctx, {
+		Sala = rgb(14, 10, 4), Contorno = OURO, ContornoDe = 4, Olhos = OURO, OlhosDe = 2.9,
+		Aura = { rgb(255, 240, 180), OURO, rgb(20, 10, 0) }, AuraDe = 6, Rosto = { { 0, 4 }, { 8.5, 12 } },
+		Particulas = { Textura = TEX.Faisca, Cor = cores({ { 0, rgb(255, 240, 180) }, { 1, OURO } }), Tamanho = numeros({ { 0, 0.3 }, { 1, 0 } }),
+			Taxa = 35, Vel = { 0.3, 1 }, Acel = V3(0, 0.6, 0) },
+	})
+	local head = ctx.Character:FindFirstChild("Head")
+	-- trono
+	local trono = {}
+	local function peca(nome, tam, rel, cor)
+		local p = parte(pasta, nome, { Color = cor or OURO, Material = Enum.Material.Metal })
+		p.Size = tam
+		p.Transparency = 0
+		table.insert(trono, { Parte = p, Rel = rel })
+	end
+	peca("Assento", V3(3.4, 0.6, 2.8), CFrame.new(0, 1.3, 1))
+	peca("Almofada", V3(3, 0.3, 2.4), CFrame.new(0, 1.7, 1), rgb(120, 20, 25))
+	peca("Encosto", V3(3.4, 5.5, 0.5), CFrame.new(0, 4.2, 2.4))
+	peca("EncostoVeludo", V3(2.6, 4.4, 0.2), CFrame.new(0, 4.1, 2.1), rgb(120, 20, 25))
+	peca("BracoD", V3(0.5, 1.2, 2.6), CFrame.new(1.7, 2.3, 1))
+	peca("BracoE", V3(0.5, 1.2, 2.6), CFrame.new(-1.7, 2.3, 1))
+	for i = 1, 3 do peca("PontaTrono" .. i, V3(0.4, 1.2 + (i == 2 and 0.8 or 0), 0.4), CFrame.new((i - 2) * 1.3, 7.3 + (i == 2 and 0.4 or 0), 2.4)) end
+	for i = 1, 4 do peca("PeTrono" .. i, V3(0.4, 1.1, 0.4), CFrame.new(i <= 2 and 1.4 or -1.4, 0.55, (i % 2 == 0) and 2.1 or -0.1)) end
+	-- coroa: aro + 5 pontas + joia
+	local coroa = {}
+	local aro = parte(pasta, "CoroaAro", { Shape = Enum.PartType.Cylinder, Color = OURO, Material = Enum.Material.Neon })
+	table.insert(coroa, aro)
+	local pontas = {}
+	for i = 1, 5 do
+		local w = Instance.new("WedgePart")
+		w.Name = "CoroaPonta" .. i
+		w.Anchored, w.CanCollide, w.CanQuery, w.CanTouch, w.CastShadow = true, false, false, false, false
+		w.Material = Enum.Material.Neon
+		w.Color = OURO
+		w.Size = V3(0.1, 0.6, 0.38)
+		w.Parent = pasta
+		pontas[i] = w
+		table.insert(coroa, w)
+	end
+	local joia = esfera(pasta, "CoroaJoia", rgb(220, 30, 40))
+	table.insert(coroa, joia)
+	local efeitos = {}
+	function efeitos.Quadro(t, _dt, _s)
+		base.Atualizar(t)
+		-- trono: parado e dourado; se desfaz em poeira quando ele levanta
+		local some = smooth(phase(t, 4.6, 5.6))
+		local baseCF = ctx.Inicio * CFrame.new(0, ctx.ChaoY, 0.8)
+		for _, p in ipairs(trono) do
+			p.Parte.CFrame = baseCF * p.Rel * CFrame.new(0, -1.5 * some, 0)
+			p.Parte.Transparency = some
+		end
+		-- coroa na cabeça (aparece em 2.7)
+		local c = smooth(phase(t, 2.7, 3.2))
+		if head then
+			-- (alta: por cima do cabelo — mais baixa afundava nele)
+			local topo = head.CFrame * CFrame.new(0, head.Size.Y * 1.05, 0)
+			aro.Size = V3(0.22, 1.25, 1.25)
+			aro.CFrame = topo * CFrame.Angles(0, 0, math.rad(90))
+			for i, w in ipairs(pontas) do
+				local a = math.rad((i - 1) * 72)
+				w.CFrame = topo * CFrame.Angles(0, a, 0) * CFrame.new(0, 0.35, -0.58) * CFrame.Angles(0, math.rad(90), 0)
+			end
+			joia.Size = Vector3.one * 0.18
+			joia.CFrame = topo * CFrame.new(0, 0.05, -0.65)
+		end
+		for _, p in ipairs(coroa) do p.Transparency = 1 - c end
+	end
+	function efeitos.Impacto(_s)
+		ctx.Flash(rgb(255, 235, 170), 0.2, 0.4)
+		onda(pasta, ctx.Root.Position, Vector3.yAxis, OURO, 24, 0.45, 0.3)
+	end
+	return efeitos
+end
+
+
 return E
