@@ -2232,17 +2232,26 @@ function E.GaiaBreak(ctx)
 	local AMARELO = rgb(255, 225, 90)
 	local feixes = {}
 	for i = 1, 3 do feixes[i] = parte(pasta, "FeixeGaia" .. i, { Color = AMARELO }) end
+	-- ⚠️ v113 — pelo anime a 0,2s (21.0-23.4s): as rochas são GRANDES, voam
+	-- ALTO no feixe amarelo girando e depois se juntam numa massa ESPINHOSA em
+	-- volta da bola (pontas pra fora). Antes subiam 2.8 studs e eram pequenas.
 	local rochas = {}
 	local rng = Random.new(21)
-	for i = 1, 14 do
+	for i = 1, 18 do
 		local ang = rng:NextNumber(0, math.pi * 2)
-		local dist = rng:NextNumber(5, 12)
+		local dist = rng:NextNumber(4, 11)
+		local p = rochaNova(pasta, "Rocha" .. i)
+		local s = rng:NextNumber(1.1, 2)
+		p.Size = V3(s, s * rng:NextNumber(1.6, 2.3), s)
 		rochas[i] = {
-			Parte = rochaNova(pasta, "Rocha" .. i),
+			Parte = p, Tam = s,
 			Chao = V3(math.cos(ang) * dist, 0, math.sin(ang) * dist - 3),
+			Altura = rng:NextNumber(4, 13),
+			Deriva = V3(math.cos(ang), 0, math.sin(ang)) * rng:NextNumber(1, 4),
 			Dir = V3(rng:NextNumber(-1, 1), rng:NextNumber(-1, 1), rng:NextNumber(-1, 1)).Unit,
 			Rot = CFrame.Angles(rng:NextNumber(0, 6), rng:NextNumber(0, 6), rng:NextNumber(0, 6)),
-			Quando = 0.6 + i * 0.03,
+			Giro = V3(rng:NextNumber(-4, 4), rng:NextNumber(-4, 4), rng:NextNumber(-4, 4)),
+			Quando = 0.6 + i * 0.025,
 		}
 	end
 	local poeiraFx = parte(pasta, "PoeiraGaia")
@@ -2280,12 +2289,15 @@ function E.GaiaBreak(ctx)
 		end
 		local bola = s.BolaMundo
 		for _, r in ipairs(rochas) do
-			local sobe = easeOut(phase(t, r.Quando, r.Quando + 0.3))
+			local sobe = easeOut(phase(t, r.Quando, r.Quando + 0.45))
 			local gruda = smooth(phase(t, ph.Gather[1] + (r.Quando - 0.6) * 0.5, ph.Gather[2]))
-			local chao = mundo(V3(r.Chao.X, ctx.ChaoY - 1.5 + 2.8 * sobe, r.Chao.Z))
-			local naBola = bola + r.Dir * ((ctx.TamanhoBola or 1.7) * 0.65)
-			local pos = chao:Lerp(naBola, gruda)
-			r.Parte.CFrame = CFrame.new(pos) * r.Rot
+			local alto = V3(r.Chao.X, ctx.ChaoY - 1.5 + (r.Altura + 1.5) * sobe, r.Chao.Z) + r.Deriva * sobe
+			local voando = CFrame.new(mundo(alto)) * r.Rot
+				* CFrame.Angles(r.Giro.X * t, r.Giro.Y * t, r.Giro.Z * t)
+			-- grudada: ponta pra fora (o eixo comprido da rocha na direção Dir)
+			local naBola = bola + r.Dir * ((ctx.TamanhoBola or 1.7) * 0.4 + r.Tam * 0.5)
+			local grudada = CFrame.lookAt(naBola, naBola + r.Dir) * CFrame.Angles(-math.pi / 2, 0, 0)
+			r.Parte.CFrame = voando:Lerp(grudada, gruda)
 			local some = s.ImpactoFeito and 1 or 0
 			r.Parte.Transparency = (sobe > 0.02 and some == 0) and 0 or 1
 		end
@@ -2310,16 +2322,21 @@ function E.GaiaBreak(ctx)
 			pastaVoo.Parent = workspace
 			table.insert(coisas, pastaVoo)
 			local casca = {}
-			for i = 1, 10 do
+			for i = 1, 12 do
 				local r = rochaNova(pastaVoo, "RochaVoo" .. i)
+				local s = 1 + math.random() * 0.9
+				r.Size = V3(s, s * 1.8, s)
 				r.Transparency = 0
-				casca[i] = { Parte = r, Dir = V3(math.random() - 0.5, math.random() - 0.5, math.random() - 0.5).Unit,
-					Rot = CFrame.Angles(math.random() * 6, math.random() * 6, math.random() * 6) }
+				casca[i] = { Parte = r, Tam = s, Dir = V3(math.random() - 0.5, math.random() - 0.5, math.random() - 0.5).Unit }
 			end
 			ctx._cascaGaia = casca
 		end, function(_a, _dt, tempo)
+			-- massa espinhosa girando com a bola (pontas pra fora)
+			local giro = CFrame.Angles(tempo * 3, tempo * 2, 0)
 			for _, r in ipairs(ctx._cascaGaia or {}) do
-				r.Parte.CFrame = CFrame.new(ball.Position + r.Dir * (ball.Size.X * 0.62)) * r.Rot * CFrame.Angles(tempo * 3, tempo * 2, 0)
+				local d = giro:VectorToWorldSpace(r.Dir)
+				local pos = ball.Position + d * (ball.Size.X * 0.4 + r.Tam * 0.55)
+				r.Parte.CFrame = CFrame.lookAt(pos, pos + d) * CFrame.Angles(-math.pi / 2, 0, 0)
 			end
 		end)
 	end

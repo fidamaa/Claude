@@ -1791,7 +1791,9 @@ function GB.Camera(t, rootPos, ballPos)
 		local u = smooth(phase(t, 1.3, 2.4))
 		return V3(15 - 3 * u, 7 + 3 * u, -4), V3(0, 6 + 6 * u, -4.5), 64 -- de lado, a massa de pedra e os três saltando
 	elseif t < GB.ImpactTime then
-		return GB.Centro + V3(3, 1.5, -9), GB.Centro, 58 -- de frente, os três fechando na bola
+		-- de frente, os três fechando na massa de pedra (⚠️ v113: mais aberta — a 9
+		-- studs a massa espinhosa tampava os três)
+		return GB.Centro + V3(4, 2.5, -15), GB.Centro + V3(0, 0, 2), 55
 	end
 	local u = easeOut(phase(t, GB.ImpactTime, GB.Duration))
 	return GB.Centro + V3(-2, -1.5, -7):Lerp(V3(-1.6, -1.2, -5.2), u), ballPos, 64 - 14 * u
