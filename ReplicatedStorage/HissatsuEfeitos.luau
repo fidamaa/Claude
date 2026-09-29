@@ -3925,4 +3925,140 @@ function E.FlowBachira(ctx)
 end
 
 
+-- ============================================================
+-- 🪶 FLOW DO NAGI (⚠️ v113) — ver a coreografia Flow_Nagi
+-- ============================================================
+-- Vazio azul-acinzentado calmo, PENAS brancas caindo, uma cópia da bola que
+-- cai do céu, morre no pé, fica presa no pé no ar enquanto ele gira, passa
+-- pela finta e sai no chute com rastro branco. Olhos claros no final.
+function E.FlowNagi(ctx)
+	local pasta, spec = ctx.Pasta, ctx.Spec
+	local BRANCO, AZUL_CLARO = rgb(250, 252, 255), rgb(180, 210, 255)
+	local character = ctx.Character
+	local head = character:FindFirstChild("Head")
+	local pernaD = character:FindFirstChild("RightFoot") or character:FindFirstChild("Right Leg")
+	local ph = spec.Phases
+
+	local sala = salaEscura(pasta, "SalaFlowNagi", rgb(38, 44, 60), ctx.Inicio * CFrame.new(0, 20, -8), 140, ctx.ChaoY + 0.1 - 20)
+	sala.Transparency = 0
+
+	-- penas caindo (partícula achatada e girando devagar)
+	local ceu = parte(pasta, "CeuPenas")
+	ceu.Size = V3(36, 1, 36)
+	ceu.CFrame = ctx.Inicio * CFrame.new(0, 14, -3)
+	local penas = emissor(ceu, {
+		Cor = BRANCO, Tamanho = numeros({ { 0, 0.55 }, { 1, 0.45 } }), Transp = numeros({ { 0, 0.1 }, { 0.8, 0.2 }, { 1, 1 } }),
+		Vida = { 4, 6 }, Vel = { 0.5, 1.5 }, Acel = V3(0, -1.2, 0), Drag = 0.4, RotVel = 90, Taxa = 22,
+		Forma = Enum.ParticleEmitterShape.Box, Estilo = Enum.ParticleEmitterShapeStyle.Volume, Direcao = Enum.NormalId.Bottom,
+	})
+	penas.Squash = numeros({ { 0, 1.2 }, { 1, 1.2 } })
+
+	-- a bola da cena
+	local bola
+	if ctx.Ball then
+		local ok, c = pcall(function() return ctx.Ball:Clone() end)
+		if ok and c then
+			bola = c
+			for _, d in ipairs(bola:GetDescendants()) do
+				if d:IsA("Script") or d:IsA("LocalScript") or d:IsA("Sound") then d:Destroy() end
+			end
+			if bola:IsA("BasePart") then
+				bola.Anchored, bola.CanCollide, bola.CanQuery, bola.CanTouch = true, false, false, false
+			end
+			bola.Parent = pasta
+		end
+	end
+	if not bola then
+		bola = esfera(pasta, "BolaNagi", BRANCO, Enum.Material.SmoothPlastic)
+		bola.Size = Vector3.one * (ctx.TamanhoBola or 1.7)
+	end
+	local rastroBola = rastroDuplo(bola, 0.9, AZUL_CLARO, BRANCO, 0.45)
+	local rastrosPernas = {}
+	for _, nome in ipairs({ "Right Leg", "Left Leg", "RightLowerLeg", "LeftLowerLeg" }) do
+		local p = character:FindFirstChild(nome)
+		if p then table.insert(rastrosPernas, rastroDuplo(p, 0.6, AZUL_CLARO, BRANCO, 0.3)) end
+	end
+	local olhos = { esfera(pasta, "OlhoNagi1", AZUL_CLARO), esfera(pasta, "OlhoNagi2", AZUL_CLARO) }
+	local auraFx = parte(pasta, "AuraNagi")
+	local aura = emissor(auraFx, {
+		Textura = TEX.Fumaca, Cor = cores({ { 0, BRANCO }, { 1, AZUL_CLARO } }), Brilho = 0.5,
+		Tamanho = numeros({ { 0, 1.5 }, { 1, 4 } }), Transp = numeros({ { 0, 0.6 }, { 1, 1 } }), Vida = { 0.8, 1.4 },
+		Vel = { 0.5, 1.5 }, Acel = V3(0, 2, 0), Forma = Enum.ParticleEmitterShape.Box, Estilo = Enum.ParticleEmitterShapeStyle.Volume,
+	})
+	auraFx.Size = V3(2.5, 4.5, 1.5)
+
+	local function noPe()
+		if not pernaD then return ctx.Root.Position end
+		-- em cima do peito do pé
+		return pernaD.CFrame:PointToWorldSpace(V3(0, -pernaD.Size.Y / 2 + 0.2, -0.5 - (ctx.TamanhoBola or 1.7) / 2))
+	end
+	-- contorno claro (fundo escuro) e luz no rosto no final
+	local contorno = Instance.new("Highlight")
+	contorno.FillTransparency = 1
+	contorno.OutlineColor = AZUL_CLARO
+	contorno.DepthMode = Enum.HighlightDepthMode.Occluded
+	contorno.Adornee = character
+	contorno.Parent = pasta
+	local luzRosto = parte(pasta, "LuzRostoNagi")
+	local luzRostoL = luz(luzRosto, rgb(220, 230, 255), 0, 1.4)
+
+	local posChute = nil
+	local efeitos = {}
+	function efeitos.Quadro(t, _dt, s)
+		local r = s.RootLocal
+		if head then
+			luzRosto.CFrame = head.CFrame * CFrame.new(0, -0.2, -2.6)
+			luzRostoL.Range = t >= 8.8 and 7 or 0
+		end
+		local pos
+		if t < ph.Cai[2] then
+			local u = phase(t, 0, ph.Cai[2])
+			pos = ctx.Mundo(V3(0.4, 22, -3)):Lerp(noPe(), u * u)
+		elseif t < ph.Levanta[1] then
+			pos = noPe() -- amortecendo: presa no pé
+		elseif t < ph.Levanta[2] then
+			local u = easeOut(phase(t, ph.Levanta[1], ph.Levanta[2]))
+			pos = noPe():Lerp(ctx.Mundo(V3(0.4, 4.5, -1.3)), u)
+		elseif t < 3.3 then
+			local u = smooth(phase(t, ph.Levanta[2], 3.3))
+			pos = ctx.Mundo(V3(0.4, 4.5, -1.3)):Lerp(noPe(), u)
+		elseif t < ph.Finta[1] then
+			pos = noPe() -- presa no pé no ar, girando com ele
+		elseif t < ph.Kick[2] then
+			-- finta: a perna passa e a bola vai caindo na frente dele
+			local u = phase(t, ph.Finta[1], ph.Kick[2])
+			pos = ctx.Mundo(r + V3(0.2, -1.2 - 1.2 * u * u, -1.6))
+			posChute = pos
+		else
+			local u = easeOut(phase(t, ph.Kick[2], ph.Voa[2]))
+			local de = posChute or ctx.Mundo(r + V3(0.2, -2.4, -1.6))
+			pos = de:Lerp(ctx.Mundo(r + V3(0, 3, -70)), u)
+		end
+		bola.CFrame = CFrame.new(pos) * CFrame.Angles(t * 4, t * 3, 0)
+		bola.Transparency = t < ph.Voa[2] and 0 or 1
+		rastroBola.Ligar(t >= ph.Kick[2] and t < ph.Voa[2])
+		for _, rr in ipairs(rastrosPernas) do rr.Ligar(t >= ph.Gira[1] and t < ph.Kick[2] + 0.1) end
+
+		if head then
+			local o = FlowCenaOlhos(head)
+			local a = smooth(phase(t, 8.8, 9.3))
+			for i, e in ipairs(olhos) do
+				e.Size = Vector3.one * 0.26
+				e.CFrame = head.CFrame * CFrame.new(o[i])
+				e.Transparency = a > 0.02 and (1 - a * 0.9) or 1
+			end
+		end
+		auraFx.CFrame = ctx.Root.CFrame
+		aura.Enabled = t >= 8.6
+		aura.Rate = 18
+	end
+	function efeitos.Impacto(s)
+		onda(pasta, bola.Position, ctx.Inicio.LookVector, BRANCO, 18, 0.35, 0.3)
+		anelVazado(pasta, bola.Position, ctx.Inicio.LookVector, AZUL_CLARO, 1.5, 12, 0.3, 0.25)
+		penas:Emit(40)
+	end
+	return efeitos
+end
+
+
 return E

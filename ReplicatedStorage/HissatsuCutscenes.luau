@@ -2589,4 +2589,101 @@ function FB.Camera(t, rootPos)
 end
 
 
+-- ============================================================
+-- 🪶 FLOW DO NAGI — cena de ativação (⚠️ v113)
+-- ============================================================
+-- PEDIDO: "Nagi". Pelo vídeo ("Nagi's Inhuman Goal", U-20, visão geral a cada
+-- 2s): a bola cai do alto e ele a MATA no pé (8-14s); levanta, salta e
+-- "agarra" a bola com o pé no ar; GIRA na horizontal no ar (32-36s, 46-48s);
+-- finge o voleio, deixa a bola cair e bate de verdade (a finta em dois tempos);
+-- GOL. Tudo com a cara de preguiça dele. Motivo da loja: penas.
+--   0.0-1.6 a bola cai do céu no pé erguido;  1.6-2.0 amortece até o chão;
+--   2.0-2.6 levanta;  2.6-3.8 salta e prende no pé no ar;
+--   3.8-6.2 gira na horizontal (duas voltas);  6.2-7.0 finge o voleio;
+--   7.0-7.4 bate de verdade (a outra perna);  7.4-9.0 a bola some no fundo;
+--   9.0-12  pousa, cabeça de lado, olhos claros, penas caindo.
+-- A bola da cena é uma cópia (a de verdade não sai do lugar).
+local FN = {}
+Cutscenes.Flow_Nagi = FN
+FN.Motor = "V2"
+FN.Efeitos = "FlowNagi"
+FN.KickFoot = "Right"
+FN.Duration = 12
+FN.ImpactTime = 7.4
+FN.ColarNoPe = false
+FN.TitleText = "FLOW · NAGI SEISHIRO"
+FN.Tema = {
+	Titulo = { rgb(255, 255, 255), rgb(225, 235, 255), rgb(140, 160, 200) },
+	Contorno = rgb(20, 25, 40), Flash = rgb(240, 245, 255),
+	Tint = rgb(235, 240, 255), Saturation = -0.1, Contrast = 0.12, Brightness = 0,
+}
+FN.Phases = {
+	Cai = { 0, 1.6 }, Amortece = { 1.6, 2.0 }, Levanta = { 2.0, 2.6 }, Prende = { 2.6, 3.8 },
+	Gira = { 3.8, 6.2 }, Finta = { 6.2, 7.0 }, Kick = { 7.0, FN.ImpactTime },
+	Voa = { FN.ImpactTime, 9 }, Final = { 9, 12 }, Impact = { FN.ImpactTime, FN.Duration },
+}
+local FN_ROOT = {
+	{ 0, V3(0, 0, 0) }, { 2.6, V3(0, 0, 0) }, { 2.8, V3(0, -0.5, 0) },
+	{ 3.8, V3(0, 4.2, -1) }, { 6.2, V3(0, 5, -1.6) }, { 7.4, V3(0, 4.6, -2) },
+	{ 8.4, V3(0, 0, -2.4) }, { 12, V3(0, 0, -2.4) },
+}
+-- (duas voltas inteiras: com volta e meia ele terminava de COSTAS pra câmera)
+local FN_YAW = { { 0, 0 }, { 3.9, 0 }, { 5.9, 720 }, { 12, 720 } }
+local FN_PITCH = { { 0, 0 }, { 3.9, 0 }, { 4.3, -72 }, { 5.8, -72 }, { 6.3, -10 }, { 7.4, 8 }, { 8.4, 0 }, { 12, 0 } }
+function FN.RootPosition(t) return sample(FN_ROOT, t) end
+function FN.RootCFrame(t)
+	return CFrame.new(FN.RootPosition(t)) * CFrame.Angles(0, rad(sample(FN_YAW, t)), 0) * CFrame.Angles(rad(sample(FN_PITCH, t)), 0, 0)
+end
+function FN.BallPosition(_t, s) return s or V3(0, -2.3, -1.8) end
+function FN.BallVisible(t) return t < 0.05 end
+function FN.BallSpin() return 0 end
+
+local FN_PREGUICA = { Root = { 3, 0, 0 }, Neck = { -8, 0, -12 }, RShoulder = { -4, 0, 6 }, LShoulder = { -4, 0, -6 } }
+local FN_POSE = {
+	{ 0.00, FN_PREGUICA },
+	{ 0.80, { Root = { 3, 0, 0 }, Neck = { 30, 0, -8 }, RShoulder = { -4, 0, 6 }, LShoulder = { -4, 0, -6 } } }, -- olha a bola
+	{ 1.40, { Root = { 6, 0, 0 }, Neck = { 20, 0, -6 }, RHip = { 62, 0, 0 }, RShoulder = { 10, 0, 25 }, LShoulder = { 10, 0, -25 } } }, -- pé erguido
+	{ 2.00, { Root = { 4, 0, 0 }, Neck = { -5, 0, -8 }, RHip = { 5, 0, 0 }, RShoulder = { 0, 0, 12 }, LShoulder = { 0, 0, -12 } } }, -- amorteceu
+	{ 2.30, { Root = { 2, 0, 0 }, Neck = { 15, 0, -6 }, RHip = { 45, 0, 0 } } }, -- levanta
+	{ 2.80, { Root = { -14, 0, 0 }, Neck = { 25, 0, 0 }, RHip = { 55, 0, 5 }, LHip = { 55, 0, -5 },
+		RShoulder = { -35, 0, 25 }, LShoulder = { -35, 0, -25 } } }, -- agacha pro salto
+	{ 3.60, { Root = { 12, 0, 0 }, Neck = { 30, 0, 0 }, RHip = { 95, 0, 0 }, LHip = { -10, 0, 0 },
+		RShoulder = { 40, 0, 70 }, LShoulder = { 40, 0, -70 } } }, -- prende no pé no ar
+	{ 6.00, { Root = { 12, 0, 0 }, Neck = { 30, 0, 0 }, RHip = { 95, 0, 0 }, LHip = { -10, 0, 0 },
+		RShoulder = { 40, 0, 80 }, LShoulder = { 40, 0, -80 } } },
+	{ 6.60, { Neck = { 10, 0, 0 }, RHip = { -45, 0, 0 }, LHip = { 20, 0, 0 }, RShoulder = { -30, 0, 60 }, LShoulder = { 50, 0, -70 } } }, -- arma o voleio
+	{ 7.00, { Neck = { 5, 0, 0 }, RHip = { 40, 0, 0 }, LHip = { -40, 0, 0 }, RShoulder = { -30, 0, 60 }, LShoulder = { 50, 0, -70 } } }, -- finta: para no meio
+	{ FN.ImpactTime, { Neck = { 0, 0, 0 }, RHip = { -30, 0, 0 }, LHip = { 100, 0, 0 }, RShoulder = { 50, 0, 70 }, LShoulder = { -40, 0, -60 } } }, -- bate com a outra
+	{ 8.40, { Root = { -8, 0, 0 }, Neck = { 5, 0, 0 }, RHip = { 25, 0, 4 }, LHip = { 25, 0, -4 } } }, -- pousa
+	{ 9.20, FN_PREGUICA },
+	{ 12.00, { Root = { 3, 0, 0 }, Neck = { -10, 0, -16 }, RShoulder = { -4, 0, 6 }, LShoulder = { -4, 0, -6 } } },
+}
+function FN.Pose(t) return samplePose(FN_POSE, t) end
+
+function FN.Camera(t, rootPos)
+	if t < 1.6 then
+		-- de baixo e de frente: a bola caindo do céu nele
+		return V3(1.8, -1.9, -7.5), V3(0, 2.5 - 1.6 * smooth(phase(t, 0.4, 1.6)), -0.5), 58
+	elseif t < 2.6 then
+		-- close no pé: a bola morre ali
+		return V3(3.2, -1.6, -6.4), V3(0.3, -1.6, -0.8), 46
+	elseif t < 3.8 then
+		return rootPos + V3(8.5, 0.5, -1), rootPos + V3(0, 0, -0.6), 55
+	elseif t < 6.2 then
+		-- em volta dele no ar, de baixo, enquanto ele gira na horizontal
+		local a = 0.3 + (t - 3.8) * 1.1
+		return rootPos + V3(math.cos(a) * 7.5, -2.4, math.sin(a) * 7.5), rootPos, 60
+	elseif t < FN.ImpactTime then
+		return rootPos + V3(2.4, -1.6, -6.5), rootPos + V3(0, -0.6, -1), 55
+	elseif t < 9 then
+		-- atrás dele: a bola sumindo no fundo com o rastro
+		return rootPos + V3(1.2, 1.4, 5), rootPos + V3(0, 0.5, -30), 50
+	end
+	-- a cara de preguiça
+	local cabeca = rootPos + V3(0, 1.5, 0)
+	local u = smooth(phase(t, 9, 12))
+	return cabeca + V3(0.8, -0.4, -5.2):Lerp(V3(0.5, -0.3, -3.6), u), cabeca + V3(0, -0.1, 0), 40
+end
+
+
 return Cutscenes
