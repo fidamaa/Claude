@@ -418,29 +418,35 @@ local function buildDummyFromModel(sourceModel, nameSuffix)
 end
 
 -- ===== CONTROLE DO JOGADOR DURANTE A CUTSCENE =====
--- Trava o personagem no lugar (senão ele podia se afastar da posição de
--- kickoff enquanto está escondido/invisível, e reaparecer no lugar errado
--- quando a cutscene termina) e assume a câmera manualmente.
-local savedWalkSpeed, savedJumpPower, savedAutoRotate = nil, nil, nil
-
-local function freezeLocalCharacter(character)
-	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-	if not humanoid then return end
-	savedWalkSpeed = humanoid.WalkSpeed
-	savedJumpPower = humanoid.JumpPower
-	savedAutoRotate = humanoid.AutoRotate
-	humanoid.WalkSpeed = 0
-	humanoid.JumpPower = 0
-	humanoid.AutoRotate = false
-end
-
-local function unfreezeLocalCharacter(character)
-	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-	if not humanoid then return end
-	if savedWalkSpeed then humanoid.WalkSpeed = savedWalkSpeed end
-	if savedJumpPower then humanoid.JumpPower = savedJumpPower end
-	if savedAutoRotate ~= nil then humanoid.AutoRotate = savedAutoRotate end
-	savedWalkSpeed, savedJumpPower, savedAutoRotate = nil, nil, nil
+-- ⚠️ v112 — PEDIDO: "eles não vão poder se mexer, nem ativar a trava do shift, nem
+-- nada enquanto tiver na cutscene de entrada". Antes zerava o WalkSpeed uma vez —
+-- mas o PlayerSystems reescreve o WalkSpeed todo quadro, então dava pra andar.
+-- Agora usa o CORPO TRAVADO do FootballClient (_G.CorpoTravadoAte: Move(zero),
+-- sem pulo, sem girar, todo quadro) e _G.CutsceneEntradaAtiva, que o Ctrl lê
+-- (não liga/desliga a trava durante a cutscene).
+local guisEscondidas = {}
+local function travarJogador(travar)
+	_G.CutsceneEntradaAtiva = travar and true or nil
+	-- ⚠️ v112: HUD (placar, botões) some durante a cutscene — cobria o rosto
+	local pg = player:FindFirstChildOfClass("PlayerGui")
+	if travar and pg then
+		for _, g in ipairs(pg:GetChildren()) do
+			if g:IsA("ScreenGui") and g.Enabled then
+				g.Enabled = false
+				guisEscondidas[g] = true
+			end
+		end
+	elseif not travar then
+		for g in pairs(guisEscondidas) do
+			if g.Parent then g.Enabled = true end
+		end
+		guisEscondidas = {}
+	end
+	if travar then
+		_G.CorpoTravadoAte = math.huge
+	elseif _G.CorpoTravadoAte == math.huge then
+		_G.CorpoTravadoAte = 0
+	end
 end
 
 -- ⚠️ FIX: "StreamingTargetRadius is not a valid member of Workspace" —
@@ -477,447 +483,228 @@ local function printMissingTunnelDiagnostic(teamName)
 end
 
 -- ===== A CUTSCENE EM SI =====
+-- ⚠️ v112 — REFEITA (ver o PEDIDO em Config.ENTRADA_*):
+--   FASE 1 — as duas filas saem do túnel LADO A LADO, em linha reta, e seguem
+--            pro gramado; a câmera vai na FRENTE delas, recuando junto, baixa e
+--            perto (o túnel é enorme pro tamanho dos personagens — de longe eles
+--            sumiam). Os bonecos andam com a animação de verdade do jogo
+--            (_G.AnimadorRegistrar — o asset de caminhada antigo não pegava nos
+--            personagens com juntas novas e eles deslizavam parados).
+--   FASE 2 — cada time em fila na borda do círculo central, virado pro outro; a
+--            câmera passa RENTE, na altura do rosto, de um jogador ao outro; corta
+--            pro outro time.
+--   FIM    — tudo volta: personagem de verdade na posição de saída, câmera,
+--            controle e a trava do Ctrl liberados.
 local cutscenePlaying = false
 
+local function alturaDoRosto(character, fallbackY)
+	local head = character and character:FindFirstChild("Head")
+	if head then return head.Position.Y end
+	return fallbackY + 1.6
+end
+
 local function playEntranceCutscene(roster, duration)
-	if cutscenePlaying then return end -- já tocando (não deveria disparar 2x, mas por segurança)
+	if cutscenePlaying then return end
 
-	duration = tonumber(duration) or Config.ENTRANCE_CUTSCENE_DURATION
-
-	-- Descobre as Parts do túnel só pros times que TÊM alguém no roster —
-	-- um time vazio (ninguém escolheu ele, ou 3v3/5v5 com vaga sobrando)
-	-- não precisa de túnel nenhum.
+	-- túneis só dos times que TÊM alguém no roster
 	local tunnelByTeam = {}
 	for teamName, list in pairs(roster) do
 		if #list > 0 then
 			local startPart, endPart = findTunnelPartsForTeam(teamName, 6)
 			if not startPart or not endPart then
 				printMissingTunnelDiagnostic(teamName)
-				warn(("🎬 EntranceCutsceneClient: Part '%s%s'/'%s%s' não encontrada na cena (ainda) — cutscene de entrada pulada dessa vez. Se a Part já existe no Studio no lugar certo, isso deve se autocorrigir sozinho nas próximas partidas assim que ela terminar de streamar (workspace.DescendantAdded continua ouvindo, igual GKAreaUtil) — sem precisar reiniciar o server. Se persistir sempre, confira o nome exato da Part (ver comentário em FootballConfig.lua, Config.CUTSCENE_TUNNEL_START_PREFIX)."):format(
+				warn(("🎬 EntranceCutsceneClient: Part '%s%s'/'%s%s' não encontrada — cutscene de entrada pulada."):format(
 					Config.CUTSCENE_TUNNEL_START_PREFIX, teamName, Config.CUTSCENE_TUNNEL_END_PREFIX, teamName))
-				return -- aborta só essa cutscene: sem túnel de um time, não dá pra mostrar "os dois lado a lado"
+				return
 			end
 			tunnelByTeam[teamName] = { Start = startPart, End = endPart }
 		end
 	end
-
-	if not next(tunnelByTeam) then return end -- nenhum time com jogador (ex: testando sozinho)
+	if not next(tunnelByTeam) then return end
 
 	cutscenePlaying = true
-
-	-- Esconde TODO personagem de verdade em campo (os dois times) — eles já
-	-- estão parados na posição certa de formação (ver
-	-- _G.PositionPlayerAtFormation no MatchController), só invisíveis
-	-- enquanto o boneco cosmético "anda até lá" no lugar deles.
+	travarJogador(true)
 	for _, plr in ipairs(Players:GetPlayers()) do
 		hideModel(plr.Character)
 	end
 
-	if player.Character then
-		freezeLocalCharacter(player.Character)
+	-- ===== GEOMETRIA DA ENTRADA: um eixo só, as duas filas lado a lado =====
+	local somaFim, somaFrente, n = Vector3.zero, Vector3.zero, 0
+	for _, tunnel in pairs(tunnelByTeam) do
+		somaFim += tunnel.End.Position
+		local f = tunnel.End.Position - tunnel.Start.Position
+		f = Vector3.new(f.X, 0, f.Z)
+		if f.Magnitude > 0.01 then somaFrente += f.Unit end
+		n += 1
 	end
+	local bocaDoTunel = somaFim / n
+	local frente = somaFrente.Magnitude > 0.01 and somaFrente.Unit or Vector3.new(0, 0, 1)
+	local lado = frente:Cross(Vector3.yAxis).Unit
 
-	-- ===== MONTA A FILA DE CADA TIME =====
-	-- ⚠️ NOVO: cada boneco anda RETO em linha, na sua própria velocidade
-	-- (mesma pra todos: distância do túnel / ENTRANCE_CUTSCENE_TUNNEL_SECONDS),
-	-- e é revelado (destruído + personagem de verdade aparece) assim que
-	-- CRUZA a Part End — não é mais uma fase única sincronizada por tempo
-	-- pra todo mundo, então quem está mais atrás na fila cruza o End um
-	-- pouco depois (mesmo espaçamento, mesma velocidade = chega depois).
-	local dummies = {} -- { model, character, queueStartPos, forward, endPlaneDot, done }
-	local remainingDummies = 0
+	local times = {}
+	for teamName in pairs(tunnelByTeam) do table.insert(times, teamName) end
+	table.sort(times)
 
-	for teamName, tunnel in pairs(tunnelByTeam) do
-		local list = roster[teamName]
-		local forward = (tunnel.End.Position - tunnel.Start.Position)
-		forward = Vector3.new(forward.X, 0, forward.Z)
-		if forward.Magnitude < 0.01 then forward = Vector3.new(0, 0, -1) end
-		forward = forward.Unit
+	local velocidade = Config.ENTRADA_VELOCIDADE or 11
+	local antes = Config.ENTRADA_INICIO_ANTES_DO_FIM or 38
+	local depois = Config.ENTRADA_ANDA_DEPOIS_DO_FIM or 26
+	local gap = Config.ENTRADA_DISTANCIA_ENTRE_FILAS or 7
+	local espaco = Config.ENTRANCE_CUTSCENE_QUEUE_SPACING or 5
+	local T1 = (antes + depois) / velocidade
 
-		local tunnelDistance = (tunnel.End.Position - tunnel.Start.Position).Magnitude
-		local walkSpeed = tunnelDistance / math.max(Config.ENTRANCE_CUTSCENE_TUNNEL_SECONDS, 0.1) -- studs/segundo
-
-		for i, entry in ipairs(list) do
+	local dummies = {}
+	local entradaDoLocal = nil
+	for indice, teamName in ipairs(times) do
+		local deslocLado = (#times == 1) and 0 or ((indice == 1) and -gap / 2 or gap / 2)
+		local frenteDaFila = bocaDoTunel - frente * antes + lado * deslocLado
+		for i, entry in ipairs(roster[teamName]) do
 			local plr = Players:GetPlayerByUserId(entry.UserId)
 			local character = plr and plr.Character
+			if plr == player then entradaDoLocal = entry end
 			if character then
 				local dummy, walkTrack = buildDummyFromModel(character, teamName .. "_" .. tostring(entry.UserId))
 				if dummy then
-					-- fila tradicional: um atrás do outro, espaçados pra trás a
-					-- partir da FRENTE (Start) — ordem dentro do time não importa
-					-- (pedido explícito), só precisa ser fila.
-					local queueStartPos = tunnel.Start.Position - forward * (i - 1) * Config.ENTRANCE_CUTSCENE_QUEUE_SPACING
-					dummy:PivotTo(CFrame.lookAt(queueStartPos, queueStartPos + forward))
-
-					remainingDummies += 1
-					table.insert(dummies, {
-						model = dummy,
-						character = character,
-						queueStartPos = queueStartPos,
-						forward = forward,
-						walkSpeed = walkSpeed,
-						-- "cruzou o End" = a projeção da posição atual no eixo
-						-- forward já passou da projeção do End nesse mesmo eixo.
-						endPlaneDot = tunnel.End.Position:Dot(forward),
-						done = false,
-						-- ⚠️ FIX: "os jogadores estão parando na entrada do campo,
-						-- eles precisam teleportar, após passar de TunnelEnd,
-						-- direto pras suas posições" — antes disso o código
-						-- CONFIAVA que o personagem de verdade já estava parado
-						-- na posição de formação (comentário antigo: "já estão
-						-- parados na posição certa"), mas isso depende de
-						-- timing do servidor (_G.PositionPlayerAtFormation pode
-						-- não ter rodado ainda quando a cutscene começa). Agora
-						-- teleporta EXPLICITAMENTE pro FieldCFrame que o
-						-- servidor já manda dentro do próprio roster (ver
-						-- EntranceCutsceneController.legacy.luau, entry.
-						-- FieldCFrame) — não depende mais de suposição nenhuma.
-						fieldCFrame = entry.FieldCFrame,
-						walkTrack = walkTrack,
-					})
+					-- a animação é a do jogo (AnimadorProcedural), não o asset antigo
+					if walkTrack then pcall(function() walkTrack:Stop(0) end) end
+					if _G.AnimadorRegistrar then _G.AnimadorRegistrar(dummy) end
+					local inicio = frenteDaFila - frente * (i - 1) * espaco
+					dummy:PivotTo(CFrame.lookAt(inicio, inicio + frente))
+					table.insert(dummies, { model = dummy, inicio = inicio })
 				end
 			end
 		end
 	end
 
-	-- Nenhum boneco de verdade foi criado (personagens sumiram entre o
-	-- servidor mandar o roster e o cliente montar a fila) — não trava a
-	-- partida esperando um "todos cruzaram" que nunca chega.
-	if remainingDummies == 0 then
-		for _, plr in ipairs(Players:GetPlayers()) do
-			restoreOneModel(plr.Character)
-		end
-		if player.Character then unfreezeLocalCharacter(player.Character) end
+	if #dummies == 0 then
+		for _, plr in ipairs(Players:GetPlayers()) do restoreOneModel(plr.Character) end
+		travarJogador(false)
 		cutscenePlaying = false
 		return
 	end
 
-	-- ===== CÂMERA =====
-	-- Ponto médio de todas as Parts de início/fim do túnel (funciona com 1
-	-- ou 2 times) pra enquadrar os dois lado a lado automaticamente, sem
-	-- precisar de nenhuma Part de câmera extra.
-	local sumStart, sumEnd, sumForward, count = Vector3.zero, Vector3.zero, Vector3.zero, 0
-	for _, tunnel in pairs(tunnelByTeam) do
-		sumStart += tunnel.Start.Position
-		sumEnd += tunnel.End.Position
-		local f = (tunnel.End.Position - tunnel.Start.Position)
-		f = Vector3.new(f.X, 0, f.Z)
-		if f.Magnitude > 0.01 then sumForward += f.Unit end
-		count += 1
-	end
-	local midStart = sumStart / count
-	local midEnd = sumEnd / count
-	local avgForward = sumForward.Magnitude > 0.01 and sumForward.Unit or Vector3.new(0, 0, -1)
-
-	-- ⚠️ NOVO: PEDIDO — "coloque a câmera no lado contrário, do final pro
-	-- início" + "todos os jogadores precisam passar pela câmera e não sumir
-	-- após chegar lá, faça a câmera um pouco mais pra frente, porque vai
-	-- dar impressão que todos estão passando" — a câmera fica ANTES do End
-	-- (Config.ENTRANCE_CUTSCENE_CAMERA_BEFORE_END studs, baixa/rasteira),
-	-- olhando de volta pro Start: os dois times andam EM DIREÇÃO à câmera,
-	-- passam visivelmente por ela, e só somem (revelados como personagem
-	-- de verdade) um pouco DEPOIS, ao cruzar o End de verdade — nunca bem
-	-- em cima do próprio ponto onde a câmera está.
-	local tunnelCamCFrame = CFrame.lookAt(
-		midEnd - avgForward * Config.ENTRANCE_CUTSCENE_CAMERA_BEFORE_END + Vector3.new(0, Config.ENTRANCE_CUTSCENE_CAMERA_HEIGHT, 0),
-		midStart + Vector3.new(0, 1, 0)
-	)
-
-	-- Enquadramento amplo do campo pro corte final ("corta pra todo mundo
-	-- dentro de campo") — usa o próprio hitbox do campo (sempre existe,
-	-- outros sistemas já dependem dele) em vez de pedir mais uma Part nova.
-	local campoHit = Workspace:FindFirstChild(Config.FIELD_HITBOX_NAME)
-	local fieldOverviewCFrame
-	if campoHit then
-		local size = campoHit.Size
-		local highPoint = campoHit.Position + Vector3.new(0, math.max(size.X, size.Z) * 0.55, 0)
-		fieldOverviewCFrame = CFrame.lookAt(
-			highPoint - avgForward * (math.max(size.X, size.Z) * 0.32),
-			campoHit.Position
-		)
-	else
-		fieldOverviewCFrame = tunnelCamCFrame
-	end
-
-	-- ⚠️ NOVO: PEDIDO — "coloque um take no final da animação, do campo
-	-- por cima, por uns 2 segundos" — bem mais alto e quase reto pra baixo
-	-- (diferente do fieldOverviewCFrame acima, que é um ângulo mais
-	-- diagonal/baixo). Desloca um pouquinho na horizontal de propósito: um
-	-- CFrame.lookAt totalmente vertical (reto pra baixo) deixa o
-	-- LookVector paralelo ao eixo Y, e o RightVector interno vira NaN —
-	-- mesmo bug já visto em applyCurve (BallController.lua) — um pequeno
-	-- desvio evita isso.
-	-- ⚠️ NOVO: PEDIDO — "vou colocar uma part pra você inserir a câmera nela
-	-- 'CutsceneAirCamera'" — se essa Part existir, usa a CFrame dela
-	-- (posição e ângulo exatos montados no Studio) pro take aéreo final,
-	-- em vez do cálculo automático abaixo.
-	-- ⚠️ v30 — PEDIDO: "sabe a cutscene que vai pra uma câmera que grava o
-	-- campo? remova isso. Depois de entrarem, os times se infileiram nas
-	-- extremidades do círculo central, a câmera trava 2 segundos de um lado,
-	-- depois vai pro outro lado, 180 graus, pra gravar os times se
-	-- encarando. Depois começa a partida."
-	--
-	-- O take aéreo saiu. O `finalOverheadCFrame` continua sendo calculado só
-	-- como PLANO B: se por algum motivo não der pra montar o encaramento
-	-- (não achou os gols pra saber onde é o círculo central), a cutscene
-	-- volta pro comportamento antigo em vez de travar.
-	-- A Part 'CutsceneAirCamera' não é mais usada — pode deletar do Studio.
-	local finalOverheadCFrame
-	if campoHit then
-		-- ⚠️ FIX: "a câmera do campo está virada pra cima, é pra ficar pra
-		-- baixo" — CFrame.lookAt perto da vertical (câmera quase reto pra
-		-- baixo, como esse take pede) é uma conta instável (produto
-		-- vetorial degenera quando o LookVector fica quase paralelo ao Up
-		-- padrão (0,1,0)) e podia inverter a rotação, fazendo a câmera
-		-- "olhar pra cima" na prática. Trocado por CFrame.Angles, que NUNCA
-		-- tem esse problema: um pitch de -90° em X sempre aponta reto pra
-		-- BAIXO (LookVector = (0,-1,0)), sem ambiguidade nenhuma de eixo.
-		local size = campoHit.Size
-		local topPoint = campoHit.Position + Vector3.new(0, math.max(size.X, size.Z) * 1.15, 0)
-		finalOverheadCFrame = CFrame.new(topPoint) * CFrame.Angles(math.rad(-90), 0, 0)
-	else
-		finalOverheadCFrame = fieldOverviewCFrame
-	end
-
-	camera.CameraType = Enum.CameraType.Scriptable
-
-	-- ⚠️ v36 — PEDIDO: "cutscene precisa de mais zoom na câmera ainda, 50%
-	-- maior". O v34 já tinha dobrado a APROXIMAÇÃO (ZOOM_DISTANCE 16 -> 34)
-	-- e não dá pra continuar por aí: a câmera termina o movimento a 54
-	-- studs do centro e a fila de jogadores está a 46 — mais 50% de dolly
-	-- (51) colocaria a câmera 9 studs À FRENTE do time, atravessando a
-	-- fila. Então este 50% vem de zoom de LENTE, que é o que "zoom de
-	-- câmera" quer dizer de verdade e não esbarra em geometria nenhuma.
-	-- A conta: o tamanho do time na tela é proporcional a 1/tan(FOV/2).
-	-- tan(70/2) = 0.700; pra tudo aparecer 1.5x maior preciso de
-	-- tan(FOV/2) = 0.700 / 1.5 = 0.467 -> FOV = 50. Restaurado no fim da
-	-- cutscene (nos DOIS caminhos de saída, incluindo a rede de segurança).
 	local fovOriginal = camera.FieldOfView
+	camera.CameraType = Enum.CameraType.Scriptable
+	camera.FieldOfView = Config.ENTRADA_CAMERA_FOV or 60
 
-	-- ===== ANIMAÇÃO =====
-	-- ⚠️ NOVO: já não é mais "uma passada só sincronizada por tempo pra
-	-- todo mundo" — agora cada boneco anda reto na sua própria velocidade
-	-- até CRUZAR o End (revelado ali, individualmente); a câmera só sobe
-	-- pro take aéreo quando `remainingDummies` chegar a 0 (ver comentário
-	-- em Config.ENTRANCE_CUTSCENE_TUNNEL_SAFETY_SECONDS).
-	local safetySeconds = math.max(Config.ENTRANCE_CUTSCENE_TUNNEL_SAFETY_SECONDS, 1)
-	local overheadSeconds = math.max(Config.ENTRANCE_CUTSCENE_OVERHEAD_SECONDS, 0.1)
-	local overheadTransitionSeconds = math.min(0.6, overheadSeconds)
-
-	-- ===== ⚠️ v30: ENCARAMENTO NO CÍRCULO CENTRAL =====
-	-- Monta, UMA vez, as posições de fila dos dois times nas bordas opostas
-	-- do círculo central e as duas câmeras (uma de cada lado, 180° entre
-	-- elas). Devolve nil se não der pra descobrir onde fica o círculo — aí o
-	-- chamador cai no plano B (take aéreo antigo).
-	local function montarEncaramento()
+	-- ===== FASE 2: filas no círculo central + câmera de rosto =====
+	local HOLD = math.max(Config.ENTRADA_APRESENTACAO_SEGUNDOS or 2.5, 0.5)
+	local planos = nil -- { { de = CFrame, para = CFrame }, ... } um por time
+	local function montarApresentacao()
 		local golAzul = Workspace:FindFirstChild(Config.BLUE_GOAL_NAME, true)
 		local golAmarelo = Workspace:FindFirstChild(Config.YELLOW_GOAL_NAME, true)
 		if not golAzul or not golAmarelo then return nil end
-
 		local centro = (golAzul.Position + golAmarelo.Position) / 2
 		local eixo = golAmarelo.Position - golAzul.Position
 		eixo = Vector3.new(eixo.X, 0, eixo.Z)
 		if eixo.Magnitude < 1 then return nil end
 		eixo = eixo.Unit
-		local lado = Vector3.new(-eixo.Z, 0, eixo.X) -- perpendicular horizontal
-
+		local ladoFila = Vector3.new(-eixo.Z, 0, eixo.X)
 		local raio = Config.CUTSCENE_FACEOFF_RADIUS
 		local passo = Config.CUTSCENE_FACEOFF_SPACING
-
-		-- Cada time numa borda do círculo, virado pro outro.
-		local times = {}
-		for teamName in pairs(tunnelByTeam) do table.insert(times, teamName) end
-		table.sort(times) -- ordem estável: o mesmo time sempre no mesmo lado
-
-		local filas = {}
+		local dist = Config.ENTRADA_ROSTO_DISTANCIA or 7.5
+		local lista = {}
 		for indice, teamName in ipairs(times) do
-			-- índice 1 fica do lado do gol azul, índice 2 do lado oposto
 			local sentido = (indice == 1) and -1 or 1
-			filas[teamName] = {
-				origem = centro + eixo * (raio * sentido),
-				olhar = -sentido, -- olha PRA DENTRO, na direção do outro time
-			}
-		end
-
-		-- Posiciona os personagens de verdade nas filas.
-		for teamName, fila in pairs(filas) do
-			local lista = roster[teamName] or {}
-			local total = #lista
-			for i, entrada in ipairs(lista) do
+			local origem = centro + eixo * (raio * sentido)
+			local olhar = eixo * -sentido -- pra dentro, pro outro time
+			local total = #roster[teamName]
+			local rosto = nil
+			for i, entrada in ipairs(roster[teamName]) do
 				local plr = Players:GetPlayerByUserId(entrada.UserId)
 				local personagem = plr and plr.Character
 				if personagem then
-					-- centraliza a fila: -(n-1)/2 .. +(n-1)/2
-					local deslocamento = (i - 1 - (total - 1) / 2) * passo
-					local pos = fila.origem + lado * deslocamento
-					pos = Vector3.new(pos.X, (entrada.FieldCFrame and entrada.FieldCFrame.Position.Y) or pos.Y, pos.Z)
-					personagem:PivotTo(CFrame.lookAt(pos, pos + eixo * fila.olhar))
+					local desl = (i - 1 - (total - 1) / 2) * passo
+					local pos = origem + ladoFila * desl
+					local y = (entrada.FieldCFrame and entrada.FieldCFrame.Position.Y) or pos.Y
+					pos = Vector3.new(pos.X, y, pos.Z)
+					personagem:PivotTo(CFrame.lookAt(pos, pos + olhar))
+					rosto = rosto or alturaDoRosto(personagem, y)
 				end
 			end
+			rosto = rosto or (origem.Y + 1.6)
+			-- a câmera passa rente de uma ponta da fila à outra, na altura do rosto
+			local meia = math.max((total - 1) / 2 * passo, 1.5)
+			local function quadro(d)
+				local alvo = Vector3.new(origem.X, rosto + 0.5, origem.Z) + ladoFila * d
+				local pos = alvo + olhar * dist + Vector3.new(0, 0.2, 0)
+				return CFrame.lookAt(pos, alvo)
+			end
+			table.insert(lista, { de = quadro(-meia - 1), para = quadro(meia + 1) })
 		end
-
-		-- Duas câmeras opostas: cada uma por trás de um time, olhando pro
-		-- outro. É isso que dá a leitura de "os dois se encarando".
-		local altura = Config.CUTSCENE_FACEOFF_CAMERA_HEIGHT
-		local recuo = Config.CUTSCENE_FACEOFF_CAMERA_DISTANCE
-		local alvo = centro + Vector3.new(0, altura * 0.35, 0)
-
-		-- ⚠️ v33 — PEDIDO: "coloca um jogo de câmera pra dar um zoom com um
-		-- pouco de movimento no time que ele tá exibindo."
-		-- Cada lado tem DOIS CFrames: onde a câmera começa (mais longe e mais
-		-- alta) e onde ela termina (mais perto e mais baixa). O Heartbeat
-		-- interpola entre os dois durante o hold, então a câmera "entra" no
-		-- time devagar em vez de ficar parada.
-		local aproxima = Config.CUTSCENE_FACEOFF_ZOOM_DISTANCE
-		local abaixa = Config.CUTSCENE_FACEOFF_ZOOM_DROP
-
-		local function par(sentido)
-			local base = centro + eixo * ((raio + recuo) * sentido)
-			local perto = centro + eixo * ((raio + recuo - aproxima) * sentido)
-			return {
-				CFrame.lookAt(base + Vector3.new(0, altura, 0), alvo),
-				CFrame.lookAt(perto + Vector3.new(0, altura - abaixa, 0), alvo),
-			}
-		end
-
-		return par(1), par(-1)
+		return lista
 	end
 
-	local encaramentoPronto = false
-	local camEncaraA, camEncaraB = nil, nil
-	local HOLD = math.max(Config.CUTSCENE_FACEOFF_HOLD_SECONDS, 0.2)
-
-	local startTick = os.clock()
-	local allCrossedAt = nil -- os.clock() de quando o ÚLTIMO boneco cruzou o End (nil = ainda tem gente andando)
-	local connection
-	connection = RunService.Heartbeat:Connect(function()
-		local elapsed = os.clock() - startTick
-
-		-- ===== FASE 1: TÚNEL — cada boneco anda reto até cruzar o End =====
-		if not allCrossedAt then
-			for _, dummy in ipairs(dummies) do
-				if not dummy.done and dummy.model.Parent then
-					local traveled = dummy.walkSpeed * elapsed
-					local currentPos = dummy.queueStartPos + dummy.forward * traveled
-					-- ⚠️ v19 FIX: mesma coisa do replay — Model:PivotTo todo frame
-					-- reposicionava os membros junto e apagava a pose da
-					-- animação. Move só o HumanoidRootPart anchorado; os Motor6D
-					-- (reconstruídos em buildDummyFromModel) levam o corpo.
-					-- ⚠️ v20: de volta pro PivotTo (ver o mesmo comentário em
-					-- GoalReplayClient) — o que travava o movimento era não ter
-					-- parte anchorada, não o PivotTo.
-					dummy.model:PivotTo(CFrame.lookAt(currentPos, currentPos + dummy.forward))
-
-					if currentPos:Dot(dummy.forward) >= dummy.endPlaneDot then
-						-- cruzou o End: some o boneco e TELEPORTA o personagem de
-						-- verdade direto pra posição de formação (fieldCFrame,
-						-- mandado pelo servidor no roster) ANTES de revelar —
-						-- ele fica travado lá (freezeLocalCharacter já trava o
-						-- LOCAL; pra jogadores remotos, o próprio servidor só
-						-- libera o jogo depois que a partida começa de verdade)
-						-- até o kickoff, sem parar na entrada do túnel.
-						dummy.done = true
-						dummy.model:Destroy()
-						if dummy.fieldCFrame and dummy.character then
-							dummy.character:PivotTo(dummy.fieldCFrame)
-						end
-						restoreOneModel(dummy.character)
-						remainingDummies -= 1
-					end
-				elseif not dummy.done then
-					-- boneco sumiu por algum outro motivo (ex: parte destruída);
-					-- conta como "cruzado" pra não travar o resto da cutscene.
-					dummy.done = true
-					restoreOneModel(dummy.character)
-					remainingDummies -= 1
+	local function terminar()
+		for _, d in ipairs(dummies) do
+			if _G.AnimadorRemover then _G.AnimadorRemover(d.model) end
+			if d.model.Parent then d.model:Destroy() end
+		end
+		restoreHiddenOriginals()
+		-- cada um volta pra posição de saída (a fila do círculo era só pra câmera)
+		for _, list in pairs(roster) do
+			for _, entrada in ipairs(list) do
+				local plr = Players:GetPlayerByUserId(entrada.UserId)
+				if plr and plr.Character and entrada.FieldCFrame then
+					plr.Character:PivotTo(entrada.FieldCFrame)
 				end
-			end
-
-			if remainingDummies <= 0 then
-				allCrossedAt = os.clock()
-			end
-
-			camera.CFrame = tunnelCamCFrame
-		else
-			-- ===== FASE 2 (v30): ENCARAMENTO NO CÍRCULO CENTRAL =====
-			local faseElapsed = os.clock() - allCrossedAt
-
-			if not encaramentoPronto then
-				encaramentoPronto = true
-				camEncaraA, camEncaraB = montarEncaramento()
-				-- ⚠️ v36: zoom de lente só no encaramento — o take do túnel
-				-- continua com o FOV normal (ele precisa do campo de visão
-				-- aberto pra caber o corredor inteiro).
-				if camEncaraA and camEncaraB then
-					camera.FieldOfView = Config.CUTSCENE_FACEOFF_FOV
-				end
-			end
-
-			if camEncaraA and camEncaraB then
-				if faseElapsed < HOLD then
-					-- LADO 1: entra na câmera vindo do túnel e, ao mesmo tempo,
-					-- vai aproximando do time. `zoom` anda de 0 a 1 ao longo do
-					-- hold inteiro — é o movimento lento que dá vida ao plano.
-					local zoom = math.clamp(faseElapsed / HOLD, 0, 1)
-					local destino = camEncaraA[1]:Lerp(camEncaraA[2], zoom)
-					local entrada = math.clamp(faseElapsed / overheadTransitionSeconds, 0, 1)
-					camera.CFrame = tunnelCamCFrame:Lerp(destino, entrada)
-				else
-					-- LADO 2: CORTE SECO de 180°, sem lerp de propósito — é o
-					-- corte de transmissão esportiva; interpolar aqui daria uma
-					-- volta tonta em torno do campo. O zoom recomeça do zero.
-					local zoom = math.clamp((faseElapsed - HOLD) / HOLD, 0, 1)
-					camera.CFrame = camEncaraB[1]:Lerp(camEncaraB[2], zoom)
-				end
-			else
-				-- Plano B: não achei os gols, volta pro take aéreo antigo.
-				local alpha = math.clamp(faseElapsed / overheadTransitionSeconds, 0, 1)
-				camera.CFrame = tunnelCamCFrame:Lerp(finalOverheadCFrame, alpha)
-			end
-
-			local duracaoFase = (camEncaraA and camEncaraB) and (HOLD * 2) or overheadSeconds
-			if faseElapsed >= duracaoFase then
-				connection:Disconnect()
-
-				restoreHiddenOriginals() -- rede de segurança: qualquer coisa que não tenha sido revelada individualmente
-				unfreezeLocalCharacter(player.Character)
-
-				camera.FieldOfView = fovOriginal
-				camera.CameraType = Enum.CameraType.Custom
-				local humanoid = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
-				if humanoid then
-					camera.CameraSubject = humanoid
-				end
-
-				cutscenePlaying = false
 			end
 		end
+		travarJogador(false)
+		camera.FieldOfView = fovOriginal
+		camera.CameraType = Enum.CameraType.Custom
+		local humanoid = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
+		if humanoid then camera.CameraSubject = humanoid end
+		cutscenePlaying = false
+	end
 
-		-- Margem de segurança: se algo travou (ex: nunca deu allCrossedAt
-		-- por bonecos presos), força o fim da cutscene em vez de deixar o
-		-- jogador congelado pra sempre. `cutscenePlaying` já checa se o fim
-		-- normal (acima) não rodou nesse mesmo tick antes desse aqui.
-		-- ⚠️ v30: a rede de segurança precisa cobrir a fase mais LONGA das
-		-- duas (encaramento = 2 × HOLD), senão ela cortaria a cutscene no
-		-- meio do segundo ângulo.
-		if cutscenePlaying and elapsed >= safetySeconds + math.max(overheadSeconds, HOLD * 2 + 1) then
-			connection:Disconnect()
+	local inicioT = os.clock()
+	local fase2Desde = nil
+	local connection
+	connection = RunService.Heartbeat:Connect(function()
+		local t = os.clock() - inicioT
+		-- depuração: atributo EntradaDebugT no jogador congela a cutscene nesse instante
+		local congelado = player:GetAttribute("EntradaDebugT")
+		if typeof(congelado) == "number" then t = congelado end
 
-			for _, dummy in ipairs(dummies) do
-				if dummy.model.Parent then dummy.model:Destroy() end
+		if t < T1 then
+			-- ===== FASE 1: as filas andam reto; a câmera recua na frente delas =====
+			local andou = velocidade * t
+			for _, d in ipairs(dummies) do
+				if d.model.Parent then
+					local pos = d.inicio + frente * andou
+					d.model:PivotTo(CFrame.lookAt(pos, pos + frente))
+				end
 			end
+			local frenteDasFilas = bocaDoTunel - frente * antes + frente * andou
+			local camPos = frenteDasFilas + frente * (Config.ENTRADA_CAMERA_FRENTE or 13)
+				+ Vector3.new(0, Config.ENTRADA_CAMERA_ALTURA or 4.5, 0) + lado * 1.5
+			local alvo = frenteDasFilas - frente * 5 + Vector3.new(0, 1.2, 0)
+			camera.CFrame = CFrame.lookAt(camPos, alvo)
+			return
+		end
 
+		-- ===== FASE 2 =====
+		if not fase2Desde then
+			fase2Desde = os.clock()
+			for _, d in ipairs(dummies) do
+				if _G.AnimadorRemover then _G.AnimadorRemover(d.model) end
+				if d.model.Parent then d.model:Destroy() end
+			end
 			restoreHiddenOriginals()
-			unfreezeLocalCharacter(player.Character)
-
-			camera.FieldOfView = fovOriginal
-			camera.CameraType = Enum.CameraType.Custom
-			local humanoid = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
-			if humanoid then
-				camera.CameraSubject = humanoid
-			end
-
-			cutscenePlaying = false
+			planos = montarApresentacao()
+			if planos then camera.FieldOfView = Config.ENTRADA_ROSTO_FOV or 40 end
+		end
+		local f = t - T1
+		if planos and #planos > 0 then
+			local qual = math.min(math.floor(f / HOLD) + 1, #planos)
+			local u = math.clamp((f - (qual - 1) * HOLD) / HOLD, 0, 1)
+			u = u * u * (3 - 2 * u)
+			camera.CFrame = planos[qual].de:Lerp(planos[qual].para, u)
+		end
+		local duracaoFase2 = planos and (HOLD * #planos) or 0.5
+		if f >= duracaoFase2 or t > T1 + HOLD * 2 + 4 then
+			connection:Disconnect()
+			terminar()
 		end
 	end)
 end

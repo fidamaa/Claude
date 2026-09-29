@@ -1731,8 +1731,9 @@ local function waitForPlayersAndStart()
 		return
 	end
 
-	print("✅ Jogadores suficientes — partida vai começar em 3 segundos.")
-	task.wait(3)
+	-- ⚠️ v112: era 3s — PEDIDO: "pra não ter atraso, pra não ter enrolação"
+	print("✅ Jogadores suficientes — partida começando.")
+	task.wait(0.5)
 	startMatchTimer()
 end
 

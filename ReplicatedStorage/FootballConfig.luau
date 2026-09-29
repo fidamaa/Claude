@@ -211,7 +211,8 @@ Config.OVERTIME_DISPLAY_SECONDS = 60
 -- ⚠️ v52 — PEDIDO: "entre as transições, pra virar de lado ou dar o
 -- overtime, coloca só 3 segundos no máximo. O overtime tá com 15 segundos
 -- pra começar, não pode ser." Era 15.
-Config.HALFTIME_BREAK_DURATION = 3 -- segundos de intervalo entre os tempos
+-- ⚠️ v112 — PEDIDO: "diminua os tempos de intervalo... vai direto pro segundo tempo... coloca pra ir direto pra iniciar a partida, meio segundo depois do teleporte, pra não ter enrolação".
+Config.HALFTIME_BREAK_DURATION = 0 -- segundos de intervalo entre os tempos (era 3)
 
 -- ===== MOVIMENTO / STAMINA =====
 Config.NORMAL_SPEED = 22
@@ -2824,7 +2825,7 @@ Config.CUTSCENE_TUNNEL_START_PREFIX = "CutsceneTunnelStart_"
 Config.CUTSCENE_TUNNEL_END_PREFIX = "CutsceneTunnelEnd_"
 
 Config.ENTRANCE_CUTSCENE_ENABLED = true -- true = joga a cutscene 1x no início de cada partida (antes da contagem de kickoff); false = pula direto pra contagem, igual antes
-Config.ENTRANCE_CUTSCENE_QUEUE_SPACING = 5 -- distância (studs) entre um jogador e o de trás dele na fila
+Config.ENTRANCE_CUTSCENE_QUEUE_SPACING = 6.5 -- ⚠️ v112: era 5 ("distancie eles um pouco mais") -- distância (studs) entre um jogador e o de trás dele na fila
 -- ⚠️ NOVO: PEDIDO — "aumente um pouco a duração, deixe os personagens um
 -- pouco mais lentos" — mesma distância (Start->End da Part), mais tempo
 -- pra percorrer = anda mais devagar.
@@ -2861,7 +2862,7 @@ Config.CUTSCENE_AIR_CAMERA_NAME = "CutsceneAirCamera"
 -- (CUTSCENE_AIR_CAMERA_NAME acima não é mais lido — a Part pode ser apagada.)
 Config.CUTSCENE_FACEOFF_HOLD_SECONDS = 2    -- tempo parado em CADA lado
 Config.CUTSCENE_FACEOFF_RADIUS = 70 -- ⚠️ v112: 58 -> 70 (campo 20% maior)         -- raio do círculo central (⚠️ v104: campo 25% maior — medido: ~58.4; era 46)
-Config.CUTSCENE_FACEOFF_SPACING = 11        -- distância entre um jogador e o próximo na fila
+Config.CUTSCENE_FACEOFF_SPACING = 5         -- distância entre um jogador e o próximo na fila (⚠️ v112: era 11 — a câmera de rosto passa de um pro outro)
 Config.CUTSCENE_FACEOFF_CAMERA_DISTANCE = 42 -- o quanto a câmera fica ATRÁS da fila
 Config.CUTSCENE_FACEOFF_CAMERA_HEIGHT = 13   -- altura da câmera
 -- ⚠️ v33: o zoom lento em cima do time exibido. A câmera começa na posição
@@ -2901,7 +2902,27 @@ Config.ENTRANCE_CUTSCENE_CAMERA_HEIGHT = 6
 -- take aéreo), não o teto de segurança do cliente (esse é
 -- TUNNEL_SAFETY_SECONDS, bem mais folgado de propósito, só pra nunca
 -- travar o jogador preso na cutscene se algo der errado).
-Config.ENTRANCE_CUTSCENE_DURATION = Config.ENTRANCE_CUTSCENE_TUNNEL_SECONDS + 4 + Config.ENTRANCE_CUTSCENE_OVERHEAD_SECONDS
+-- ⚠️ v112 — CUTSCENE DE ENTRADA REFEITA. PEDIDO: "tem que ser os players entrando,
+-- vendo os dois times entrando em duas linhas retas; depois demonstrar os dois
+-- times — tá muito longe, tem que dar mais zoom pra mostrar o rosto dos dois; e
+-- eles não vão poder se mexer nem ativar a trava do shift enquanto tiver na
+-- cutscene" + "o local de entrada já tá muito grande pro tamanho dos personagens".
+-- FASE 1: as duas filas saem do túnel lado a lado e seguem reto pro gramado,
+-- com a câmera na frente delas, recuando junto (plano fechado).
+Config.ENTRADA_VELOCIDADE = 11          -- studs/s da caminhada das filas
+Config.ENTRADA_INICIO_ANTES_DO_FIM = 38 -- a frente da fila começa isso antes da boca do túnel
+Config.ENTRADA_ANDA_DEPOIS_DO_FIM = 26  -- e anda isso pelo gramado até a fase 2
+Config.ENTRADA_DISTANCIA_ENTRE_FILAS = 10 -- as duas filas lado a lado (antes: 54 studs, uma em cada túnel) · "distancie eles um pouco mais" (era 7)
+Config.ENTRADA_CAMERA_FRENTE = 13       -- câmera à frente da primeira dupla
+Config.ENTRADA_CAMERA_ALTURA = 4.5
+Config.ENTRADA_CAMERA_FOV = 60
+-- FASE 2: cada time em fila no círculo central; a câmera passa rente, na altura do
+-- rosto, de um jogador ao outro (um time, corta, o outro).
+Config.ENTRADA_APRESENTACAO_SEGUNDOS = 2.5 -- por time
+Config.ENTRADA_ROSTO_DISTANCIA = 7.5       -- câmera a isso na frente dos rostos
+Config.ENTRADA_ROSTO_FOV = 40
+Config.ENTRANCE_CUTSCENE_DURATION = (Config.ENTRADA_INICIO_ANTES_DO_FIM + Config.ENTRADA_ANDA_DEPOIS_DO_FIM) / Config.ENTRADA_VELOCIDADE
+	+ Config.ENTRADA_APRESENTACAO_SEGUNDOS * 2 + 0.5
 
 -- ============================================================
 -- ELEMENTOS (reinserido a pedido do usuário — a versão antiga, puramente

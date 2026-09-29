@@ -393,6 +393,9 @@ end
 
 local function setShiftLock(enabled)
 	if shiftLockEnabled == enabled then return end
+	-- ⚠️ v112: "não vão poder ativar a trava do shift nem nada enquanto tiver na
+	-- cutscene de entrada"
+	if _G.CutsceneEntradaAtiva then return end
 	shiftLockEnabled = enabled
 
 	applyMouseLockState()
@@ -472,14 +475,30 @@ RunService:BindToRenderStep("FootballShiftLockRotation", Enum.RenderPriority.Cam
 			UserInputService.MouseIconEnabled = false
 		end
 	end
+	local character = player.Character
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	-- ⚠️ v112 — PEDIDO: "reformule a trava do control, de vez em quando dá umas
+	-- bugadas; veja por que e faça ela ficar perfeita". O AutoRotate só era
+	-- acertado no aperto do Ctrl. Quem o mexia depois deixava ele ERRADO até o
+	-- próximo aperto: o fim do ragdoll no servidor (drible que derruba,
+	-- carrinho, pisão) religa o AutoRotate; a cutscene de entrada devolvia o
+	-- valor de ANTES. Com a trava ligada e AutoRotate ligado, o corpo gira pela
+	-- câmera E pela direção de andar ao mesmo tempo — treme e vira sozinho.
+	-- Agora ele é reafirmado todo quadro (fora do corpo travado / ragdoll).
+	if humanoid and not humanoid.PlatformStand and os.clock() >= (_G.CorpoTravadoAte or 0) then
+		local desejado = not shiftLockEnabled
+		if humanoid.AutoRotate ~= desejado then humanoid.AutoRotate = desejado end
+	end
 	if not shiftLockEnabled then return end
 	if tick() < rotationSuppressedUntil then return end -- finta/carrinho em andamento: não briga pela rotação
 	if os.clock() < (_G.CorpoTravadoAte or 0) then return end -- ⚠️ v104: caído/levantando do carrinho
 	if _G.HissatsuCutsceneLocal then return end -- ⚠️ v87: cutscene de Hissatsu move o corpo sozinha
-
-	local character = player.Character
-	local root = character and character:FindFirstChild("HumanoidRootPart")
-	if not root then return end
+	-- ⚠️ v112: câmera de cutscene/replay (Scriptable) não é a câmera do jogador —
+	-- girar o corpo pra ela deixava o personagem virado pra qualquer lado depois
+	-- do replay; e corpo caído/sentado/ancorado não se gira na mão (rodopiava)
+	if camera.CameraType == Enum.CameraType.Scriptable or _G.CutsceneEntradaAtiva then return end
+	if not root or not humanoid or humanoid.PlatformStand or humanoid.Sit or root.Anchored then return end
 
 	local lookVector = camera.CFrame.LookVector
 	local flatLook = Vector3.new(lookVector.X, 0, lookVector.Z)

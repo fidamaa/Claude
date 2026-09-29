@@ -45,8 +45,16 @@ _G.AnimadorPausado = _G.AnimadorPausado or {}
 
 -- Modelos extras pra animar além dos jogadores (replay de gol, etc.).
 local extras = {} -- [model] = true
+-- ⚠️ v112 — PEDIDO: "no início eles não começam a andar com o braço balançando,
+-- só depois de um tempo — pré-carrega a animação". A lista de modelos só era
+-- revarrida a cada 0.5s: o boneco da cutscene de entrada ficava até meio segundo
+-- deslizando parado. Registrar agora força a varredura no próximo quadro.
+local varrerJa = false
 _G.AnimadorRegistrar = function(model)
-	if typeof(model) == "Instance" and model:IsA("Model") then extras[model] = true end
+	if typeof(model) == "Instance" and model:IsA("Model") then
+		extras[model] = true
+		varrerJa = true
+	end
 end
 _G.AnimadorRemover = function(model)
 	extras[model] = nil
@@ -509,7 +517,8 @@ local proximaVarredura = 0
 
 RunService.Stepped:Connect(function(_, dt)
 	local agora = os.clock()
-	if agora >= proximaVarredura then
+	if agora >= proximaVarredura or varrerJa then
+		varrerJa = false
 		proximaVarredura = agora + 0.5
 		ultimaLista = modelosParaAnimar()
 		for model in pairs(estados) do
