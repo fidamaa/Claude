@@ -125,6 +125,52 @@ workspace.DescendantAdded:Connect(checkUnionCollisionFidelity)
 local matchHistory = {} -- array de { t, ball={x,y,z}, players={{uid,name,team,x,y,z,yaw},...}, bots={{team,x,y,z,yaw},...} }
 local lastHistorySampleAt = 0
 
+-- ⚠️ v103 — REPLAY COMPLETO. PEDIDO: "o replay tá maravilhoso, só que
+-- algumas animações não saem: a de ficar parado e correr saem, mas a de
+-- chutar não, nem a da cutscene... não é pra replicar a cutscene, é pra
+-- aparecer o personagem fazendo a animação em tempo real... os VFX vão sair
+-- no replay pra você saber que a habilidade foi ativada, vai aparecer o
+-- número da vida da bola, e se o GK usou a habilidade — tudo o que aconteceu
+-- vai ser registrado no replay."
+-- Além das posições, agora grava (no MESMO relógio das amostras):
+--   • EVENTOS (matchEvents): cada ação animada (chute, drible, mergulho,
+--     carrinho, preparo de Hissatsu...) e cada cutscene de Hissatsu, com quem
+--     fez e os parâmetros — o cliente repete no fantasma;
+--   • por amostra: o número da vida da bola (texto e cor), a aura de
+--     habilidade de cada jogador e as peças visuais de habilidade (guarda do
+--     goleiro, bloqueio do defensor) — ver replayExtras mais abaixo.
+local matchEvents = {} -- { t, tipo, dados }
+local replayExtras = {} -- Forca(), Visuais(): preenchidas mais abaixo no arquivo
+_G.RegistrarEventoReplay = function(tipo, dados)
+	table.insert(matchEvents, { t = os.clock(), tipo = tipo, dados = dados })
+end
+_G.GetReplayEventos = function()
+	local copia = table.create(#matchEvents)
+	for i, e in ipairs(matchEvents) do copia[i] = e end
+	return copia
+end
+-- quem é o ator de um Model: "P<UserId>" (jogador) ou "B<time>" (goleiro bot)
+local function idDoAtorReplay(model)
+	if typeof(model) ~= "Instance" then return nil end
+	local plr = Players:GetPlayerFromCharacter(model)
+	if plr then return "P" .. plr.UserId end
+	if model.Name:sub(1, 6) == "GKBot_" then return "B" .. model.Name:sub(7) end
+	return nil
+end
+_G.IdDoAtorReplay = idDoAtorReplay
+local AbilityAuraModulo = ReplicatedStorage:FindFirstChild("AbilityAura") and require(ReplicatedStorage.AbilityAura)
+local ATRIBUTO_AURA = AbilityAuraModulo and AbilityAuraModulo.PULSE_ATTRIBUTE
+local function auraDoPersonagem(character)
+	if not ATRIBUTO_AURA or not character then return nil end
+	for _, h in ipairs(character:GetChildren()) do
+		if h:IsA("Highlight") and h:GetAttribute(ATRIBUTO_AURA) then
+			local c = h.OutlineColor
+			return { r = c.R, g = c.G, b = c.B, ritmo = h:GetAttribute(ATRIBUTO_AURA) }
+		end
+	end
+	return nil
+end
+
 -- Ângulo de giro no eixo Y a partir do LookVector (ignora pitch/roll —
 -- não interessa pra um personagem/bot andando no chão).
 local function yawFromLookVector(look)
@@ -150,6 +196,7 @@ RunService.Heartbeat:Connect(function()
 				team = plr.Team and plr.Team.Name or nil,
 				x = rPos.X, y = rPos.Y, z = rPos.Z,
 				yaw = yawFromLookVector(root.CFrame.LookVector),
+				aura = auraDoPersonagem(character), -- ⚠️ v103
 			})
 		end
 	end
@@ -164,6 +211,10 @@ RunService.Heartbeat:Connect(function()
 		})
 	end
 
+	-- ⚠️ v103: vida da bola e peças visuais de habilidade nesse instante
+	if replayExtras.Forca then sample.forca = replayExtras.Forca() end
+	if replayExtras.Visuais then sample.visuais = replayExtras.Visuais() end
+
 	table.insert(matchHistory, sample)
 
 	-- poda o que já passou do tempo que a gente precisa guardar (com uma
@@ -171,6 +222,9 @@ RunService.Heartbeat:Connect(function()
 	local cutoff = now - (Config.GOAL_REPLAY_DURATION + 1)
 	while #matchHistory > 0 and matchHistory[1].t < cutoff do
 		table.remove(matchHistory, 1)
+	end
+	while #matchEvents > 0 and matchEvents[1].t < cutoff do
+		table.remove(matchEvents, 1)
 	end
 end)
 
@@ -265,6 +319,30 @@ local function playKickFeedback(force)
 	end
 	kickSound.PlaybackSpeed = 0.9 + (force / Config.KICK_MAX_FORCE) * 0.3
 	kickSound:Play()
+end
+
+-- ⚠️ v97 — velocidade de saída pra bola, com essa rapidez, passar PELO
+-- ponto `alvo` (parábola com a gravidade da bola: Gravity x
+-- BALL_GRAVITY_MULTIPLIER, já que a VectorForce cancela o resto). Usa o arco
+-- BAIXO (o mais direto). Alvo fora de alcance: sai na direção exata da mira,
+-- um pouquinho acima, e cai antes — a direção nunca erra, só falta força.
+_G.VelocidadeBalistica = function(origem, alvo, rapidez)
+	local g = workspace.Gravity * Config.BALL_GRAVITY_MULTIPLIER
+	local d = alvo - origem
+	local plano = Vector3.new(d.X, 0, d.Z)
+	local x = plano.Magnitude
+	if x < 0.5 or rapidez <= 0 or g <= 0 then return nil end
+	local h = d.Y
+	local v2 = rapidez * rapidez
+	local disc = v2 * v2 - g * (g * x * x + 2 * h * v2)
+	local angulo
+	if disc >= 0 then
+		angulo = math.atan((v2 - math.sqrt(disc)) / (g * x))
+	else
+		angulo = math.atan2(h, x) + math.rad(5)
+	end
+	angulo = math.clamp(angulo, math.rad(-70), math.rad(70))
+	return plano.Unit * (rapidez * math.cos(angulo)) + Vector3.new(0, rapidez * math.sin(angulo), 0)
 end
 
 local curveGeneration = 0
@@ -587,10 +665,59 @@ local loadedAnimationTracks = {}
 -- Amarrando a animação à mecânica, mexer no tempo do carrinho no Config
 -- reajusta o vídeo sozinho, e reexportar a animação com outra duração
 -- também — nenhum dos dois lados precisa saber do outro.
-local function playAnimation(player, animationId, priority, ajustarPara, semLoop, congelarNoFim)
+--
+-- ⚠️ v86 — `reverso` (opcional): toca a animação DE TRÁS PRA FRENTE (começa
+-- no último quadro, velocidade negativa). PEDIDO: "a animação do para frente
+-- é só você fazer a animação do para trás, só que no reverse" — é o drible
+-- pra frente, que reaproveita o Dribble.Back.
+-- ⚠️ v96 — ANIMAÇÃO POR CÓDIGO (Config.ANIMACAO_PROCEDURAL). O servidor
+-- não toca mais asset nenhum no corpo: traduz a animação pedida pro NOME da
+-- ação ("Kick", "Dribble.Left", "GKDive.Up"...) e avisa todos os clientes
+-- (Remotes.AcaoAnimada); o AnimadorProcedural de cada um anima. Assim nenhum
+-- chamador precisou mudar — continuam pedindo pelo ID do Config.
+local nomeDaAnimacao = {} -- [animationId normalizado] = nome da ação
+do
+	for chave, valor in pairs(Config.ANIMATIONS) do
+		if type(valor) == "table" then
+			for sub, id in pairs(valor) do
+				local n = Config.NormalizeAnimationId(id)
+				if type(n) == "string" and n ~= "" then nomeDaAnimacao[n] = chave .. "." .. sub end
+			end
+		else
+			local n = Config.NormalizeAnimationId(valor)
+			if type(n) == "string" and n ~= "" then nomeDaAnimacao[n] = chave end
+		end
+	end
+end
+
+local function avisarAcao(model, nome, duracao, parametros)
+	if model and nome then
+		Remotes.AcaoAnimada:FireAllClients(model, nome, duracao, parametros)
+		-- ⚠️ v103: vai pro replay também (o fantasma repete a ação)
+		local ator = idDoAtorReplay(model)
+		if ator then
+			_G.RegistrarEventoReplay("Acao", { ator = ator, chave = nome, dur = duracao, params = parametros })
+		end
+	end
+end
+-- Pra quem não é jogador (goleiro bot) ou pra ações sem ID no Config.
+_G.AnimarAcao = avisarAcao
+
+local function playAnimation(player, animationId, priority, ajustarPara, semLoop, congelarNoFim, reverso, nomeAcao)
 	-- ⚠️ FIX: normaliza (aceita colar só o número, sem "rbxassetid://" na
 	-- frente — ver Config.NormalizeAnimationId em FootballConfig.luau).
 	animationId = Config.NormalizeAnimationId(animationId)
+
+	if Config.ANIMACAO_PROCEDURAL then
+		local nome = nomeAcao or (animationId and nomeDaAnimacao[animationId])
+		if nome == "Dribble.Back" and reverso then nome = "Dribble.Forward" end
+		-- o preparo do chute o animador lê direto do atributo KickCharging
+		if nome and nome ~= "PrepareKick" then
+			avisarAcao(player.Character, nome, ajustarPara)
+		end
+		return
+	end
+
 	if not animationId or animationId == "" then return end
 
 	local _, _, humanoid = getCharacterParts(player)
@@ -664,6 +791,25 @@ local function playAnimation(player, animationId, priority, ajustarPara, semLoop
 	if semLoop or congelarNoFim then track.Looped = false end
 	track:Play()
 
+	-- ⚠️ v86: a MESMA track serve o drible pra trás (normal) e pra frente
+	-- (reverso), então a velocidade precisa ser reafirmada nos dois sentidos —
+	-- senão um Back tocado depois de um Forward sairia ao contrário.
+	local function velocidadeAlvo()
+		local v = (ajustarPara and ajustarPara > 0 and track.Length > 0) and (track.Length / ajustarPara) or 1
+		return reverso and -v or v
+	end
+	local function aplicarSentido()
+		if reverso and track.Length > 0 then
+			track.TimePosition = math.max(track.Length - 0.03, 0)
+		end
+		track:AdjustSpeed(velocidadeAlvo())
+	end
+	if track.Length > 0 then
+		aplicarSentido()
+	elseif not reverso then
+		track:AdjustSpeed(1)
+	end
+
 	-- ⚠️ v67 — REESCRITO. Tudo que depende da animação já ter CARREGADO mora
 	-- numa thread só, depois de esperar a carga de verdade.
 	--
@@ -683,9 +829,10 @@ local function playAnimation(player, animationId, priority, ajustarPara, semLoop
 	--
 	-- Agora Looped é reafirmado DEPOIS da carga, junto com o ajuste de
 	-- velocidade e o congelamento no último frame.
-	if semLoop or congelarNoFim or (ajustarPara and ajustarPara > 0) then
+	if semLoop or congelarNoFim or reverso or (ajustarPara and ajustarPara > 0) then
 		task.spawn(function()
 			local esperou = 0
+			local jaCarregada = track.Length > 0
 			while track.Length <= 0 and esperou < 2 do
 				task.wait(0.05)
 				esperou += 0.05
@@ -695,8 +842,17 @@ local function playAnimation(player, animationId, priority, ajustarPara, semLoop
 			-- reafirma DEPOIS da carga (ver o comentário acima)
 			if semLoop or congelarNoFim then track.Looped = false end
 
-			if ajustarPara and ajustarPara > 0 then
-				track:AdjustSpeed(track.Length / ajustarPara)
+			if not jaCarregada then
+				aplicarSentido() -- primeira execução: só agora dá pra saber a duração
+			end
+
+			-- ⚠️ v86: tocando ao contrário, ela chega no quadro 0 e o Roblox nem
+			-- sempre encerra sozinho nesse sentido — encerra na mão no fim da
+			-- janela (só se ainda estiver indo ao contrário, ou seja, se ninguém
+			-- reaproveitou a track pra tocar pra frente nesse meio tempo).
+			if reverso then
+				task.wait(math.abs(track.Length / velocidadeAlvo()))
+				if track.IsPlaying and track.Speed < 0 then track:Stop(0.1) end
 			end
 
 			-- Congela no último frame: a track continua tocando (por isso a
@@ -718,6 +874,14 @@ end
 local function stopAnimation(player, animationId, fade)
 	animationId = Config.NormalizeAnimationId(animationId)
 	if not animationId or animationId == "" then return end
+	if Config.ANIMACAO_PROCEDURAL then -- ⚠️ v96: ver playAnimation
+		local nome = nomeDaAnimacao[animationId]
+		if nome and nome ~= "PrepareKick" then
+			avisarAcao(player.Character, "parar:" .. nome)
+			if nome == "Dribble.Back" then avisarAcao(player.Character, "parar:Dribble.Forward") end
+		end
+		return
+	end
 	local entrada = loadedAnimationTracks[player]
 	local track = entrada and entrada.Tracks and entrada.Tracks[animationId]
 	if track then
@@ -770,9 +934,43 @@ local selfPickupLockUntil = {} -- [player] = tick() até quando ELE MESMO não p
 local teamPassChain = {}    -- [teamName] = número de passes seguidos
 local possessionSince = {}  -- [player] = tick() em que ele ganhou a bola
 
+-- ⚠️ v104 — BOLA NOS PÉS (ver Config.BOLA_NOS_PES_*). Com a posse, a física
+-- da bola passa pro cliente de quem está com ela: ele a coloca na frente dos
+-- pés todo quadro (BolaNosPes.local.luau) e o resto do servidor a vê já
+-- colada no corpo dele (os dois chegam pela MESMA conexão, então os outros
+-- jogadores também veem bola e corpo juntos). Sem posse, a bola é SEMPRE do
+-- servidor — chute, voo de Hissatsu, curva, tudo continua calculado aqui.
+local bolaNoClienteDesde = nil -- tick() em que a rede foi entregue ao dono atual (nil = servidor)
+local bolaRetomadaAte = 0      -- servidor segurou a bola (bola longe demais) até esse tick()
+
+local function definirDonoDeRede(player)
+	if ball.Anchored then return false end
+	local ok = pcall(function()
+		if player and Config.BOLA_NOS_PES_LIGADO then
+			ball:SetNetworkOwner(player)
+		else
+			ball:SetNetworkOwner(nil)
+		end
+	end)
+	if ok and player and Config.BOLA_NOS_PES_LIGADO then
+		bolaNoClienteDesde = bolaNoClienteDesde or tick()
+	else
+		bolaNoClienteDesde = nil
+	end
+	return ok
+end
+
+local function bolaEstaNoCliente(player)
+	if not Config.BOLA_NOS_PES_LIGADO or not player or ball.Anchored then return false end
+	local ok, dono = pcall(function() return ball:GetNetworkOwner() end)
+	return ok and dono == player
+end
+
 local function setOwner(player)
 	local previousOwner = owner
 	owner = player
+	bolaNoClienteDesde = nil
+	if tick() >= bolaRetomadaAte then definirDonoDeRede(player) end
 	if player then
 		pushToucher(player)
 		lastReceiveTime[player] = tick()
@@ -838,11 +1036,15 @@ end
 
 local function releaseOwner()
 	if owner then
+		-- ⚠️ v105: largou a bola — sai das mãos do goleiro
+		owner:SetAttribute("BolaNaMao", nil)
+		if owner.Character then owner.Character:SetAttribute("BolaNaMao", nil) end
 		Remotes.PossessionChanged:FireAllClients(owner, false)
 		if dribbleMoves[owner] then setIframeGlow(owner, false) end
 		dribbleMoves[owner] = nil
 	end
 	owner = nil
+	definirDonoDeRede(nil) -- ⚠️ v104: sem posse, a bola volta a ser do servidor NA HORA (o chute sai daqui)
 end
 
 -- ===== GRAVIDADE E FÍSICA DA BOLA =====
@@ -926,9 +1128,25 @@ local pulseFlightLastDisplayed = nil
 -- precisa resetar essa variável a cada chute nova, e só enxerga locals já
 -- declarados ANTES dele no arquivo.
 local lastPulseForceDebugPrintAtTraveled = 0
+-- ⚠️ v94: direção do voo reto, anotada no 1º quadro do voo (ver o Heartbeat
+-- "Até a bola parar" mais abaixo, que encerra o voo se a bola for REBATIDA).
+local pulseFlightDirecao = nil
+-- ⚠️ v103: módulo da velocidade do voo, anotado junto com a direção (ver o
+-- Heartbeat "Até a bola parar") — o voo MANTÉM essa velocidade até a força
+-- (a vida da bola) chegar a 0.
+local pulseFlightVelocidade = nil
+
+-- ⚠️ v103: o número da vida da bola entra em cada amostra do replay
+replayExtras.Forca = function()
+	if not pulseForceGui.Enabled then return nil end
+	local c = pulseForceLabel.TextColor3
+	return { txt = pulseForceLabel.Text, r = c.R, g = c.G, b = c.B }
+end
 
 local function startPulseStraightFlight(force)
 	pulseStraightFlightActive = true
+	pulseFlightDirecao = nil
+	pulseFlightVelocidade = nil
 	pulseForceLabel.Text = tostring(math.floor(force))
 	pulseForceGui.Enabled = true
 	pulseFlightStartPos = ball.Position
@@ -980,6 +1198,13 @@ end
 
 -- Chamado quando a bola ATRAVESSA a guarda, com a vida que sobrou.
 local function resumePulseFlightAfterGuard(forcaRestante)
+	-- v110: sem o alcance da raridade guardado o laço de decaimento não roda e a
+	-- bola seguia reta com a força constante pra sempre (log do usuário: "PASSOU
+	-- 173" e ela nunca mais perdeu força). Recupera do último chute de Pulso.
+	if not pulseGuardSavedMaxRange then
+		local info = _G.GetLastPulseShotInfo and _G.GetLastPulseShotInfo()
+		pulseGuardSavedMaxRange = (info and info.Rarity and Config.PULSE_RARITY_MAX_RANGE[info.Rarity]) or 250
+	end
 	local velocidade = pulseGuardSavedVelocity
 	pulseGuardSavedVelocity = nil
 	if not velocidade or velocidade.Magnitude < 0.01 then return false end
@@ -996,6 +1221,8 @@ local function resumePulseFlightAfterGuard(forcaRestante)
 	pulseFlightBaseForce = forcaRestante
 	pulseFlightMaxRange = pulseGuardSavedMaxRange
 	pulseGuardSavedMaxRange = nil
+	pulseFlightDirecao = velocidade.Unit -- ⚠️ v110: segue na mesma reta travada
+	pulseFlightVelocidade = velocidade.Magnitude
 	return true
 end
 
@@ -1090,6 +1317,61 @@ local function beginGuardForceDrain(forcaInicial, physical)
 	end
 end
 
+-- ⚠️ v103 — DUELO DE DEFESA (substitui a drenagem contínua acima nos dois
+-- goleiros). PEDIDO: "o GK ao defender SUGA a vida da bola antes de fazer o
+-- QTE... o que vai começar a dar dano é quantas vezes o defensor ou GK
+-- acertarem a hissatsu deles". Na colisão a força CONGELA (o decaimento por
+-- distância para porque o voo reto é encerrado) e só cai por ACERTO — cada
+-- acerto tira um valor fixo (Config.DEFESA_DANO_POR_ACERTO) e o número pisca
+-- na hora. No fim: força 0 = defendeu; sobrou = a bola retoma o voo com o que
+-- sobrou e o decaimento por distância volta (resumePulseFlightAfterGuard).
+local function iniciarDueloDeDefesa(forcaInicial)
+	guardDrainGeneration += 1 -- encerra qualquer drenagem antiga pendurada
+	local geracao = guardDrainGeneration
+	local atual = math.max(forcaInicial or 0, 0)
+	pulseForceGui.Enabled = true
+	pulseForceLabel.TextColor3 = Config.PULSE_GUARD_DRAIN_COLOR
+	pulseForceLabel.Text = tostring(math.floor(atual))
+
+	local duelo = {}
+	function duelo.Atual() return atual end
+	function duelo.Dano(valor)
+		if guardDrainGeneration ~= geracao then return atual end
+		atual = math.max(atual - math.max(valor or 0, 0), 0)
+		pulseForceLabel.Text = tostring(math.floor(atual))
+		-- pisca branco no acerto
+		pulseForceLabel.TextColor3 = Color3.new(1, 1, 1)
+		task.delay(0.12, function()
+			if guardDrainGeneration == geracao then
+				pulseForceLabel.TextColor3 = Config.PULSE_GUARD_DRAIN_COLOR
+			end
+		end)
+		if Config.PULSE_FORCE_DEBUG_PRINTS then
+			print(string.format("🧤 [Duelo] acerto da defesa: -%d -> força %d", math.floor(valor or 0), math.floor(atual)))
+		end
+		return atual
+	end
+	function duelo.Encerrar(defendeu)
+		if guardDrainGeneration ~= geracao then return atual end
+		guardDrainGeneration += 1
+		local minhaGeracao = guardDrainGeneration
+		if defendeu then atual = 0 end
+		pulseForceLabel.Text = tostring(math.floor(atual))
+		pulseForceLabel.TextColor3 = PULSE_FORCE_COLOR_NORMAL
+		if Config.PULSE_FORCE_DEBUG_PRINTS then
+			print(string.format("🧤 [Duelo] fim: força %d -> %d (%s)", math.floor(forcaInicial or 0), math.floor(atual), defendeu and "DEFENDEU" or "PASSOU"))
+		end
+		task.delay(Config.PULSE_GUARD_DRAIN_LINGER_SECONDS, function()
+			if guardDrainGeneration == minhaGeracao and not pulseStraightFlightActive then
+				pulseForceGui.Enabled = false
+			end
+		end)
+		return atual
+	end
+	return duelo
+end
+_G.IniciarDueloDeDefesa = iniciarDueloDeDefesa
+
 -- Exposto pro GKBotController usar a MESMA drenagem do goleiro humano —
 -- sem isso o bot teria que duplicar o BillboardGui da bola, que vive aqui.
 -- `_G.GetPulseLiveForce` entrega o número que está na tela nesse instante
@@ -1107,12 +1389,133 @@ _G.ResumePulseFlightAfterGuard = resumePulseFlightAfterGuard
 -- zero (fricção de rolagem normal quando encosta no chão) OU alguém
 -- ganhar posse da bola (dribble assume o controle da velocidade dali pra
 -- frente, não faz sentido continuar sem gravidade).
+--
+-- ⚠️ v94 — PEDIDO: "eu mirei no meio do gol, e a bola subiu pro travessão".
+-- Medido: a Hissatsu entrou EXATAMENTE onde foi mirada (meio do gol), bateu
+-- na rede do fundo e foi rebatida pra cima — e, como o voo reto continuava
+-- ligado (sem gravidade), ela SUBIU por cima do travessão e ainda atravessou
+-- o campo inteiro flutuando. O voo reto é a trajetória DO CHUTE; depois que a
+-- bola é rebatida (rede, trave, defesa, corpo), ela não está mais nessa
+-- trajetória. Então: se a direção mudar bruscamente (mais de ~60° em relação
+-- à direção do chute), o voo acaba e a gravidade volta. A curva do chute
+-- desvia só alguns graus, então não dispara isso.
+-- ⚠️ v103 — PEDIDO (com o log: "força ao vivo 104" aos 105 studs e a bola
+-- PAROU): "a força pode estar em 104, mas a bola simplesmente parou aí — ela
+-- precisa prosseguir até a força chegar a 0". A Hissatsu rasteira encostava
+-- no gramado e a frenagem de rolagem (e o atrito) matavam a VELOCIDADE com a
+-- vida ainda alta. Agora, durante o voo, a velocidade do chute é MANTIDA
+-- (mesmo módulo, na direção atual) e quem encerra o voo é a força zerar (ver
+-- o Heartbeat da força ao vivo), a posse, ou a bola ser rebatida.
+-- ⚠️ v105 — "se você chutar com uma Hissatsu pra fora, se por algum motivo a
+-- bola for pra fora, ela perde totalmente a força". Limites do campo (a
+-- hitbox) e as caixas dos gols (a boca do gol NÃO é "fora").
+do -- ⚠️ v105: bloco próprio (o script bateu o limite de 200 locais no topo)
+local campoVoo = workspace:FindFirstChild(Config.FIELD_HITBOX_NAME)
+local golsVoo = {}
+for _, d in ipairs(workspace:GetDescendants()) do
+	if d:IsA("BasePart") and d:GetAttribute("ScoringTeam") then table.insert(golsVoo, d) end
+end
+local function foraDoCampoNoVoo()
+	if not campoVoo or not campoVoo:IsA("BasePart") then return false end
+	local rel = campoVoo.CFrame:PointToObjectSpace(ball.Position)
+	if math.abs(rel.X) <= campoVoo.Size.X / 2 + 1 and math.abs(rel.Z) <= campoVoo.Size.Z / 2 + 1 then
+		return false
+	end
+	for _, gol in ipairs(golsVoo) do
+		local rg = gol.CFrame:PointToObjectSpace(ball.Position)
+		if math.abs(rg.X) <= gol.Size.X / 2 + 8 and math.abs(rg.Y) <= gol.Size.Y / 2 + 3 and math.abs(rg.Z) <= gol.Size.Z / 2 + 3 then
+			return false -- entrando no gol
+		end
+	end
+	return true
+end
+local pulseFlightDirAnterior = nil
+
 RunService.Heartbeat:Connect(function()
-	if not pulseStraightFlightActive then return end
-	if owner ~= nil or ball.AssemblyLinearVelocity.Magnitude < 2 then
+	if not pulseStraightFlightActive then pulseFlightDirAnterior = nil return end
+	if ball.Anchored then return end
+	local velocidade = ball.AssemblyLinearVelocity
+	if owner ~= nil then
 		stopPulseStraightFlight()
+		return
+	end
+	-- ⚠️ v105: saiu do campo = perde TODA a força (acaba o voo e a bola morre)
+	if foraDoCampoNoVoo() then
+		stopPulseStraightFlight()
+		ball.AssemblyLinearVelocity = velocidade * 0.15
+		pulseFlightDirAnterior = nil
+		return
+	end
+	if not pulseFlightDirecao then
+		if velocidade.Magnitude > 5 then
+			pulseFlightDirecao = velocidade.Unit
+			pulseFlightVelocidade = velocidade.Magnitude
+		elseif velocidade.Magnitude < 2 then
+			stopPulseStraightFlight()
+		end
+		return
+	end
+	-- ⚠️ v110 — MIRA TRAVADA. PEDIDO: "algumas Hissatsus de chute estão
+	-- desobedecendo e não vão pro exato local onde eu mirei. Cria um ponto
+	-- invisível na maior extremidade e a bola tem que ir até lá; traça o caminho
+	-- até esse ponto e a bola NÃO PODE, de jeito nenhum, trocar de trajetória, a
+	-- não ser que perca força — ou uma Hissatsu seja usada pra isso. Ela vai
+	-- seguir até aquele ponto até a morte dela."
+	-- A reta sai do ponto do chute (pulseFlightStartPos) na direção EXATA do
+	-- ponto mirado (pulseFlightDirecao, travada no chute) e vai até o fim do
+	-- alcance. Todo quadro a bola é recolocada NA reta, com a mesma velocidade —
+	-- gramado, corpo, trave, curva, nada a tira dali. O voo só acaba quando a
+	-- força zera (Heartbeat da força ao vivo), alguém domina, ela sai do campo ou
+	-- uma defesa de Hissatsu segura (a bola fica ancorada no duelo). Se a reta
+	-- entrar no gramado, a bola segue rente ao chão, na mesma direção.
+	do
+		local origem = pulseFlightStartPos or ball.Position
+		local rapidez = pulseFlightVelocidade or velocidade.Magnitude
+		local percorrido = math.max((ball.Position - origem):Dot(pulseFlightDirecao), 0)
+		local naReta = origem + pulseFlightDirecao * percorrido
+		local dir = pulseFlightDirecao
+		local raio = ball.Size.Y / 2
+		local params = RaycastParams.new()
+		params.FilterType = Enum.RaycastFilterType.Exclude
+		params.RespectCanCollide = true
+		local ignorar = { ball }
+		for _, plr in ipairs(Players:GetPlayers()) do if plr.Character then table.insert(ignorar, plr.Character) end end
+		params.FilterDescendantsInstances = ignorar
+		local chao = workspace:Raycast(naReta + Vector3.new(0, 30, 0), Vector3.new(0, -60, 0), params)
+		if chao and naReta.Y < chao.Position.Y + raio then
+			naReta = Vector3.new(naReta.X, chao.Position.Y + raio, naReta.Z)
+			local plano = Vector3.new(dir.X, 0, dir.Z)
+			dir = plano.Magnitude > 0.05 and plano.Unit or dir
+		end
+		if (ball.Position - naReta).Magnitude > 0.05 then
+			ball.CFrame = CFrame.new(naReta) * ball.CFrame.Rotation
+		end
+		ball.AssemblyLinearVelocity = dir * rapidez
+		pulseFlightDirAnterior = dir
+		return
+	end
+	-- ⚠️ v105: desvio BRUSCO num quadro só (tapa, corpo, trave) = rebatida —
+	-- acaba o voo e a bola perde a velocidade do chute. Antes só um desvio de
+	-- mais de 60° encerrava; um tapa de lado menor que isso seguia com a
+	-- velocidade da Hissatsu mantida na direção nova, e ia embora pra fora.
+	-- A curva do chute muda a direção devagar (poucos graus por segundo).
+	if pulseFlightDirAnterior and velocidade.Magnitude > 1
+		and velocidade.Unit:Dot(pulseFlightDirAnterior) < math.cos(math.rad(15)) then
+		stopPulseStraightFlight()
+		ball.AssemblyLinearVelocity = velocidade * 0.5
+		pulseFlightDirAnterior = nil
+		return
+	end
+	if velocidade.Magnitude > 1 then pulseFlightDirAnterior = velocidade.Unit end
+	if velocidade.Magnitude < 0.5 or velocidade.Unit:Dot(pulseFlightDirecao) < 0.5 then
+		stopPulseStraightFlight()
+		return
+	end
+	if pulseFlightVelocidade and velocidade.Magnitude < pulseFlightVelocidade * 0.98 then
+		ball.AssemblyLinearVelocity = velocidade.Unit * pulseFlightVelocidade
 	end
 end)
+end -- do (v105)
 
 -- Centro do campo, achado uma vez. Usado pelo resgate da bola logo abaixo.
 -- Vem da hitbox do campo (a mesma que o resto do jogo usa pra saber onde o
@@ -1177,6 +1580,31 @@ local function resgatarBola(motivo)
 	end
 end
 
+-- ⚠️ v87 — BOLA COM POSIÇÃO/VELOCIDADE INVÁLIDA (NaN). Num teste a bola
+-- apareceu "a nan studs do centro" e, mesmo resgatada, sumiu do jogo: um
+-- valor NaN na física faz o Roblox descartar a peça. Isso é checado TODO
+-- quadro (sem a trava de 1s do resgate normal), antes de qualquer outra
+-- coisa, e deixa a bola num estado limpo: voo de Hissatsu desligado, sem
+-- âncora, sem velocidade, no centro. O aviso mostra o estado pra dar pra
+-- achar a origem se acontecer de novo.
+local function temNaN(v)
+	return v.X ~= v.X or v.Y ~= v.Y or v.Z ~= v.Z
+end
+
+RunService.Heartbeat:Connect(function()
+	if not campoCentro or not ball.Parent then return end
+	local posicao, velocidade, giro = ball.Position, ball.AssemblyLinearVelocity, ball.AssemblyAngularVelocity
+	if not (temNaN(posicao) or temNaN(velocidade) or temNaN(giro)) then return end
+	warn(string.format("⚽ [Resgate] bola com valor inválido (pos=%s vel=%s giro=%s anchored=%s voo de Hissatsu=%s) — limpando.",
+		tostring(posicao), tostring(velocidade), tostring(giro), tostring(ball.Anchored), tostring(pulseStraightFlightActive)))
+	stopPulseStraightFlight()
+	ball.Anchored = false
+	ultimoResgateDaBola = tick()
+	if _G.ResetBallState then
+		_G.ResetBallState(campoCentro + Vector3.new(0, Config.BALL_RESCUE_SPAWN_HEIGHT, 0))
+	end
+end)
+
 RunService.Heartbeat:Connect(function()
 	if not campoCentro then return end
 	if tick() - ultimoResgateDaBola < 1 then return end -- evita resgatar duas vezes seguidas
@@ -1199,7 +1627,17 @@ RunService.Heartbeat:Connect(function()
 		gravityForce.Force = Vector3.new(0, 0, 0)
 		return
 	end
-	gravityForce.Force = Vector3.new(0, ball.AssemblyMass * workspace.Gravity * liftFraction, 0)
+	-- ⚠️ v110 — CAUSA DA BOLA QUE SUMIA (achada na bateria da noite, gravando a
+	-- bola quadro a quadro): com a bola ANCORADA (mão do goleiro, QTE, duelo de
+	-- defesa) o AssemblyMass é INFINITO — a força virava infinita e, no quadro
+	-- em que a bola era solta (arremesso do goleiro!), a física mandava ela pra
+	-- Y = inf e o Roblox APAGAVA a bola do jogo. Usa a massa da própria peça
+	-- (sempre finita) e zera a força enquanto ancorada.
+	if ball.Anchored then
+		gravityForce.Force = Vector3.zero
+		return
+	end
+	gravityForce.Force = Vector3.new(0, ball:GetMass() * workspace.Gravity * liftFraction, 0)
 end)
 
 -- "Encostada no chão?" via raycast curto pra baixo — usado tanto pra
@@ -1232,12 +1670,36 @@ end
 -- velocidade: normal (rolagem de verdade) e "rápida" acima de
 -- BALL_ROLLING_MAX_SPEED (chute forte ainda deslizando no chão) — só
 -- mexe na horizontal, nunca no ar, pra não atrapalhar arco/quicada.
+-- ⚠️ v97 — FÍSICA ARCADE. PEDIDO: "a bola está como uma bola de vida real...
+-- às vezes erra pra um lado, vai pra trás, desliza demais, desvia do caminho
+-- — quando ela está rotacionando e você acerta ela no chão, ela vai pra
+-- direção que estava rotacionando. Não é pra ser assim. Aonde você estiver
+-- mirando, clicou, é pra ser perfeito."
+--
+-- A CAUSA: o giro. A bola guardava qualquer rotação que ganhasse (do
+-- drible, de um quique, de um corpo) e, quando encostava no chão, o atrito
+-- convertia esse giro em movimento — daí o desvio "pra direção que estava
+-- rotacionando", e às vezes pra trás (giro contrário ao movimento).
+-- O CONSERTO: o giro deixa de ser livre. A cada quadro ele é exatamente o
+-- de "rolar pra frente" na direção em que a bola anda (ω = cima × v / raio):
+-- no chão isso é rolar sem escorregar (o atrito não tem o que converter), e
+-- no ar a bola já chega girando certo — não sobra efeito nenhum pra desviar.
+-- A curva de propósito (que era aplicada direto na velocidade) já foi tirada
+-- dos chutes; o giro visual continua existindo, só que sempre coerente.
 RunService.Heartbeat:Connect(function(dt)
 	if owner then return end -- bola com dono: quem controla é o dribble/posse, não isso aqui
-	if not isBallGrounded() then return end
+	if ball.Anchored then return end
 
-	local angular = ball.AssemblyAngularVelocity
-	ball.AssemblyAngularVelocity = angular * (Config.BALL_ANGULAR_DAMPING_PER_SECOND ^ dt)
+	local raio = ball.Size.Y / 2
+	local vel = ball.AssemblyLinearVelocity
+	local horizontalGiro = Vector3.new(vel.X, 0, vel.Z)
+	if raio > 0 then
+		ball.AssemblyAngularVelocity = Vector3.yAxis:Cross(horizontalGiro) / raio
+	end
+
+	if not isBallGrounded() then return end
+	-- ⚠️ v103: Hissatsu em voo não freia (ela vai até a força zerar)
+	if pulseStraightFlightActive then return end
 
 	local velocity = ball.AssemblyLinearVelocity
 	local horizontal = Vector3.new(velocity.X, 0, velocity.Z)
@@ -1247,6 +1709,8 @@ RunService.Heartbeat:Connect(function(dt)
 	local decelRate = (speed > Config.BALL_ROLLING_MAX_SPEED)
 		and Config.BALL_ROLLING_FAST_DECELERATION
 		or Config.BALL_ROLLING_DECELERATION
+	-- ⚠️ v103: + frenagem proporcional à velocidade (bola longa desliza menos)
+	decelRate += (Config.BALL_ROLLING_ARRASTO or 0) * speed
 	local newSpeed = math.max(0, speed - decelRate * dt)
 	local newHorizontal = (newSpeed > 0) and (horizontal.Unit * newSpeed) or Vector3.new(0, 0, 0)
 	ball.AssemblyLinearVelocity = Vector3.new(newHorizontal.X, velocity.Y, newHorizontal.Z)
@@ -1258,6 +1722,7 @@ local preStunWalkSpeed = {}
 
 local function stunPlayer(player, duration)
 	if not duration or duration <= 0 then return end
+	if _G.GetInstinctStunMult then duration *= _G.GetInstinctStunMult(player) end -- ⚠️ v111: Defesa Zumbi
 	local _, _, humanoid = getCharacterParts(player)
 	if not humanoid then return end
 
@@ -1537,9 +2002,20 @@ end
 
 -- ⚠️ NOVO: TÉCNICA (0-100, bruto) — domínio, primeiro toque, recepção,
 -- bola difícil e precisão de passe (ver Config.TECHNIQUE_ATTRIBUTE).
+-- ⚠️ v98 — TÉCNICA REMOVIDA. PEDIDO: "verifica se realmente é algo bom de se
+-- manter, senão remove a técnica... os buffs pelos atributos: drible buffa
+-- drible, físico buffa físico e defesa". Avaliação: precisão de passe não
+-- existe mais (mira perfeita por projeto, desvio 0) e o resto dela —
+-- domínio, primeiro toque, recepção, bola difícil — é CONTROLE DE BOLA, que
+-- é o Drible. Então o que lia Técnica agora lê o DRIBLE (nome da função
+-- mantido pra não mexer nos lugares que chamam). Config.USAR_TECNICA = true
+-- volta ao atributo antigo.
 local function getTechnique(player)
-	local value = player:GetAttribute(Config.TECHNIQUE_ATTRIBUTE)
-	if typeof(value) ~= "number" then value = Config.DEFAULT_TECHNIQUE end
+	local atributo = Config.USAR_TECNICA and Config.TECHNIQUE_ATTRIBUTE or Config.DRIBBLE_SKILL_ATTRIBUTE
+	local value = player:GetAttribute(atributo)
+	if typeof(value) ~= "number" then
+		value = Config.USAR_TECNICA and Config.DEFAULT_TECHNIQUE or Config.DEFAULT_DRIBBLE_SKILL
+	end
 	return math.clamp(value, 0, 100)
 end
 
@@ -1596,6 +2072,7 @@ local function checkLivePulseBlockInterception()
 			pulseFlightExternalMult = 0.15
 			pulseFlightBlockApplied = true
 			ball.AssemblyLinearVelocity = ball.AssemblyLinearVelocity * 0.15
+			if pulseFlightVelocidade then pulseFlightVelocidade *= 0.15 end
 			if Config.PULSE_FORCE_DEBUG_PRINTS then
 				print(string.format(
 					"🧱 [Pulso] Muralha de %s interceptou o chute de %s em pleno voo — força ao vivo cortada para 15%%",
@@ -1630,7 +2107,11 @@ RunService.Heartbeat:Connect(function()
 	-- diminui". Isso nunca depende da velocidade real (imune à curva) e
 	-- SEMPRE tem os `maxRange` studs inteiros de queda visível pela
 	-- frente, tirando qualquer chance dele subir de volta.
-	local liveFactor = getPulseRangeFactor(traveled, pulseFlightMaxRange)
+	-- ⚠️ v103: a força ao vivo não trava mais no mínimo da raridade — ela
+	-- continua caindo NO MESMO RITMO até 0 (é a vida da bola), e quando zera
+	-- o voo acaba: a gravidade e o atrito voltam e a bola cai/rola normal.
+	local ritmoPorStud = (1 - Config.PULSE_RANGE_FALLOFF_MIN) / pulseFlightMaxRange
+	local liveFactor = math.max(0, 1 - traveled * ritmoPorStud)
 	local liveForce = pulseFlightBaseForce * liveFactor * pulseFlightExternalMult
 
 	-- Trava extra (ratchet): NUNCA deixa o número exibido subir em cima do
@@ -1654,6 +2135,9 @@ RunService.Heartbeat:Connect(function()
 		))
 	end
 	pulseForceLabel.Text = tostring(math.floor(math.max(liveForce, 0)))
+	if liveForce <= 0 then
+		stopPulseStraightFlight()
+	end
 end)
 
 -- Nota de força do chute "perigoso" ATUAL — 0 (sempre pegável) se não
@@ -1872,6 +2356,7 @@ end
 -- do cone de visão de quem poderia te marcar. É o oposto do
 -- forwardOpponentDistance acima (lá o cone é o SEU, aqui é o DELES).
 local function isUnseenByOpponents(player, root)
+	if player.Character and (player.Character:GetAttribute("FurtivoAte") or 0) > workspace:GetServerTimeNow() then return true end -- ⚠️ v111: Passo Furtivo (Sumir)
 	for _, plr in ipairs(Players:GetPlayers()) do
 		if plr == player or not areOpponents(player, plr) then continue end
 		local _, oRoot = getCharacterParts(plr)
@@ -1994,6 +2479,15 @@ _G.GetInstinctFieldContext = function(player)
 		TeamPassChain = teamPassChain[teamName] or 0,
 		SecondsInPossession = (owner == player and possessionSince[player])
 			and (tick() - possessionSince[player]) or 0,
+		-- ⚠️ v110 (Armas novas): dentro da PRÓPRIA área (Saída Rápida, Sexto
+		-- Sentido...) e a distância até o ADVERSÁRIO que está com a bola
+		-- (Marcação Cerrada, Defesa Zumbi, Desarme Relâmpago...)
+		InOwnArea = GKAreaUtil.IsPositionInArea(teamName, root.Position, true),
+		CarrierDistance = (function()
+			if not owner or owner == player or not areOpponents(player, owner) then return math.huge end
+			local _, oRoot = getCharacterParts(owner)
+			return oRoot and (oRoot.Position - root.Position).Magnitude or math.huge
+		end)(),
 	}
 end
 
@@ -2028,6 +2522,10 @@ end
 -- de [-degrees, degrees] em volta do eixo vertical — o desvio de mira de
 -- verdade.
 local function applyAimDeviation(direction, degrees)
+	-- ⚠️ v103 — PEDIDO: "Não é pra existir desvio aleatório em nenhum chute."
+	-- Desligado de vez (Config.DESVIO_ALEATORIO_LIGADO = true religa): TODO
+	-- chute, passe, Instinto e Hissatsu vai exatamente pra onde foi mirado.
+	if not Config.DESVIO_ALEATORIO_LIGADO then return direction end
 	if not degrees or degrees <= 0 then return direction end
 	local randomDegrees = (math.random() * 2 - 1) * degrees
 	local rotation = CFrame.fromAxisAngle(Vector3.yAxis, math.rad(randomDegrees))
@@ -2077,33 +2575,60 @@ RunService.Heartbeat:Connect(function(dt)
 	-- de pickup logo abaixo, onde esse sistema foi removido.
 	ownerExposed[owner] = looseAmount > Config.DRIBBLE_EXPOSE_THRESHOLD
 
+	-- ⚠️ v104: bola nos pés — o cliente do dono é quem posiciona a bola.
+	-- Aqui só: (1) entregar a rede se ainda não entregou (ela volta pro
+	-- servidor sozinha quando a bola é ancorada, por exemplo); (2) conferir
+	-- que a bola está mesmo perto dele — se não estiver, o servidor retoma
+	-- por meio segundo e a puxa de volta com a perseguição antiga.
+	if Config.BOLA_NOS_PES_LIGADO and dribbleMoves[owner] and tick() >= dribbleMoves[owner].expiresAt then
+		dribbleMoves[owner] = nil
+		setIframeGlow(owner, false)
+	end
+	if Config.BOLA_NOS_PES_LIGADO and tick() >= bolaRetomadaAte then
+		if bolaEstaNoCliente(owner) then
+			local longe = (ball.Position - root.Position).Magnitude > Config.BOLA_NOS_PES_DIST_MAX
+			-- (a conferência só vale depois de 1s com a rede: a bola leva um
+			-- instante pra chegar do servidor até o cliente e ser colada nos pés)
+			if longe and bolaNoClienteDesde and tick() - bolaNoClienteDesde > 1 then
+				bolaRetomadaAte = tick() + 0.5
+				definirDonoDeRede(nil)
+			else
+				return
+			end
+		elseif not ball.Anchored then
+			definirDonoDeRede(owner)
+		end
+	end
+
+	-- ⚠️ v105 — "coloca pra bola ficar na mão do GK": goleiro dentro da
+	-- própria área segura a bola nas mãos (BolaNosPes/AnimadorProcedural leem
+	-- esse atributo no personagem)
+	local naMao = GKAreaUtil.IsEffectiveGK(owner)
+	if owner:GetAttribute("BolaNaMao") ~= naMao then owner:SetAttribute("BolaNaMao", naMao) end
+	if character:GetAttribute("BolaNaMao") ~= naMao then
+		character:SetAttribute("BolaNaMao", naMao)
+		if naMao then avisarAcao(character, "Agarrar", 0.4) end -- v110: animação de agarrar
+	end
+
 	local activeMove = dribbleMoves[owner]
 	local targetPosition
 	if activeMove then
 		if tick() < activeMove.expiresAt then
-			targetPosition = activeMove.targetPosition + Vector3.new(0, Config.DRIBBLE_HEIGHT_OFFSET, 0)
-
-			-- Desloca o PERSONAGEM diretamente via CFrame, terminando
-			-- exatamente no mesmo instante em que a janela da finta acaba
-			-- — sincronizado com a bola por construção. Usa uma curva de
-			-- easing (ease-out cúbica) em vez de linear: começa rápido,
-			-- parecido com o embalo que o jogador já trazia (corrida/
-			-- sprint), e desacelera suave até o ponto final, em vez de
-			-- trocar de velocidade/direção de golpe no instante em que a
-			-- finta dispara.
+			-- ⚠️ v86: o personagem NÃO é mais preso aqui — quem o desloca é
+			-- o cliente, somando a finta ao andar (ver sendDisplacement). A
+			-- bola vai pra onde a finta termina A PARTIR de onde o jogador
+			-- está agora: posição atual + o que ainda falta do deslocamento
+			-- (mesma curva ease-out cúbica que o cliente usa). Assim, se ele
+			-- continuar andando durante a finta, a bola acompanha.
 			local totalDuration = activeMove.expiresAt - activeMove.triggeredAt
 			local alpha = totalDuration > 0
 				and math.clamp((tick() - activeMove.triggeredAt) / totalDuration, 0, 1)
 				or 1
 			local easedAlpha = 1 - (1 - alpha) ^ 3
-
-			local newPosition = activeMove.startPosition:Lerp(activeMove.endPosition, easedAlpha)
-			root.CFrame = root.CFrame.Rotation + newPosition
-			root.AssemblyLinearVelocity = Vector3.new(0, root.AssemblyLinearVelocity.Y, 0)
-			root.AssemblyAngularVelocity = Vector3.zero
-			if humanoid then
-				humanoid:Move(Vector3.zero, false)
-			end
+			local offset = activeMove.offset or (activeMove.endPosition - activeMove.startPosition)
+			local restante = offset * (1 - easedAlpha)
+			targetPosition = Vector3.new(root.Position.X + restante.X, activeMove.targetPosition.Y, root.Position.Z + restante.Z)
+				+ Vector3.new(0, Config.DRIBBLE_HEIGHT_OFFSET, 0)
 		else
 			dribbleMoves[owner] = nil
 			setIframeGlow(owner, false)
@@ -2119,6 +2644,9 @@ RunService.Heartbeat:Connect(function(dt)
 			+ facing * (Config.DRIBBLE_OFFSET + looseAmount)
 			+ rightVector * bobPhase
 			+ Vector3.new(0, Config.DRIBBLE_HEIGHT_OFFSET, 0)
+		if naMao then
+			targetPosition = root.Position + root.CFrame.LookVector * 1.45 + Vector3.new(0, 0.35, 0) -- ⚠️ v105: nas mãos
+		end
 	end
 
 	local rootVelocity = root.AssemblyLinearVelocity
@@ -2244,11 +2772,10 @@ RunService.Heartbeat:Connect(function()
 
 		local radius = Config.POSSESSION_PICKUP_RADIUS * Config.AttributeCurve(technique, Config.TECHNIQUE_PICKUP_RADIUS_MULT_MIN, Config.TECHNIQUE_PICKUP_RADIUS_MULT_MAX)
 		if _G.GetPulsePickupRadiusAdd then radius += _G.GetPulsePickupRadiusAdd(plr) end
-		if _G.CheckInstinct then
-			local opponentDistance = nearestOpponentDistance(plr)
-			local effect = _G.CheckInstinct(plr, "Instant", { OpponentDistance = opponentDistance })
-			if effect and effect.PickupRadiusAdd then radius += effect.PickupRadiusAdd end
-		end
+		-- ⚠️ v111: era _G.CheckInstinct(plr, "Instant") a cada quadro de bola
+		-- solta — piscava o HUD, acendia a aura e enchia o medidor do Flow sem
+		-- parar. Agora só soma o alcance das Armas contínuas já ligadas.
+		if _G.GetInstinctPickupRadiusAdd then radius += _G.GetInstinctPickupRadiusAdd(plr) end
 
 		-- PEDIDO: bola passando por CIMA de alguém LENTO (andando, não
 		-- sprintando) fica mais fácil de dominar — decompõe a distância em
@@ -2453,6 +2980,22 @@ local DIVE_DISTANCE_BY_DIRECTION = {
 }
 
 local function startGKMove(player, root, direction, distance, duration, targetPlayer)
+	-- v110 — PEDIDO: "o dive do GK está atravessando a parede, só pode atravessar
+	-- a hitbox do gol". Corta a distância antes de qualquer coisa SÓLIDA no
+	-- caminho (a hitbox do gol não colide, então continua atravessável).
+	if direction.Magnitude > 0.01 and distance > 0 then
+		local params = RaycastParams.new()
+		params.FilterType = Enum.RaycastFilterType.Exclude
+		params.RespectCanCollide = true
+		local ignorar = { ball }
+		for _, p in ipairs(Players:GetPlayers()) do if p.Character then table.insert(ignorar, p.Character) end end
+		for _, m in ipairs(workspace:GetChildren()) do
+			if m:IsA("Model") and m:FindFirstChildOfClass("Humanoid") then table.insert(ignorar, m) end
+		end
+		params.FilterDescendantsInstances = ignorar
+		local hit = workspace:Raycast(root.Position, direction.Unit * (distance + 2), params)
+		if hit then distance = math.max(0, (hit.Position - root.Position).Magnitude - 2.5) end
+	end
 	local dash = {
 		startPosition = root.Position,
 		endPosition = root.Position + direction * distance,
@@ -2467,11 +3010,17 @@ local function startGKMove(player, root, direction, distance, duration, targetPl
 end
 
 Remotes.AttemptGKDive.OnServerEvent:Connect(function(player, direction)
+	if _G.HissatsuCutsceneActive then return end -- ⚠️ v87: ninguém age durante a cutscene de Hissatsu
 	if not GKAreaUtil.IsEffectiveGK(player) then return end -- só funciona goleiro DENTRO da própria área
 	if isStunned(player) then return end
 	if gkActionCooldowns[player] and tick() < gkActionCooldowns[player] then return end
 	local vectorFn = typeof(direction) == "string" and DIVE_DIRECTION_VECTOR[direction]
 	if not vectorFn then return end
+	-- ⚠️ v105 — PEDIDO: "pode remover o dive diagonal (pula pra cima e pra
+	-- direita/esquerda) — só o GK bot pode fazer isso" e "pra cima, não: ele
+	-- pula alto". O goleiro humano só mergulha pro LADO (no chão ou no ar,
+	-- depois do pulo alto — ver Config.GK_PULO_ALTURA / GKInput).
+	if direction ~= "Left" and direction ~= "Right" then return end
 
 	local _, root = getCharacterParts(player)
 	if not root then return end
@@ -2502,10 +3051,13 @@ Remotes.AttemptGKDive.OnServerEvent:Connect(function(player, direction)
 	setIframeGlow(player, true) -- janela ativa do mergulho: brilho branco
 	playAnimation(player, gkDiveAnimationFor(direction), Enum.AnimationPriority.Action2, nil, true) -- ⚠️ v65: animação de mergulho de verdade, uma por direção (antes reaproveitava a finta de drible)
 	local diveDistance = DIVE_DISTANCE_BY_DIRECTION[direction] or Config.GK_DIVE_DISTANCE
+	-- ⚠️ v110 (Armas de goleiro: Mergulho Longo, Corpo Elástico, Muralha Divina)
+	if instEffect and instEffect.DiveDistanceMult then diveDistance *= instEffect.DiveDistanceMult end
 	startGKMove(player, root, vectorFn(root), diveDistance, Config.GK_DIVE_DURATION, nil)
 end)
 
 Remotes.AttemptGKForward.OnServerEvent:Connect(function(player)
+	if _G.HissatsuCutsceneActive then return end -- ⚠️ v87: ninguém age durante a cutscene de Hissatsu
 	if not GKAreaUtil.IsEffectiveGK(player) then return end -- só funciona goleiro DENTRO da própria área
 	if isStunned(player) then return end
 	if gkActionCooldowns[player] and tick() < gkActionCooldowns[player] then return end
@@ -2664,6 +3216,34 @@ RunService.Heartbeat:Connect(function()
 	end
 end)
 
+-- ⚠️ v105 — HITBOX DO GOLEIRO. PEDIDO: "a hitbox do goleiro vai pegar
+-- automaticamente a partir de agora. Se a bola parar e passar nele, no meio
+-- dele, tanto do GK quanto do GK bot, ele vai pegar na hora." (O bot já tinha
+-- a caixa garantida — GKBOT_GUARANTEED_CATCH_BOX.) Goleiro humano DENTRO da
+-- própria área: bola sem dono encostando no corpo = dele. Não vale pra
+-- Hissatsu em voo (essa passa pela guarda/duelo), nem logo depois do próprio
+-- arremesso, nem com "ignora goleiro" recente.
+RunService.Heartbeat:Connect(function()
+	if ballFrozenForGuardQTE or owner or deadBallMode or pulseStraightFlightActive then return end
+	if tick() - lastIgnoreGKShot < 1 then return end
+	local caixa = Config.GK_CORPO_CAPTURA or { Raio = 2.8, Baixo = 3.4, Alto = 3.8 }
+	for _, plr in ipairs(Players:GetPlayers()) do
+		if not GKAreaUtil.IsEffectiveGK(plr) or isStunned(plr) then continue end
+		if recentKicker == plr and tick() - recentKickTime < 0.6 then continue end
+		local _, root = getCharacterParts(plr)
+		if not root then continue end
+		local rel = ball.Position - root.Position
+		if Vector3.new(rel.X, 0, rel.Z).Magnitude <= caixa.Raio and rel.Y >= -caixa.Baixo and rel.Y <= caixa.Alto then
+			local vinhaRapida = ball.AssemblyLinearVelocity.Magnitude > LOOSE_BALL_PICKUP_MAX_SPEED
+			ball.AssemblyLinearVelocity = Vector3.zero
+			ball.CanCollide = true
+			setOwner(plr)
+			if vinhaRapida and _G.RegisterSave then _G.RegisterSave(plr) end
+			return
+		end
+	end
+end)
+
 -- ===== FINTA DIRECIONAL (Z esquerda / X trás / C direita) =====
 -- ⚠️ NOVO — DRIBLE DIRECIONAL (tecla Q). PEDIDO: "A direção do drible deve
 -- ser determinada pelo input de movimento no momento em que Q for
@@ -2683,12 +3263,28 @@ end
 -- direção escolhida, RELATIVA a pra onde o personagem está virado. Lado
 -- dominante = Left/Right (inclui as diagonais); senão, Back (que também é
 -- o fallback de dribbleAnimationFor pra frente, que não tem animação própria).
+-- ⚠️ v86 — PEDIDO: "drible direcional para a esquerda, para a direita, para
+-- trás ou para frente, para frente também pode acontecer". Agora existe o
+-- "Forward" de verdade (antes a frente caía no Back): sem lado dominante, o
+-- sinal da frente/trás decide. A animação do Forward é o Back ao contrário
+-- (ver dribbleAnimationFor/playAnimation).
 local function dribbleAnimationNameFor(root, direction)
 	local lateral = direction:Dot(root.CFrame.RightVector)
 	if math.abs(lateral) >= 0.5 then
 		return lateral > 0 and "Right" or "Left"
 	end
-	return "Back"
+	return direction:Dot(root.CFrame.LookVector) > 0 and "Forward" or "Back"
+end
+
+-- ⚠️ v103: nome da ANIMAÇÃO com diagonal (ForwardRight, BackLeft...) — só
+-- pro rolamento na diagonal; o movimento da finta continua o de sempre.
+local function nomeDribleComDiagonal(root, direction)
+	local lateral = direction:Dot(root.CFrame.RightVector)
+	local frente = direction:Dot(root.CFrame.LookVector)
+	if math.abs(lateral) >= 0.35 and math.abs(frente) >= 0.35 then
+		return (frente > 0 and "Forward" or "Back") .. (lateral > 0 and "Right" or "Left")
+	end
+	return dribbleAnimationNameFor(root, direction)
 end
 
 local function getSkillMoveDirectionVector(root, moveName)
@@ -2698,8 +3294,37 @@ local function getSkillMoveDirectionVector(root, moveName)
 		return root.CFrame.RightVector
 	elseif moveName == "Back" then
 		return -root.CFrame.LookVector
+	elseif moveName == "Forward" then
+		return root.CFrame.LookVector
 	end
 	return nil
+end
+
+-- ⚠️ v86: toca a finta certa pra direção — o Forward, sem animação própria
+-- no Config, reaproveita o Back AO CONTRÁRIO.
+local function playDribbleAnimation(player, moveName, window, nomeAnimacao)
+	local conf = Config.ANIMATIONS.Dribble
+	local reverso = moveName == "Forward" and not (type(conf) == "table" and conf.Forward)
+	-- ⚠️ v103: com a animação por código, manda o nome da ação direto (inclui
+	-- as diagonais do rolamento)
+	local nomeAcao = Config.ANIMACAO_PROCEDURAL and ("Dribble." .. (nomeAnimacao or moveName)) or nil
+	playAnimation(player, dribbleAnimationFor(moveName), Enum.AnimationPriority.Action2, window, true, nil, reverso, nomeAcao)
+end
+
+-- ⚠️ v86 — PEDIDO: "Não precisa travar o personagem durante o drible... O
+-- drible vai só mover o personagem, só que pode deixar ele continuando
+-- andando". Antes o servidor PRENDIA o corpo numa linha reta (CFrame a cada
+-- quadro, velocidade zerada e Humanoid:Move(0)) — o jogador perdia o
+-- controle até a finta acabar. Agora o servidor só avisa o cliente do dono do
+-- personagem (quem simula a física dele) quanto deslocar e em quanto tempo;
+-- o cliente SOMA esse empurrão ao movimento normal a cada quadro, então o
+-- WASD continua valendo durante toda a finta. Fazer isso no servidor não
+-- funcionaria: a cópia do servidor está sempre alguns ms atrasada, e cada
+-- CFrame escrito lá puxaria o personagem de volta pra essa posição velha.
+local function sendDisplacement(player, offset, duration)
+	if player and player.Parent == Players then
+		Remotes.ApplyDisplacement:FireClient(player, offset, duration)
+	end
 end
 
 -- ANKLE BREAKER: qualquer ADVERSÁRIO (checagem de time — nunca
@@ -2761,6 +3386,7 @@ local function getMinidashBonusDistance(hitOpponent, skill)
 end
 
 Remotes.AttemptDribbleMove.OnServerEvent:Connect(function(player, moveName)
+	if _G.HissatsuCutsceneActive then return end -- ⚠️ v87: ninguém age durante a cutscene de Hissatsu
 	if owner ~= player then return end
 	if isStunned(player) then return end
 	-- ⚠️ v24: nem finta por fora de uma Hissatsu de bola em andamento — a
@@ -2769,12 +3395,14 @@ Remotes.AttemptDribbleMove.OnServerEvent:Connect(function(player, moveName)
 	if GKAreaUtil.IsEffectiveGK(player) then return end -- GK DENTRO da área usa AttemptGKDive (Z/X/C/E/Q viram mergulho, não finta); fora da área, finta normal
 
 	local direction
+	local nomeAnimacaoDrible = nil -- ⚠️ v103: com diagonal (ver nomeDribleComDiagonal)
 	local _, rootForDirection = getCharacterParts(player)
 	if rootForDirection then
 		if typeof(moveName) == "Vector3" then
 			-- ⚠️ NOVO: Q + WASD (ver getDribbleDirectionFromInput acima).
 			direction = getDribbleDirectionFromInput(rootForDirection, moveName)
 			moveName = dribbleAnimationNameFor(rootForDirection, direction)
+			nomeAnimacaoDrible = nomeDribleComDiagonal(rootForDirection, direction)
 		elseif typeof(moveName) == "string" then
 			-- Nome fixo (Left/Back/Right) continua aceito: botões do mobile e
 			-- chamadas antigas.
@@ -2814,6 +3442,7 @@ Remotes.AttemptDribbleMove.OnServerEvent:Connect(function(player, moveName)
 	if _G.RegisterDribble then
 		_G.RegisterDribble(player)
 	end
+	if _G.TutorialNotificar then _G.TutorialNotificar(player, "Drible") end -- ⚠️ v104
 
 	-- SEMPRE dá certo — sem porcentagem/chance. Só a distância e a janela
 	-- de iframe escalam com o DribbleSkill (0-100) do jogador.
@@ -2822,7 +3451,7 @@ Remotes.AttemptDribbleMove.OnServerEvent:Connect(function(player, moveName)
 		+ (Config.DRIBBLE_MOVE_MAX_DISTANCE - Config.DRIBBLE_MOVE_MIN_DISTANCE) * skill
 	local window = Config.DRIBBLE_ANIMATION_SECONDS -- ⚠️ v64: janela FIXA (= tempo da animação); a distância é que escala, logo a velocidade escala junto
 
-	playAnimation(player, dribbleAnimationFor(moveName), Enum.AnimationPriority.Action2, window, true) -- ⚠️ v63: reprodução ajustada à janela (cresce com o DribbleSkill)
+	playDribbleAnimation(player, moveName, window, nomeAnimacaoDrible) -- ⚠️ v63: reprodução ajustada à janela; v86: Forward = Back ao contrário; v103: diagonais
 
 	local pulseEffect = _G.TryConsumePulse and _G.TryConsumePulse(player, "DribbleMove")
 	local rangeBonus = (instEffect and instEffect.AnkleRangeAdd or 0) + (pulseEffect and pulseEffect.AnkleRangeAdd or 0)
@@ -2844,23 +3473,73 @@ Remotes.AttemptDribbleMove.OnServerEvent:Connect(function(player, moveName)
 	-- o drible (derrubou alguém), dashDistance soma um "mini-dash" extra
 	-- na mesma deslizada — mesma janela de tempo, então o pique fica
 	-- visivelmente mais rápido nesse trecho final.
-	local endPosition = root.Position + direction * (distance + dashDistance)
+	-- ⚠️ v86: o deslocamento agora é aplicado pelo cliente, SOMADO ao andar
+	-- (ver sendDisplacement). O servidor guarda só o deslocamento total, pra
+	-- saber onde conduzir a bola durante a finta. A rotação também fica livre
+	-- (não suprime mais o Shift Lock): quem gira é o próprio jogador.
+	local offset = direction * (distance + dashDistance)
+	local endPosition = root.Position + offset
 	dribbleMoves[player] = {
 		targetPosition = endPosition,
 		startPosition = root.Position,
 		endPosition = endPosition,
+		offset = offset,
 		triggeredAt = tick(),
 		expiresAt = tick() + window,
 	}
 	setIframeGlow(player, true) -- janela de iframe ativa: brilho branco enquanto durar
-
-	-- Durante a janela da finta, o servidor é quem decide a rotação
-	-- (preserva a que já estava, ver loop de drible acima). Se o Shift
-	-- Lock do cliente também tentar girar o boneco pra câmera ao mesmo
-	-- tempo, os dois brigam pela mesma rotação — avisa o cliente pra
-	-- soltar por essa janela.
-	Remotes.SuppressShiftLockRotation:FireClient(player, window)
+	sendDisplacement(player, offset, window)
 end)
+
+-- ===== DASH (tecla F) — ⚠️ v86 =====
+-- PEDIDO: "o F pode ser utilizado para dar um dash, que é meio que um avanço
+-- para frente". NÃO é o carrinho (esse voltou pro Q, sem bola): não rouba,
+-- não disputa e não derruba ninguém — é só um arranque curto na direção do
+-- WASD (parado = pra onde o personagem olha), com ou sem a bola. O
+-- deslocamento é aplicado pelo cliente, somado ao andar (sendDisplacement),
+-- então o jogador não perde o controle durante o arranque. Goleiro dentro da
+-- própria área continua usando o F pra saída do gol (AttemptGKForward).
+do
+	local dashCooldowns = {}
+	Players.PlayerRemoving:Connect(function(plr) dashCooldowns[plr] = nil end)
+
+	Remotes.AttemptDash.OnServerEvent:Connect(function(player, directionArg)
+		if _G.HissatsuCutsceneActive then return end -- ⚠️ v87: ninguém age durante a cutscene de Hissatsu
+		if isStunned(player) then return end
+		if tackleDashes[player] then return end
+		if GKAreaUtil.IsEffectiveGK(player) then return end
+		if _G.IsPulseInProgress and _G.IsPulseInProgress(player) then return end
+
+		local last = dashCooldowns[player]
+		if last and tick() - last < Config.DASH_COOLDOWN then return end
+
+		local _, root = getCharacterParts(player)
+		if not root then return end
+
+		-- mesma desconfiança do carrinho: a direção vem do cliente, então é
+		-- achatada e normalizada aqui (nada de dash pra cima nem mais longe)
+		local direction
+		if typeof(directionArg) == "Vector3" then
+			local flat = Vector3.new(directionArg.X, 0, directionArg.Z)
+			if flat.Magnitude > 0.1 then direction = flat.Unit end
+		end
+		if not direction then
+			local look = Vector3.new(root.CFrame.LookVector.X, 0, root.CFrame.LookVector.Z)
+			if look.Magnitude < 0.01 then return end
+			direction = look.Unit
+		end
+
+		if not Config.SpendStamina(player, Config.DASH_STAMINA_COST) then return end
+		dashCooldowns[player] = tick()
+
+		sendDisplacement(player, direction * Config.DASH_DISTANCE, Config.DASH_DURATION)
+		-- ⚠️ v104: animação de arrancada (+ o vento, ver VentoVelocidade.local.luau).
+		-- A direção vai no espaço do corpo pra inclinar certo (lado/trás).
+		local rel = root.CFrame:VectorToObjectSpace(direction)
+		avisarAcao(player.Character, "Dash", Config.DASH_DURATION, { X = rel.X, Z = -rel.Z })
+		if _G.TutorialNotificar then _G.TutorialNotificar(player, "Dash") end -- ⚠️ v104
+	end)
+end
 
 -- ===== CHUTE (também serve de PASSE e de VOLEIO) =====
 -- PASSE: não existe mais botão dedicado — se você mirar (com o mouse) num
@@ -2896,24 +3575,48 @@ Remotes.UpdateKickCharging.OnServerEvent:Connect(function(player, carregando)
 	end
 end)
 
-Remotes.KickBall.OnServerEvent:Connect(function(player, chargedForce, targetPoint)
+Remotes.KickBall.OnServerEvent:Connect(function(player, chargedForce, targetPoint, noAr)
+	if _G.HissatsuCutsceneActive then return end -- ⚠️ v87: ninguém age durante a cutscene de Hissatsu
 	if isStunned(player) then return end
 	-- ⚠️ v24: com uma Hissatsu de bola em andamento, a bola não sai do pé por
 	-- fora dela (ver _G.IsPulseInProgress em PulseController.legacy.luau).
 	if _G.IsPulseInProgress and _G.IsPulseInProgress(player) then return end
 	if typeof(targetPoint) ~= "Vector3" then return end
+	-- ⚠️ v110 — "a bola sumiu de novo" (log: "cortando a bola (nan studs/s)" logo
+	-- depois do próprio chute). Mira ou força com NaN/infinito vindas do cliente
+	-- viravam direção NaN e a bola ia pro espaço. Mira inválida = chuta pra frente.
+	if targetPoint.X ~= targetPoint.X or targetPoint.Y ~= targetPoint.Y or targetPoint.Z ~= targetPoint.Z
+		or math.abs(targetPoint.X) > 1e6 or math.abs(targetPoint.Y) > 1e6 or math.abs(targetPoint.Z) > 1e6 then
+		targetPoint = nil
+	end
+	local forcaNum = tonumber(chargedForce)
+	if forcaNum and (forcaNum ~= forcaNum or math.abs(forcaNum) == math.huge) then
+		chargedForce = nil
+	end
 
 	local _, root = getCharacterParts(player)
 	if not root then return end
+	targetPoint = targetPoint or (root.Position + root.CFrame.LookVector * 60)
 
 	local hasControl = owner == player
 	local isVolley = false
+	-- ⚠️ v105: goleiro com a bola NA MÃO arremessa (animação própria)
+	local arremessoDoGoleiro = hasControl and player:GetAttribute("BolaNaMao") == true
 
 	if not hasControl then
-		-- sem posse: só permite chutar a BOLA se for VOLEIO (bola no ar, ao alcance)
+		-- ⚠️ v108 — PRIMEIRO TOQUE. PEDIDO: "nem precisa dominar, ele pode chutar
+		-- direto, antes mesmo do domínio... se a bola estiver fraca na frente dele.
+		-- Se estiver forte, já não dá". Antes (v105) sem posse só valia VOLEIO
+		-- pulando — bola rolando fraca na sua frente, sem ninguém dominando, não
+		-- dava pra bater de primeira. Agora: bola SOLTA (ninguém é dono, não é
+		-- Hissatsu voando nem duelo de goleiro), ao alcance e mais lenta que
+		-- PRIMEIRO_TOQUE_VEL_MAX = chute de primeira. Se for no ar com a bola
+		-- alta, continua sendo VOLEIO (mais forte).
 		local ballHeightAboveGround = ball.Position.Y - root.Position.Y
 		local distance = (ball.Position - root.Position).Magnitude
-		if ballHeightAboveGround < Config.VOLLEY_MIN_BALL_HEIGHT or distance > Config.VOLLEY_RANGE then
+		local bolaLivre = owner == nil and not ballFrozenForGuardQTE and not pulseStraightFlightActive
+		local bolaFraca = ball.AssemblyLinearVelocity.Magnitude <= (Config.PRIMEIRO_TOQUE_VEL_MAX or 80)
+		if not bolaLivre or not bolaFraca or distance > Config.VOLLEY_RANGE then
 			-- ⚠️ v85 — PEDIDO: "se eu chutar sem a bola, a animação de chutar
 			-- não sai... a animação de chute precisa sair mesmo sem a bola".
 			-- Antes o handler só saía daqui — o preparo (perna levantada) era
@@ -2928,7 +3631,7 @@ Remotes.KickBall.OnServerEvent:Connect(function(player, chargedForce, targetPoin
 			playAnimation(player, Config.ANIMATIONS.Kick, nil, nil, true)
 			return
 		end
-		isVolley = true
+		isVolley = noAr == true and ballHeightAboveGround >= Config.VOLLEY_MIN_BALL_HEIGHT
 	end
 
 	if _G.NotifyInstinctAction then _G.NotifyInstinctAction(player, "Kick") end -- ⚠️ v6.5: carga de "prática" do Instinct Mode
@@ -2950,6 +3653,7 @@ Remotes.KickBall.OnServerEvent:Connect(function(player, chargedForce, targetPoin
 	-- senão, "KickAtGoal" (padrão, mesmo sem time definido).
 	local aimDeviationMult = 1
 	local kickTrigger = nil
+	local armaDoChute = nil -- ⚠️ v110: Effect da Arma que disparou neste chute (Curva, CompanheiroForcaMult)
 	if player.Team then
 		local trigger = "KickAtGoal"
 		local enemyGoal = enemyGoalOf(player.Team.Name)
@@ -2985,7 +3689,12 @@ Remotes.KickBall.OnServerEvent:Connect(function(player, chargedForce, targetPoin
 		-- Config.KICK_MAX_FORCE, não com kickMaxForce.
 		local enemyTeamName = otherTeamName(player.Team.Name)
 		local ctx = {
-			DistanceToGoal = distanceToGoal,
+			-- ⚠️ v111 — BUG: era a distância do PONTO MIRADO até o gol. Mirando
+			-- no gol ela dá poucos studs, então "chute de fora da área" (Ego do
+			-- Rei), "a mais de 25 studs" (Tiro Destruidor) e a Zona de Ouro
+			-- (~124 studs) quase nunca batiam. Agora é de onde VOCÊ chuta.
+			DistanceToGoal = enemyGoal and (root.Position - enemyGoal.Position).Magnitude or math.huge,
+			TargetDistanceToGoal = distanceToGoal,
 			DistanceToOwnGoal = distanceToOwnGoal,
 			SecondsAfterReceive = lastReceiveTime[player] and (tick() - lastReceiveTime[player]) or math.huge,
 			OpponentDistance = nearestOpponentDistance(player),
@@ -3006,6 +3715,7 @@ Remotes.KickBall.OnServerEvent:Connect(function(player, chargedForce, targetPoin
 
 		kickTrigger = trigger
 		local instEffect = _G.CheckInstinct and _G.CheckInstinct(player, trigger, ctx)
+		armaDoChute = instEffect
 		local pulseEffect = _G.TryConsumePulse and _G.TryConsumePulse(player, trigger)
 		local ignoreGKChance = 0
 		if instEffect then
@@ -3103,8 +3813,18 @@ Remotes.KickBall.OnServerEvent:Connect(function(player, chargedForce, targetPoin
 
 	nudgeBallForwardForKick(direction) -- ⚠️ v21: já nasce fora do raio do corpo, na direção do chute
 
-	local velocity = direction * force
-	velocity += Vector3.new(0, force * Config.KICK_UPWARD_BOOST, 0)
+	-- ⚠️ v97 — CHUTE QUE PASSA PELO PONTO MIRADO. PEDIDO: "aonde você estiver
+	-- mirando, você clicou, é pra ser perfeito". Antes: direção reta até a
+	-- mira + um empurrão fixo de 18% pra cima (KICK_UPWARD_BOOST) — a bola
+	-- subia ACIMA do ponto mirado, mais quanto mais longe (o "sobe demais").
+	-- Agora, com a força carregada, calcula o ângulo de saída exato pra
+	-- parábola (gravidade da bola) passar PELO ponto mirado. Se a força não
+	-- alcança, sai no ângulo de alcance máximo, na direção certa.
+	local velocity = _G.VelocidadeBalistica and _G.VelocidadeBalistica(ball.Position, ball.Position + direction * (targetPoint - ball.Position).Magnitude, force)
+	if not velocity then
+		velocity = direction * force
+		velocity += Vector3.new(0, force * Config.KICK_UPWARD_BOOST, 0)
+	end
 	ball.AssemblyLinearVelocity = velocity
 
 	-- garante que o toque conte pra assistência/gol mesmo em voleio sem posse formal
@@ -3123,7 +3843,11 @@ Remotes.KickBall.OnServerEvent:Connect(function(player, chargedForce, targetPoin
 	for _, direcao in ipairs({ "Left", "Back", "Right" }) do
 		stopAnimation(player, dribbleAnimationFor(direcao), 0)
 	end
-	playAnimation(player, Config.ANIMATIONS.Kick, nil, nil, true) -- ⚠️ v60
+	if arremessoDoGoleiro then
+		avisarAcao(player.Character, "Arremesso", 0.6) -- ⚠️ v105: arremesso com as mãos
+	else
+		playAnimation(player, Config.ANIMATIONS.Kick, nil, nil, true) -- ⚠️ v60
+	end
 	-- ⚠️ v84 — PEDIDO: chute "sem nenhum tipo de erro, exatamente no ponto
 	-- mirado". O `spin` que o cliente manda vem da distância HORIZONTAL entre
 	-- o mouse e a bola na tela (computeSpin no FootballClient) — ou seja,
@@ -3132,10 +3856,34 @@ Remotes.KickBall.OnServerEvent:Connect(function(player, chargedForce, targetPoin
 	-- pra um lado ou pro outro". O chute normal agora sai RETO na direção
 	-- mirada; curva ficou só nas Hissatsus que têm CurveMult próprio.
 	applyCurve(nil, direction)
+
+	-- ⚠️ v110 — CHUTE CURVO (Armas: Tiro Destruidor / Passe do Prodígio). PEDIDO:
+	-- "me pediram pra colocar chute curvo no jogo... uma arma do Rin (ou do
+	-- Sae), que também é curvo". A bola sai ABERTA (virada pra um lado) e uma
+	-- força lateral constante traz ela de volta: ela CRUZA a linha do chute
+	-- exatamente na distância do ponto mirado (banana que contorna quem está no
+	-- meio e chega onde você mirou). Lado: A/D segurando escolhe; sem segurar,
+	-- no chute a gol curva de FORA pra DENTRO (e no passe, pela direita).
+	if armaDoChute and armaDoChute.Curva and _G.ArmaAplicarCurva then
+		_G.ArmaAplicarCurva(player, targetPoint, armaDoChute.Curva, kickTrigger == "KickAtGoal")
+	end
+	if armaDoChute and armaDoChute.CompanheiroForcaMult and kickTrigger == "KickAtTeammate" and _G.SetPulseTeammateBuff then
+		local maisPerto, menor = nil, 18
+		for _, plr in ipairs(Players:GetPlayers()) do
+			if plr == player or areOpponents(player, plr) then continue end
+			local _, mRoot = getCharacterParts(plr)
+			if mRoot and (mRoot.Position - targetPoint).Magnitude < menor then
+				menor = (mRoot.Position - targetPoint).Magnitude
+				maisPerto = plr
+			end
+		end
+		if maisPerto then _G.SetPulseTeammateBuff(maisPerto, armaDoChute.CompanheiroForcaMult, 6) end
+	end
 end)
 
 -- ===== CABEÇADA =====
 Remotes.AttemptHeader.OnServerEvent:Connect(function(player, targetPoint)
+	if _G.HissatsuCutsceneActive then return end -- ⚠️ v87: ninguém age durante a cutscene de Hissatsu
 	if isStunned(player) then return end
 	local lastAttempt = headerCooldowns[player]
 	if lastAttempt and tick() - lastAttempt < Config.HEADER_COOLDOWN then return end
@@ -3150,6 +3898,16 @@ Remotes.AttemptHeader.OnServerEvent:Connect(function(player, targetPoint)
 	-- sobravam ~5 studs de margem horizontal — por isso a cabeçada parecia
 	-- quase impossível. Agora é um cilindro: HEADER_RANGE é só a margem
 	-- HORIZONTAL, e a altura tem faixa própria (mín/máx).
+	-- ⚠️ v105 — cabeçada só no ar (o cliente só manda pulando; aqui confere
+	-- que o corpo não está parado no chão)
+	-- ⚠️ v108 — PEDIDO: "tô tentando dar cabeçada e não consigo. Clicou na
+	-- altura certa, ele dá a cabeçada automaticamente em vez do chute". A trava
+	-- de "só pulando" (v105) matava a cabeçada da bola que chega na altura da
+	-- cabeça com você no chão — saiu. No lugar: bola forte demais não dá
+	-- (HEADER_VEL_MAX), nem bola que outro jogador está dominando.
+	if owner and owner ~= player then return end
+	if ball.AssemblyLinearVelocity.Magnitude > (Config.HEADER_VEL_MAX or 95) then return end
+
 	local alturaBola = ball.Position.Y - root.Position.Y
 	local distanciaHorizontal = (Vector3.new(ball.Position.X, 0, ball.Position.Z)
 		- Vector3.new(root.Position.X, 0, root.Position.Z)).Magnitude
@@ -3196,7 +3954,7 @@ Remotes.AttemptHeader.OnServerEvent:Connect(function(player, targetPoint)
 	-- ⚠️ v21 FIX: removido o "ball.CanCollide = true" que existia aqui —
 	-- ele cancelava na hora a janela de saída limpa (startKickClearance)
 	-- aberta logo acima, então a cabeçada nunca se beneficiava dela.
-	ball.AssemblyLinearVelocity = direction * headerForce + Vector3.new(0, 8, 0)
+	ball.AssemblyLinearVelocity = direction * headerForce + Vector3.new(0, Config.HEADER_ELEVACAO or 8, 0) -- ⚠️ v105: sobe mais
 	playKickFeedback(headerForce)
 	playAnimation(player, Config.ANIMATIONS.Header, nil, nil, true) -- ⚠️ v65: cabeçada (normal e de Hissatsu passam as duas por aqui)
 end)
@@ -3335,6 +4093,7 @@ local function resolveStealAttempt(player, targetOwner)
 	tackleSound:Play()
 	setOwner(player)
 	stunPlayer(stolenFrom, Config.TACKLE_VICTIM_STUN)
+	avisarAcao(stolenFrom.Character, "SofreuCarrinho", Config.TACKLE_VICTIM_STUN) -- ⚠️ v106: cai no chão e levanta
 
 	if _G.RegisterTackle then
 		_G.RegisterTackle(player, stolenFrom)
@@ -3382,6 +4141,7 @@ local function startTackleDash(player, root, targetPlayer, requestedDirection)
 		resolved = false,            -- trava pra resolver só uma vez
 	}
 	tackleDashes[player] = dash
+	if _G.TutorialNotificar then _G.TutorialNotificar(player, "Carrinho") end -- ⚠️ v104
 
 	Remotes.SuppressShiftLockRotation:FireClient(player, Config.TACKLE_DASH_DURATION)
 	return dash -- referência direta, evita a corrida com o fallback do task.delay
@@ -3397,6 +4157,25 @@ end
 -- sem stunar quem chutou por "errar" — a hitbox JÁ conectou, não é um
 -- whiff.
 local function applyPulseDashHit(player, target, dash)
+	-- ⚠️ v110: carrinho de Hissatsu (ver _G.PulseExecuteTackle) — aqui só o
+	-- ROUBO no contato; o efeito da técnica (gelo, pisão, clarão...) sai na
+	-- chegada, em dash.aoChegar.
+	if dash.efeitoFixo then
+		if owner == target and not GKAreaUtil.IsEffectiveGK(target) then
+			local activeMove = dribbleMoves[target]
+			local escapou = (activeMove and tick() < activeMove.expiresAt) or (_G.HasPulseIframe and _G.HasPulseIframe(target))
+			if not escapou then
+				releaseOwner()
+				ball.CanCollide = true
+				tackleSound:Play()
+				setOwner(player)
+				stunPlayer(target, Config.TACKLE_VICTIM_STUN)
+				avisarAcao(target.Character, "SofreuCarrinho", Config.TACKLE_VICTIM_STUN)
+				if _G.RegisterTackle then _G.RegisterTackle(player, target) end
+			end
+		end
+		return
+	end
 	local pulseDef = dash.pulseDef
 	local bom = (pulseDef and pulseDef.Bom) or {}
 	local perfect = (pulseDef and pulseDef.Perfect) or {}
@@ -3495,7 +4274,7 @@ _G.StartPulseDashTackle = function(player, slot, def)
 	direction = Vector3.new(direction.X, 0, direction.Z)
 	direction = direction.Magnitude > 0.01 and direction.Unit or root.CFrame.LookVector
 
-	local distance = Config.PULSE_DASH_TACKLE_SPEED * qteDuration
+	local distance = Config.PULSE_DASH_TACKLE_SPEED * qteDuration * (def.DistanciaMult or 1) -- ⚠️ v108: Investida 2x mais longe
 
 	local dash = {
 		startPosition = root.Position,
@@ -3515,8 +4294,17 @@ _G.StartPulseDashTackle = function(player, slot, def)
 		currentFraction = 0,
 		pulseDef = def,
 		resolved = false,
+		-- ⚠️ v108: progresso próprio (A/D acelera o deslocamento, não alonga)
+		progress = 0,
+		lastTick = tick(),
+		velocidadeMash = def.VelocidadeMash or 0,
+		multiAlvo = def.MultiAlvo == true,
+		atingidos = {},
 	}
 	tackleDashes[player] = dash
+	-- ⚠️ v108: pose de investida (ombro à frente, correndo) + vento de fogo — sem
+	-- cutscene ("tackle não precisa de cutscene, já tem a animação dele")
+	avisarAcao(player.Character, "Investida", qteDuration)
 
 	local maxDuration = qteDuration + math.max(bomPersist, perfectPersist)
 	Remotes.SuppressShiftLockRotation:FireClient(player, maxDuration)
@@ -3578,8 +4366,28 @@ RunService.Heartbeat:Connect(function()
 			and math.clamp((tick() - dash.triggeredAt) / totalDuration, 0, 1)
 			or 1
 		local easedAlpha = 1 - (1 - alpha) ^ 3
+		if dash.progress then
+			-- ⚠️ v108 — Investida: o avanço anda num ritmo que cresce com as
+			-- alternâncias A/D (até 1 + velocidadeMash vezes mais rápido); a
+			-- distância total não muda. Curva mais reta (é uma investida, não
+			-- um lunge que freia).
+			local agora = tick()
+			local dt = math.clamp(agora - (dash.lastTick or agora), 0, 0.1)
+			dash.lastTick = agora
+			local ritmo = (1 + (dash.velocidadeMash or 0) * (dash.currentFraction or 0)) / math.max(totalDuration, 0.05)
+			dash.progress = math.min(1, dash.progress + dt * ritmo)
+			easedAlpha = 1 - (1 - dash.progress) ^ 1.6
+			if dash.progress >= 1 and not dash.chegou then
+				dash.chegou = true
+				dash.expiresAt = math.min(dash.expiresAt, agora + 0.35)
+			end
+		end
 
 		local newPosition = dash.startPosition:Lerp(dash.endPosition, easedAlpha)
+		if dash.arco then -- ⚠️ v110: salto em arco (Anjo da Neve)
+			local uArco = math.clamp((tick() - dash.triggeredAt) / math.max(dash.moveDuration or 1, 0.05), 0, 1)
+			newPosition += Vector3.new(0, 4 * dash.arco * uArco * (1 - uArco), 0)
+		end
 		root.CFrame = root.CFrame.Rotation + newPosition
 		root.AssemblyLinearVelocity = Vector3.new(0, root.AssemblyLinearVelocity.Y, 0)
 		root.AssemblyAngularVelocity = Vector3.zero
@@ -3599,6 +4407,12 @@ RunService.Heartbeat:Connect(function()
 		-- goleiro numa falha, ao contrário do carrinho normal acima). Ver
 		-- comentário completo em Remotes.AttemptGKForward.
 		if dash.isGKForward and not dash.resolved then
+			-- ⚠️ v105 — "se você der o dive pra frente em alguém, você pega a bola
+			-- na hora, mesmo que ele drible": vale pra QUALQUER adversário que
+			-- esteja com a bola quando o goleiro chega (não só quem tinha no aperto)
+			if owner and owner ~= player and areOpponents(player, owner) then
+				dash.gkTargetOwner = owner
+			end
 			if dash.gkTargetOwner then
 				if owner == dash.gkTargetOwner and not (_G.HasPulseIframe and _G.HasPulseIframe(dash.gkTargetOwner)) then
 					local _, targetRoot = getCharacterParts(dash.gkTargetOwner)
@@ -3626,15 +4440,38 @@ RunService.Heartbeat:Connect(function()
 		-- nenhum: acerta QUALQUER adversário que a hitbox (crescendo ao
 		-- vivo conforme o jogador alterna A/D) tocar, com ou sem bola,
 		-- em qualquer lugar do campo (pedido explícito do usuário).
-		if dash.isPulseDash and not dash.resolved then
+		-- ⚠️ v110: carrinho de Hissatsu chegou no fim do caminho sem acertar
+		-- ninguém — a técnica acontece ali mesmo ("vai na reta e faz o que faz")
+		if dash.aoChegar and not dash.chegouFixo and tick() - dash.triggeredAt >= (dash.moveDuration or 0) then
+			dash.chegouFixo = true
+			dash.aoChegar()
+		end
+
+		if dash.isPulseDash and (dash.multiAlvo or not dash.resolved) and not dash.chegouFixo and not dash.semContato then
 			for _, other in ipairs(Players:GetPlayers()) do
 				if other == player or not areOpponents(player, other) then continue end
+				if dash.atingidos and dash.atingidos[other] then continue end
 				local _, otherRoot = getCharacterParts(other)
 				if not otherRoot then continue end
 				if (root.Position - otherRoot.Position).Magnitude <= (dash.hitboxRadius or 0) then
 					dash.resolved = true
+					if dash.atingidos then dash.atingidos[other] = true end
 					applyPulseDashHit(player, other, dash)
-					break
+					-- ⚠️ v110: carrinho de Hissatsu PARA no primeiro que encostar e
+					-- a técnica acontece ali (roubou a bola e já aplica o efeito)
+					if dash.aoChegar and not dash.chegouFixo then
+						dash.chegouFixo = true
+						dash.endPosition = root.Position
+						dash.startPosition = root.Position
+						dash.aoChegar()
+						break
+					end
+					-- ⚠️ v108: roubou a bola — ninguém tira dele até o fim da investida
+					if owner == player and not dash.iframeDado and _G.GrantPulseIframe then
+						dash.iframeDado = true
+						_G.GrantPulseIframe(player, math.max(dash.expiresAt - tick(), 0) + 0.3)
+					end
+					if not dash.multiAlvo then break end
 				end
 			end
 		end
@@ -3642,6 +4479,7 @@ RunService.Heartbeat:Connect(function()
 end)
 
 Remotes.AttemptTackle.OnServerEvent:Connect(function(player, directionArg)
+	if _G.HissatsuCutsceneActive then return end -- ⚠️ v87: ninguém age durante a cutscene de Hissatsu
 	if isStunned(player) then return end
 	if tackleDashes[player] then return end
 	if owner == player then
@@ -3696,6 +4534,7 @@ Remotes.AttemptTackle.OnServerEvent:Connect(function(player, directionArg)
 		-- cena, não trava o Instinto — mesma filosofia do resto do módulo).
 		InOwnArea = player.Team and GKAreaUtil.IsPositionInArea(player.Team.Name, playerRoot.Position, true) or false,
 		OpponentsNearbyCount = nearbyOpponentsCount,
+		AttackingHalf = player.Team and attackingHalfOf(player.Team.Name, playerRoot.Position) or nil, -- ⚠️ v110 (DefendingHalf)
 	}
 	local instEffect = _G.CheckInstinct and _G.CheckInstinct(player, "Tackle", ctx)
 	local pulseEffect = _G.TryConsumePulse and _G.TryConsumePulse(player, "Tackle")
@@ -4016,91 +4855,24 @@ end
 -- se os gols estiverem girados de um jeito que RightVector não siga a
 -- largura da trave, o "canto" sai errado (ainda mira em algum ponto
 -- dentro do gol, só não necessariamente no canto certo).
--- ⚠️ v67 — ASSISTÊNCIA DE MIRA NA ALTURA (só eixo Y).
--- ⚠️ v84 — REESCRITA ("as Hissatsus saem muito pra baixo").
--- A versão v67 puxava QUALQUER ponto mirado 60% em direção a uma altura fixa
--- (40% da hitbox do gol) — mesmo pontos que não estavam no gol, e mesmo uma
--- mira já certa dentro da boca do gol (mirar no ângulo virava meia-altura).
--- Junto com o ponto que vinha do chão (ver miraNoPlanoDoGol em
--- HissatsuInput.local.luau), o resultado era a bola saindo baixa.
---
--- Agora o cliente manda o ponto EXATO no plano do gol, e aqui só se corrige
--- o que está FORA da boca do gol, e só quando o ponto está no gol mesmo:
---   • dentro da altura do gol  -> intocado (a mira é sua, vai onde mirou);
---   • abaixo da base           -> sobe pra rente ao chão (a bola nunca é
---                                 mandada pra dentro do gramado);
---   • acima do travessão       -> desce uma fração (PULSE_AIM_ASSIST_STRENGTH)
---                                 em direção ao travessão (o pedido do v67:
---                                 "se subir demais desce um pouco").
--- Longe do gol (passe, lançamento): nada é mexido. X e Z nunca são mexidos.
-local function aplicarAssistenciaDeAltura(player, ponto)
-	if not player.Team then return ponto end
-
-	local enemyGoal = enemyGoalOf(player.Team.Name)
-	if not enemyGoal then return ponto end
-
-	local distanciaAteOGol = (Vector3.new(ponto.X, 0, ponto.Z) - Vector3.new(enemyGoal.Position.X, 0, enemyGoal.Position.Z)).Magnitude
-	if distanciaAteOGol > getGoalWidth(enemyGoal) then return ponto end -- não é chute no gol
-
-	local base = enemyGoal.Position.Y - enemyGoal.Size.Y / 2
-	local topo = enemyGoal.Position.Y + enemyGoal.Size.Y / 2
-	local minimo = base + 1
-	local maximo = topo - 1
-
-	if ponto.Y < minimo then
-		return Vector3.new(ponto.X, minimo, ponto.Z)
-	end
-	if ponto.Y > maximo then
-		local forca = math.clamp(Config.PULSE_AIM_ASSIST_STRENGTH or 0, 0, 1)
-		return Vector3.new(ponto.X, ponto.Y + (maximo - ponto.Y) * forca, ponto.Z)
-	end
-	return ponto
-end
-
 _G.PulseComputeShotTarget = function(player)
-	-- ⚠️ v7 PEDIDO: "a mira da Hissatsu tem que ser EXATAMENTE onde o cara
-	-- estiver mirando, igual o chute padrão" — se o cliente mandou um
-	-- ponto de mira junto com o UsePulse (ver HissatsuInput.local.luau +
-	-- _G.GetPulseAimPoint em PulseController.legacy.luau), usa ele direto,
-	-- sem nenhuma mira automática. Só cai no canto automático abaixo se
-	-- não tiver mira nenhuma guardada (ex: Pulso usado por outro caminho).
-	-- ⚠️ v36 FIX — "a Hissatsu jogou a bola pra cima / pro nada".
-	-- DIAGNÓSTICO (log do usuário): alvo=(687,-298,257) com a bola em
-	-- (706,-185,258) — ou seja, a mira que o CLIENTE mandou apontava 113
-	-- studs ABAIXO da bola, bem abaixo do gramado (-193). Como o chute de
-	-- Hissatsu voa RETO e sem gravidade, ele saía atravessando o chão e
-	-- viajava pra sempre (o log de voo passou de 1500 studs sem parar).
+	-- ⚠️ v85 — PEDIDO: "remova o assistente de mira da hissatsu... é só ir
+	-- exatamente onde está apontado o mouse". O ponto que o cliente manda (o
+	-- que está debaixo do cursor, ver computeAimPoint em HissatsuInput.local.
+	-- luau) é usado EXATAMENTE como veio. Saíram a assistência de altura
+	-- (v67/v84) e as travas de altura PULSE_AIM_MAX_DROP/MAX_RISE (v36) — elas
+	-- existiam pra segurar pontos absurdos que o cliente antigo gerava (113
+	-- studs abaixo da grama), e a mira nova não gera mais isso: o raio para no
+	-- gramado, ou segue a direção exata do cursor quando não bate em nada.
 	--
-	-- A causa raiz é no cliente (a mira devolve um ponto degenerado quando
-	-- o raio do mouse não acerta nada), mas o servidor não pode aceitar uma
-	-- mira dessas de qualquer jeito — nem por bug, nem por cliente
-	-- adulterado. Aqui ela é SANEADA: a altura é presa a uma faixa
-	-- razoável em volta da bola e, se sobrar uma mira sem direção
-	-- horizontal nenhuma (mirou no próprio pé), cai na mira automática de
-	-- canto logo abaixo.
+	-- Só sobrou uma exceção: mira praticamente sem distância na horizontal (o
+	-- cursor em cima do próprio pé) não aponta pra lugar nenhum — aí cai na
+	-- mira automática de canto logo abaixo, igual quando não há mira.
 	local aimPoint = _G.GetPulseAimPoint and _G.GetPulseAimPoint(player)
 	if typeof(aimPoint) == "Vector3" then
-		local alturaMin = ball.Position.Y - Config.PULSE_AIM_MAX_DROP
-		local alturaMax = ball.Position.Y + Config.PULSE_AIM_MAX_RISE
-		local corrigido = Vector3.new(aimPoint.X, math.clamp(aimPoint.Y, alturaMin, alturaMax), aimPoint.Z)
-
-		local horizontal = Vector3.new(corrigido.X - ball.Position.X, 0, corrigido.Z - ball.Position.Z).Magnitude
+		local horizontal = Vector3.new(aimPoint.X - ball.Position.X, 0, aimPoint.Z - ball.Position.Z).Magnitude
 		if horizontal >= Config.PULSE_AIM_MIN_HORIZONTAL then
-			-- ⚠️ v67 — ASSISTÊNCIA DE MIRA, SÓ NA ALTURA.
-			-- PEDIDO: "as Hissatsus continuam subindo demais a mira. Coloca
-			-- meio que um auto-aim: ele prioriza mirar onde você está mirando,
-			-- só que corrige pra direção do gol. Se subir demais ele desce um
-			-- pouco, se descer demais ele sobe um pouco. MAS só no eixo Y de
-			-- altura — o eixo X mantém do jeito que está, porque você PODE
-			-- errar pro lado, isso é erro seu."
-			--
-			-- Então aqui o X e o Z (a direção no plano do campo) passam
-			-- INTOCADOS: mirar muito pra direita continua indo muito pra
-			-- direita. O que é puxado é só a ALTURA, em direção à altura do
-			-- gol, e só por uma fração — a mira continua sendo sua, ela só
-			-- para de mandar a bola pro céu ou pro chão.
-			corrigido = aplicarAssistenciaDeAltura(player, corrigido)
-			return corrigido
+			return aimPoint
 		end
 
 		warn(string.format(
@@ -4206,6 +4978,26 @@ end)
 -- verdade em volta do jogador, do tamanho exato que decide o bloqueio.
 local blockVisuals = {} -- [player] = Part
 
+-- ⚠️ v103: as peças visuais de habilidade (guarda do goleiro, bloqueio) que
+-- estão aparecendo nesse instante entram em cada amostra do replay
+replayExtras.Visuais = function()
+	local lista = nil
+	local function add(part)
+		if not part or not part.Parent or part.Transparency >= 0.99 then return end
+		lista = lista or {}
+		local cf = part.CFrame
+		local c = part.Color
+		table.insert(lista, {
+			cf = { cf:GetComponents() }, sx = part.Size.X, sy = part.Size.Y, sz = part.Size.Z,
+			r = c.R, g = c.G, b = c.B, tr = part.Transparency,
+			bola = part.Shape == Enum.PartType.Ball,
+		})
+	end
+	for _, part in pairs(guardVisuals) do add(part) end
+	for _, part in pairs(blockVisuals) do add(part) end
+	return lista
+end
+
 local function getOrCreateBlockVisual(player)
 	local part = blockVisuals[player]
 	if part and part.Parent then return part end
@@ -4301,14 +5093,20 @@ RunService.Heartbeat:Connect(function()
 		local shooterTeamName = shooter and shooter.Team and shooter.Team.Name
 		local forceRating = getShotForceRating(lastShotForce)
 
-		-- ⚠️ v38: a força começa a cair AGORA, enquanto o QTE de colisão
-		-- roda — é a janela em que "o goleiro está defendendo".
-		local encerrarDrenagem = beginGuardForceDrain(forcaNaColisao, getPhysical(player))
+		-- ⚠️ v103: a força CONGELA na colisão e só cai por acerto no QTE do
+		-- goleiro (ver iniciarDueloDeDefesa) — nada de "sugar" antes do QTE.
+		local duelo = iniciarDueloDeDefesa(forcaNaColisao)
+		-- ⚠️ v103: cutscene da defesa pela duração do QTE da guarda; o
+		-- resultado só é aplicado quando ela acaba
+		local fimCutsceneDefesa = tick()
+		local durDefesa = (guard.Def and guard.Def.QTE and guard.Def.QTE.Duration) or 3.5
+		if _G.TocarCutsceneDeDefesa and _G.TocarCutsceneDeDefesa(player.Character, guard.Def, durDefesa) then
+			fimCutsceneDefesa = tick() + durDefesa
+		end
 
 		local function finish(caught, rebate)
-			-- ⚠️ v41: encerrarDrenagem devolve a força que SOBROU — é a vida
-			-- com que a bola segue voando se tiver atravessado a guarda.
-			local forcaRestante = encerrarDrenagem(caught)
+			-- a força que SOBROU é a vida com que a bola segue voando
+			local forcaRestante = duelo.Encerrar(caught)
 			ball.Anchored = false
 			ball.CanCollide = true
 			if caught and rebate then
@@ -4356,16 +5154,14 @@ RunService.Heartbeat:Connect(function()
 		end
 
 		if _G.ConsumeGKGuardOnCollision then
+			-- ⚠️ v103: quem decide é o DANO dos acertos, não mais Físico vs
+			-- nota do chute: defendeu = a força chegou a 0.
 			local started = _G.ConsumeGKGuardOnCollision(player, function(perfect, effect)
-				-- Mesma regra do mergulho normal (Físico vs Força), só que
-				-- agora com o bônus da Hissatsu somado (DiveRadiusAdd
-				-- reaproveitado como reforço de "físico efetivo" pra ESSA
-				-- defesa específica) e GuaranteedCatch garantindo na hora
-				-- num Perfect muito bom.
-				local boost = (effect and effect.DiveRadiusAdd) or 0
-				local guaranteed = effect and effect.GuaranteedCatch
-				local caught = guaranteed or (getPhysical(player) + boost >= forceRating)
-				finish(caught, effect and effect.Rebate)
+				task.delay(math.max(0, fimCutsceneDefesa - tick()), function()
+					finish(duelo.Atual() <= 0, effect and effect.Rebate)
+				end)
+			end, function(_hits, dano)
+				duelo.Dano(dano)
 			end)
 			if not started then finish(false) end
 		else
@@ -4515,9 +5311,23 @@ local function pulsePerformKick(player, targetPoint, force, curveMult, aimDeviat
 	-- cairia nele toda vez. O canário agora é o warn de "[Mira] mira do
 	-- cliente saneada", que dispara só quando algo está de fato errado.
 
-	if not deadBallMode then
+	-- ⚠️ v103 — PEDIDO: "testei com o chute glacial e ele foi perfeitamente onde
+	-- eu queria. Só que o furacão de fogo não foi exatamente onde eu queria...
+	-- calcula o ponto antes de tirar". A diferença entre os dois era o DESVIO
+	-- DE MIRA aleatório: a Fúria Glacial tem AimDeviationMult 0.5/0.25 (quase
+	-- nada), o Tornado não tem o campo (desvio inteiro) — e chutando lá de
+	-- cima, alguns graus viram metros no gol. A Hissatsu de voo reto (sem
+	-- arco) agora vai EXATAMENTE na reta até o ponto mirado, calculada da
+	-- posição real da bola no instante do chute (onde a cutscene deixou).
+	-- Instinto/lançamento (arco) continuam com o desvio de sempre.
+	local vooReto = not effect.AerialArc and not useNormalArc
+	if not deadBallMode and not vooReto then
 		local degrees = getAimDeviationDegrees(player) * (aimDeviationMult or 1)
 		direction = applyAimDeviation(direction, degrees)
+	end
+	if vooReto and Config.PULSE_FORCE_DEBUG_PRINTS then
+		print(string.format("🎯 [Hissatsu] chute de (%.1f, %.1f, %.1f) pro alvo (%.1f, %.1f, %.1f) — reta exata, sem desvio",
+			ball.Position.X, ball.Position.Y, ball.Position.Z, targetPoint.X, targetPoint.Y, targetPoint.Z))
 	end
 
 	nudgeBallForwardForKick(direction) -- ⚠️ v21: já nasce fora do raio do corpo, na direção do chute
@@ -4589,7 +5399,10 @@ local function pulsePerformKick(player, targetPoint, force, curveMult, aimDeviat
 
 		local delta = targetPoint - ball.Position
 		local flatDelta = Vector3.new(delta.X, 0, delta.Z)
-		local gravity = workspace.Gravity
+		-- ⚠️ v97: a gravidade que a bola sente é Gravity x BALL_GRAVITY_MULTIPLIER
+		-- (a VectorForce dela cancela o resto). Com a gravidade cheia aqui, a
+		-- parábola calculada caía ANTES e a bola real passava do companheiro.
+		local gravity = workspace.Gravity * Config.BALL_GRAVITY_MULTIPLIER
 
 		local vFlat = flatDelta / arcTime
 		local vy = (delta.Y + 0.5 * gravity * arcTime * arcTime) / arcTime
@@ -4599,8 +5412,13 @@ local function pulsePerformKick(player, targetPoint, force, curveMult, aimDeviat
 		-- normal (arco com gravidade, Config.KICK_UPWARD_BOOST) — nada de
 		-- voo reto sem gravidade nem número de força flutuando (isso é só
 		-- do Pulso/Hissatsu, ver o `else` abaixo).
-		velocity = direction * force
-		velocity += Vector3.new(0, force * Config.KICK_UPWARD_BOOST, 0)
+		-- ⚠️ v97: e agora a mesma PRECISÃO do chute manual — parábola que
+		-- passa pelo ponto mirado (ver _G.VelocidadeBalistica).
+		velocity = _G.VelocidadeBalistica(ball.Position, ball.Position + direction * (targetPoint - ball.Position).Magnitude, force)
+		if not velocity then
+			velocity = direction * force
+			velocity += Vector3.new(0, force * Config.KICK_UPWARD_BOOST, 0)
+		end
 	else
 		-- PEDIDO: chute/passe de Pulso vai RETO na direção do alvo — sem o
 		-- probable boost pra cima do chute normal (Config.KICK_UPWARD_BOOST,
@@ -4609,6 +5427,9 @@ local function pulsePerformKick(player, targetPoint, force, curveMult, aimDeviat
 		-- lá em cima, perto do gravityForce).
 		velocity = direction * force
 		startPulseStraightFlight(force)
+		-- ⚠️ v110: a RETA fica travada desde o chute (ver o Heartbeat do voo)
+		pulseFlightDirecao = direction
+		pulseFlightVelocidade = force
 	end
 	ball.AssemblyLinearVelocity = velocity
 	lastShotForce = force
@@ -4641,7 +5462,17 @@ local function pulsePerformKick(player, targetPoint, force, curveMult, aimDeviat
 			spin = (side >= 0 and -1 or 1) * 0.75 * curveMult
 		end
 	end
-	applyCurve(spin ~= 0 and spin or nil, direction)
+	-- ⚠️ v97 — PEDIDO: "quando eu uso a Hissatsu... às vezes a bola vai um
+	-- pouco pro lado... precisa ir sempre reto aonde foi mirado". A curva
+	-- "banana" automática (CurveMult dos Pulsos, puxando pro centro do gol)
+	-- tirava a bola do ponto mirado. Agora a bola vai RETA. O cálculo do spin
+	-- acima fica, só não é mais aplicado (Config.PULSE_CURVA_AUTOMATICA liga
+	-- de volta, se um dia quiser).
+	if Config.PULSE_CURVA_AUTOMATICA then
+		applyCurve(spin ~= 0 and spin or nil, direction)
+	else
+		applyCurve(nil, direction) -- só encerra qualquer curva antiga ainda viva
+	end
 
 	return true
 end
@@ -4683,7 +5514,7 @@ _G.PulseExecuteShot = function(player, effect, rarity)
 	-- 60% Chute + 40% Técnica), já passada pela curva de força do Chute no
 	-- PulseController (effect.AttributeForceMult). Sem ela (chamada antiga
 	-- sem fórmula), cai no Chute puro. A Energy saiu daqui: é só custo.
-	local kickMult = effect.AttributeForceMult or getKickForceMultiplier(player)
+	local kickMult = (effect.AttributeForceMult or getKickForceMultiplier(player)) * (effect.ElementoProprioMult or 1) -- ⚠️ v107: elemento próprio
 	local baseForce = Config.KICK_MAX_FORCE * kickMult * rarityMult
 	local qteTierMult = effect.ForceMult or 1
 	local force = baseForce * qteTierMult
@@ -4743,6 +5574,8 @@ _G.PulseExecuteShot = function(player, effect, rarity)
 		Player = player,
 		Team = player.Team and player.Team.Name,
 		Rarity = rarity,
+		Element = effect.Elemento, -- ⚠️ v107: o duelo de defesa compara com o elemento da defesa
+		QuebraDefesa = effect.QuebraDefesa, -- ⚠️ v109: Ruptura de Gaia — fração do dano da defesa que ela ignora
 		TargetPoint = targetPoint,
 		Origin = shotOrigin,
 		Direction = shotDirection,
@@ -4877,20 +5710,80 @@ _G.PulseExecuteHeader = function(player, effect)
 
 	local direction = root.CFrame.LookVector
 	local target = _G.PulseComputeShotTarget(player)
+
+	-- ⚠️ v106 — XEQUE-MATE TELEGUIADO. PEDIDO: "o R do Xeque-Mate é pra ser
+	-- teleguiado: se você estiver mirando errado, ele vai direto no gol, no
+	-- ÂNGULO — ele mira pro ângulo pra você, por isso que ele é tão bom".
+	-- Com effect.MiraNoAngulo o alvo vira o ângulo do gol adversário (perto do
+	-- travessão, do lado MAIS LONGE do goleiro) e a bola corrige o rumo no voo.
+	local anguloAlvo = nil
+	if effect.MiraNoAngulo and player.Team then
+		local gol = enemyGoalOf(player.Team.Name)
+		if gol then
+			local cf, sz = gol.CFrame, gol.Size
+			-- eixo da LARGURA do gol = o maior eixo horizontal da caixa
+			local eixo, meia = cf.RightVector, sz.X / 2
+			if sz.Z > sz.X then eixo, meia = cf.LookVector, sz.Z / 2 end
+			local baseY = gol.Position.Y - sz.Y / 2
+			local altura = baseY + sz.Y * 0.72
+			local cantos = {
+				Vector3.new(gol.Position.X, altura, gol.Position.Z) + eixo * (meia - 3.5),
+				Vector3.new(gol.Position.X, altura, gol.Position.Z) - eixo * (meia - 3.5),
+			}
+			-- goleiro adversário (humano na área ou o bot)
+			local posGK = nil
+			for _, plr in ipairs(Players:GetPlayers()) do
+				if plr.Team and plr.Team ~= player.Team and GKAreaUtil.IsEffectiveGK(plr) then
+					local _, r = getCharacterParts(plr)
+					if r then posGK = r.Position end
+				end
+			end
+			if not posGK then
+				for _, m in ipairs(workspace:GetChildren()) do
+					if m:IsA("Model") and m.Name:sub(1, 6) == "GKBot_" and m.Name ~= "GKBot_" .. player.Team.Name then
+						local r = m:FindFirstChild("HumanoidRootPart")
+						if r then posGK = r.Position end
+					end
+				end
+			end
+			anguloAlvo = cantos[1]
+			if posGK and (cantos[2] - posGK).Magnitude > (cantos[1] - posGK).Magnitude then anguloAlvo = cantos[2] end
+			target = anguloAlvo
+		end
+	end
+
 	if target then
 		local toTarget = target - ball.Position
 		if toTarget.Magnitude > 0.01 then direction = toTarget.Unit end
 	end
 	local headerForce = Config.HEADER_FORCE * (effect.HeaderForceMult or 1)
-	direction = applyAimDeviation(direction, getAimDeviationDegrees(player) * 0.5)
+	if not anguloAlvo then
+		direction = applyAimDeviation(direction, getAimDeviationDegrees(player) * 0.5)
+	end
 
 	nudgeBallForwardForKick(direction) -- ⚠️ v21: já nasce fora do raio do corpo, na direção da cabeçada
 	-- ⚠️ v21 FIX: removido o "ball.CanCollide = true" que existia aqui —
 	-- ele cancelava na hora a janela de saída limpa (startKickClearance)
 	-- aberta logo acima, então essa cabeçada de Pulso nunca se beneficiava dela.
-	ball.AssemblyLinearVelocity = direction * headerForce + Vector3.new(0, 8, 0)
+	ball.AssemblyLinearVelocity = direction * headerForce + Vector3.new(0, anguloAlvo and 0 or (Config.HEADER_ELEVACAO or 8), 0) -- ⚠️ v105: sobe mais
 	playKickFeedback(headerForce)
 	playAnimation(player, Config.ANIMATIONS.Header, nil, nil, true) -- ⚠️ v65: cabeçada (normal e de Hissatsu passam as duas por aqui)
+	if anguloAlvo then
+		-- teleguiado: corrige o rumo até o ângulo (mesma velocidade), até
+		-- chegar, alguém dominar, ou 2.5s
+		local inicio = tick()
+		local conexao
+		conexao = RunService.Heartbeat:Connect(function()
+			local v = ball.AssemblyLinearVelocity
+			local falta = anguloAlvo - ball.Position
+			if owner or ball.Anchored or tick() - inicio > 2.5 or falta.Magnitude < 3 or v.Magnitude < 5 then
+				conexao:Disconnect()
+				return
+			end
+			-- ⚠️ v108: correção mais suave (era 0.25) — "tá forte demais, nerfa um pouco"
+			ball.AssemblyLinearVelocity = v:Lerp(falta.Unit * v.Magnitude, 0.14)
+		end)
+	end
 	return true
 end
 
@@ -4916,12 +5809,209 @@ _G.PulseExecuteAerialControl = function(player, effect)
 
 	setOwner(player)
 	pushToucher(player)
-	playAnimation(player, dribbleAnimationFor(nil), Enum.AnimationPriority.Action2, nil, true) -- ⚠️ v63: sem direção aqui (domínio), usa a neutra
+	playAnimation(player, dribbleAnimationFor(nil), Enum.AnimationPriority.Action2, nil, true, nil, nil, "Dominio") -- ⚠️ v63: sem direção aqui (domínio), usa a neutra · v96: no animador por código é a pose de amortecer
 	return true
 end
 
-_G.PulseExecuteTackle = function(player, effect)
+_G.PulseExecuteTackle = function(player, effect, def)
 	if isStunned(player) then return false end
+	-- ⚠️ v110 — PEDIDO: "os tackles, todos, não precisam que você tenha outra
+	-- pessoa na frente ou uma pessoa com a bola pra usar. Você pode usar em
+	-- qualquer lugar. Ele vai na distância que precisa ir e faz o que ele faz —
+	-- o de gelo vai lá, rouba a bola do cara e deixa ele paralisado. Só que ele
+	-- vai na RETA onde o cara tá mirando, não exatamente no cara com a bola."
+	-- Igual a Investida Titânica: um dash reto na direção da MIRA (a mesma do
+	-- chute de Hissatsu), mais longo quanto maior o alcance da técnica
+	-- (TackleRangeAdd). No primeiro adversário que encostar ele PARA — rouba a
+	-- bola se estiver com ela — e a técnica acontece ali; sem ninguém no
+	-- caminho, acontece no fim da reta. O efeito (gelo/pisão/clarão...) sai
+	-- depois de def.ImpactoAtraso (o instante do golpe na animação).
+	if def then
+		if owner == player then return false end
+		local _, root = getCharacterParts(player)
+		if not root then return false end
+		local direcao
+		local mira = _G.GetPulseAimPoint and _G.GetPulseAimPoint(player)
+		if typeof(mira) == "Vector3" and mira.X == mira.X then
+			local plano = Vector3.new(mira.X - root.Position.X, 0, mira.Z - root.Position.Z)
+			if plano.Magnitude > 1 then direcao = plano.Unit end
+		end
+		if not direcao then
+			local look = Vector3.new(root.CFrame.LookVector.X, 0, root.CFrame.LookVector.Z)
+			direcao = look.Magnitude > 0.01 and look.Unit or Vector3.new(0, 0, -1)
+		end
+		local extra = effect.TackleRangeAdd or 0
+		local distancia = Config.TACKLE_DASH_FORCE * Config.TACKLE_DASH_DURATION + extra * 2
+		local duracao = Config.TACKLE_DASH_DURATION + extra * 0.012
+		-- ⚠️ v110 — PEDIDO: "faz do jeito que faz mais sentido no anime". Só a
+		-- Rasteira e o Roubo Congelante são CARRINHO de verdade; as outras têm o
+		-- deslocamento delas (def.Deslocamento):
+		--   Carrinho — desliza (Killer Slide, Frozen Steal)
+		--   Corrida  — corre de braços pra trás (Photon Flash)
+		--   Salto    — salto em arco até o ponto e cai pisando (Snow Angel)
+		--   Passo    — um passo curto e pisa ali (Super Shikofumi)
+		--   Projetil — fica no lugar e a MEIA-LUA é que corre na mira (Spinning Cut)
+		local modo = def.Deslocamento or "Carrinho"
+		do -- não atravessa parede
+			local params = RaycastParams.new()
+			params.FilterType = Enum.RaycastFilterType.Exclude
+			params.RespectCanCollide = true
+			local ignorar = { ball }
+			for _, p in ipairs(Players:GetPlayers()) do if p.Character then table.insert(ignorar, p.Character) end end
+			for _, m in ipairs(workspace:GetChildren()) do
+				if m:IsA("Model") and m:FindFirstChildOfClass("Humanoid") then table.insert(ignorar, m) end
+			end
+			params.FilterDescendantsInstances = ignorar
+			local hit = workspace:Raycast(root.Position, direcao * (distancia + 2), params)
+			if hit then distancia = math.max(0, (hit.Position - root.Position).Magnitude - 2.5) end
+		end
+		local alcanceTotal = distancia
+		if modo == "Passo" then
+			distancia = math.min(distancia, 6)
+			duracao = 0.22
+		elseif modo == "Corrida" then
+			duracao = duracao * 1.35
+		elseif modo == "Salto" then
+			duracao = 0.84 -- casa com a animação do Anjo da Neve (cai aos 0.84s)
+		elseif modo == "Projetil" then
+			distancia = 0
+			duracao = 0.4 -- o chute giratório solta a meia-lua aos 0.4s
+		end
+		root.CFrame = CFrame.lookAt(root.Position, root.Position + direcao)
+		local atraso = def.ImpactoAtraso or 0
+		local agora = tick()
+		local dash = {
+			startPosition = root.Position,
+			endPosition = root.Position + direcao * distancia,
+			triggeredAt = agora,
+			expiresAt = agora + duracao + atraso + 0.1,
+			moveDuration = duracao,
+			isPulseDash = true,
+			hitboxRadius = Config.PULSE_TACKLE_HITBOX or 5.5,
+			efeitoFixo = effect,
+			multiAlvo = true,
+			atingidos = {},
+			resolved = false,
+			arco = (modo == "Salto") and 7 or nil,                        -- sobe e desce no caminho
+			semContato = (modo == "Salto" or modo == "Projetil") or nil,  -- não para no caminho
+		}
+		dash.aoChegar = function()
+			dash.expiresAt = tick() + atraso + 0.1 -- fica no lugar enquanto o golpe acontece
+			if modo == "Projetil" then
+				-- a MEIA-LUA azul corre reta na mira; no primeiro adversário (ou no
+				-- fim do alcance) sobe o MURO de fogo azul: joga longe quem estiver
+				-- ali, e quem estava com a bola perde ela — que volta quicando pra
+				-- quem usou (wiki: "the ball bounces back towards them")
+				local _, r0 = getCharacterParts(player)
+				if not r0 then return end
+				local origem = r0.Position
+				local VEL = 70
+				if Remotes.HissatsuVFX and player.Character then
+					Remotes.HissatsuVFX:FireAllClients(player.Character, def.Name, def.Element,
+						{ Dir = direcao, Vel = VEL, Alcance = alcanceTotal })
+				end
+				local t0 = tick()
+				local andado = 0
+				local con
+				con = RunService.Heartbeat:Connect(function()
+					local antes = andado
+					andado = math.min(alcanceTotal, (tick() - t0) * VEL)
+					local a = origem + direcao * antes
+					local b = origem + direcao * andado
+					local atingido = false
+					for _, other in ipairs(Players:GetPlayers()) do
+						if other == player or not areOpponents(player, other) then continue end
+						local _, oRoot = getCharacterParts(other)
+						if not oRoot then continue end
+						local pp = Vector3.new(oRoot.Position.X, a.Y, oRoot.Position.Z)
+						local ab = b - a
+						local u = ab.Magnitude > 0.001 and math.clamp((pp - a):Dot(ab) / ab:Dot(ab), 0, 1) or 0
+						if (pp - (a + ab * u)).Magnitude <= 5 then atingido = true break end
+					end
+					if not atingido and andado < alcanceTotal then return end
+					con:Disconnect()
+					local ponto = origem + direcao * andado
+					if Remotes.HissatsuVFX and player.Character then
+						Remotes.HissatsuVFX:FireAllClients(player.Character, def.Name .. "@muro", def.Element, { Posicao = ponto, Dir = direcao })
+					end
+					local forca = effect.KnockbackForce or 55
+					for _, other in ipairs(Players:GetPlayers()) do
+						if other == player or not areOpponents(player, other) then continue end
+						local _, oRoot = getCharacterParts(other)
+						if not oRoot then continue end
+						if Vector3.new(oRoot.Position.X - ponto.X, 0, oRoot.Position.Z - ponto.Z).Magnitude > (effect.KnockbackRadius or 12) then continue end
+						if owner == other and not GKAreaUtil.IsEffectiveGK(other) and not (_G.HasPulseIframe and _G.HasPulseIframe(other)) then
+							releaseOwner()
+							ball.CanCollide = true
+							tackleSound:Play()
+							local _, meu = getCharacterParts(player)
+							local volta = meu and (meu.Position - ball.Position) or -direcao
+							volta = Vector3.new(volta.X, 0, volta.Z)
+							volta = volta.Magnitude > 0.1 and volta.Unit or -direcao
+							ball.AssemblyLinearVelocity = volta * 38 + Vector3.new(0, 18, 0)
+							if _G.RegisterTackle then _G.RegisterTackle(player, other) end
+						end
+						oRoot.AssemblyLinearVelocity += direcao * forca + Vector3.new(0, forca * 0.35, 0)
+						stunPlayer(other, 0.8)
+					end
+				end)
+				return
+			end
+			if Remotes.HissatsuVFX and player.Character then
+				Remotes.HissatsuVFX:FireAllClients(player.Character, def.Name, def.Element)
+			end
+			task.delay(atraso, function()
+				if not player.Parent then return end
+				local _, r = getCharacterParts(player)
+				if not r then return end
+				-- quem estava com a bola ali perto perde ela (o pisão/clarão/gelo
+				-- pega quem está no raio, não só quem o corpo encostou)
+				local alcanceRoubo = Config.PULSE_TACKLE_HITBOX_ROUBO or 9
+				if owner and owner ~= player and areOpponents(player, owner) and not GKAreaUtil.IsEffectiveGK(owner)
+					and not (_G.HasPulseIframe and _G.HasPulseIframe(owner)) then
+					local _, oRoot = getCharacterParts(owner)
+					if oRoot and (oRoot.Position - r.Position).Magnitude <= alcanceRoubo then
+						local vitima = owner
+						releaseOwner()
+						ball.CanCollide = true
+						tackleSound:Play()
+						setOwner(player)
+						stunPlayer(vitima, Config.TACKLE_VICTIM_STUN)
+						if _G.RegisterTackle then _G.RegisterTackle(player, vitima) end
+					end
+				end
+				if effect.StunRadius and effect.StunDuration and _G.PulseApplyAreaStun then
+					_G.PulseApplyAreaStun(player, effect.StunRadius, effect.StunDuration)
+				end
+				if effect.FreezeRadius and effect.FreezeDuration and _G.PulseApplyAreaFreeze then
+					_G.PulseApplyAreaFreeze(player, effect.FreezeRadius, effect.FreezeDuration)
+				end
+				if effect.KnockbackRadius and effect.KnockbackForce and _G.PulseApplyAreaKnockback then
+					_G.PulseApplyAreaKnockback(player, effect.KnockbackRadius, effect.KnockbackForce)
+				end
+				if effect.RagdollRadius and effect.RagdollDuration then
+					for _, other in ipairs(Players:GetPlayers()) do
+						if other == player or not areOpponents(player, other) then continue end
+						local _, otherRoot = getCharacterParts(other)
+						if otherRoot and (otherRoot.Position - r.Position).Magnitude <= effect.RagdollRadius then
+							ragdollPlayer(other, effect.RagdollDuration)
+						end
+					end
+				end
+			end)
+		end
+		tackleDashes[player] = dash
+		if modo == "Carrinho" then
+			avisarAcao(player.Character, "Tackle", duracao)
+		elseif modo == "Corrida" then
+			avisarAcao(player.Character, "CorridaHissatsu", duracao)
+		end -- (Salto/Projetil: a animação da técnica toca já no início, pelo VFX)
+		Remotes.SuppressShiftLockRotation:FireClient(player, duracao + atraso)
+		if Remotes.HissatsuVFX and player.Character then
+			Remotes.HissatsuVFX:FireAllClients(player.Character, def.Name .. "@inicio", def.Element, { Duracao = duracao, Dir = direcao })
+		end
+		return true
+	end
 	-- ⚠️ v43: respeita o alcance extra da habilidade (ver TackleRangeAdd).
 	if not _G.PulseHasOpponentInTackleRange(player, effect.TackleRangeAdd) then return false end
 	-- ⚠️ v67: goleiro na própria área não perde a bola pra ninguém — nem por
@@ -4951,6 +6041,7 @@ _G.PulseExecuteTackle = function(player, effect)
 	tackleSound:Play()
 	setOwner(player)
 	stunPlayer(stolenFrom, Config.TACKLE_VICTIM_STUN)
+	avisarAcao(stolenFrom.Character, "SofreuCarrinho", Config.TACKLE_VICTIM_STUN) -- ⚠️ v106: cai no chão e levanta
 	if _G.RegisterTackle then _G.RegisterTackle(player, stolenFrom) end
 	return true
 end
@@ -4974,6 +6065,7 @@ _G.PulseExecuteDribbleMove = function(player, effect)
 		Left = -root.CFrame.RightVector,
 		Right = root.CFrame.RightVector,
 		Back = -root.CFrame.LookVector,
+		Forward = root.CFrame.LookVector, -- ⚠️ v86: drible pra frente também existe (Back ao contrário)
 	}
 	local bestName, bestDot = "Back", -math.huge
 	for name, vec in pairs(candidates) do
@@ -4989,11 +6081,13 @@ _G.PulseExecuteDribbleMove = function(player, effect)
 	-- seção DRIBLE) escalam a distância da finta em cima da distância
 	-- normal (que já depende do DribbleSkill do jogador); sem a chave =
 	-- 1x (nenhum Pulso de drible usa isso ainda além dos novos 5).
-	local distance = (Config.DRIBBLE_MOVE_MIN_DISTANCE
-		+ (Config.DRIBBLE_MOVE_MAX_DISTANCE - Config.DRIBBLE_MOVE_MIN_DISTANCE) * skill) * (effect.DistanceMult or 1)
+	-- ⚠️ v104: Hissatsu de drible mantém o alcance longo (a finta normal virou só rolamento)
+	local minD = Config.DRIBBLE_HISSATSU_MIN_DISTANCE or Config.DRIBBLE_MOVE_MIN_DISTANCE
+	local maxD = Config.DRIBBLE_HISSATSU_MAX_DISTANCE or Config.DRIBBLE_MOVE_MAX_DISTANCE
+	local distance = (minD + (maxD - minD) * skill) * (effect.DistanceMult or 1)
 	local window = Config.DRIBBLE_ANIMATION_SECONDS -- ⚠️ v64: janela FIXA (= tempo da animação); a distância é que escala, logo a velocidade escala junto
 
-	playAnimation(player, dribbleAnimationFor(bestName), Enum.AnimationPriority.Action2, window, true) -- ⚠️ v63: reprodução ajustada à janela
+	playDribbleAnimation(player, bestName, window) -- ⚠️ v63: reprodução ajustada à janela; v86: Forward = Back ao contrário
 
 	local rangeBonus = (effect.AnkleRangeAdd or 0)
 		+ (_G.GetPulseActiveAnkleRangeAdd and _G.GetPulseActiveAnkleRangeAdd(player) or 0)
@@ -5001,16 +6095,19 @@ _G.PulseExecuteDribbleMove = function(player, effect)
 	local hitOpponent = applyAnkleBreaker(player, root, rangeBonus, stunBonus, effect.AlwaysStun)
 	local dashDistance = getMinidashBonusDistance(hitOpponent, skill)
 
-	local endPosition = root.Position + direction * (distance + dashDistance)
+	-- ⚠️ v86: mesmo esquema da finta manual — o cliente desloca, sem travar.
+	local offset = direction * (distance + dashDistance)
+	local endPosition = root.Position + offset
 	dribbleMoves[player] = {
 		targetPosition = endPosition,
 		startPosition = root.Position,
 		endPosition = endPosition,
+		offset = offset,
 		triggeredAt = tick(),
 		expiresAt = tick() + window,
 	}
 	setIframeGlow(player, true)
-	Remotes.SuppressShiftLockRotation:FireClient(player, window)
+	sendDisplacement(player, offset, window)
 	return true
 end
 
@@ -5144,3 +6241,669 @@ Players.PlayerRemoving:Connect(function(player)
 end)
 
 print("✅ BallController carregado.")
+
+-- ⚠️ v108 — METAVISÃO: "saber exatamente, a cada tick, aonde o jogador que está
+-- com a bola está olhando — uma linha reta fina até o final — pra interceptar
+-- (meta pra goleiro)". A mira só existe no cliente de quem chuta; ele manda
+-- ~10x/s enquanto tem a posse e aqui vira o atributo MiraBola (replica sozinho).
+-- Dentro de do...end: este script está no limite de 200 locals no topo.
+do
+	-- v110: o GKBot precisa saber se uma Hissatsu está voando (não "afasta" ela)
+	_G.PulseEmVooReto = function() return pulseStraightFlightActive end
+	Remotes.MiraDoDono.OnServerEvent:Connect(function(player, ponto)
+		if typeof(ponto) ~= "Vector3" or ponto ~= ponto or owner ~= player then return end
+		player:SetAttribute("MiraBola", ponto)
+	end)
+	-- ⚠️ v109: caminho rápido, todo quadro — repassa na hora pra todo mundo
+	Remotes.MiraDoDonoU.OnServerEvent:Connect(function(player, ponto)
+		if typeof(ponto) ~= "Vector3" or ponto ~= ponto or owner ~= player then return end
+		Remotes.MiraDoDonoU:FireAllClients(player, ponto)
+	end)
+end
+
+-- ⚠️ v108 — DEFESA INSTANTÂNEA CONTRA CHUTE NORMAL. PEDIDO: "Hissatsus de
+-- defesa e de gol tiram a bola que for chutada. Se uma bola for chutada numa
+-- Hissatsu de gol, ele pega instantaneamente — roda a cutscene da Hissatsu, mas
+-- a bola simplesmente para na mão dele e nem precisa do QTE. E a do defensor
+-- também: a bola para onde for, no ar — a da barreira para na barreira."
+-- Hissatsu x Hissatsu continua no duelo com QTE (Heartbeat de colisão acima,
+-- que só age com pulseStraightFlightActive). Aqui é só chute comum.
+-- (numa função própria: dentro de do...end os locals ainda contam no limite de 200 do topo)
+;(function()
+	local DUR_CUTSCENE = 1.8
+	local VEL_MINIMA = 18
+	local bloqueadoNoChute = nil -- recentKickTime do chute já parado pela barreira
+
+	RunService.Heartbeat:Connect(function()
+		if pulseStraightFlightActive or ballFrozenForGuardQTE or owner then return end
+		if not recentKicker then return end
+		local vel = ball.AssemblyLinearVelocity
+		if vel.Magnitude < VEL_MINIMA then return end
+
+		-- 1) goleiro com a guarda de Hissatsu armada: pega na hora
+		for _, player in ipairs(Players:GetPlayers()) do
+			if guardResolving[player] then continue end
+			if not areOpponents(recentKicker, player) then continue end
+			local guard = _G.GetGKGuard and _G.GetGKGuard(player)
+			if not guard then continue end
+			local ownGoal = player.Team and ownGoalOf(player.Team.Name)
+			local _, root = getCharacterParts(player)
+			if not ownGoal or not root then continue end
+			local guardWidth = getGoalWidth(ownGoal) * (guard.GuardSize or 0.5)
+			local guardHeight = math.max(ownGoal.Size.Y * 0.95, guardWidth * 0.4)
+			local horizontal = (Vector3.new(ball.Position.X, 0, ball.Position.Z) - Vector3.new(root.Position.X, 0, root.Position.Z)).Magnitude
+			if horizontal > guardWidth / 2 then continue end
+			if ball.Position.Y - root.Position.Y > guardHeight + 2 then continue end
+
+			local def = _G.ConsumirGuardaSemQTE and _G.ConsumirGuardaSemQTE(player)
+			if not def then continue end
+			guardResolving[player] = true
+			ballFrozenForGuardQTE = true
+			ball.AssemblyLinearVelocity = Vector3.zero
+			ball.AssemblyAngularVelocity = Vector3.zero
+			ball.Anchored = true
+			ball.CanCollide = false
+			if _G.TocarCutsceneDeDefesa then _G.TocarCutsceneDeDefesa(player.Character, def, DUR_CUTSCENE) end
+			if Config.PULSE_FORCE_DEBUG_PRINTS then
+				print(string.format("🧤 [Defesa] %s pegou o chute comum de %s com %s (sem QTE)", player.Name, recentKicker.Name, def.Name))
+			end
+			task.delay(DUR_CUTSCENE, function()
+				ball.Anchored = false
+				ball.CanCollide = true
+				ballFrozenForGuardQTE = false
+				guardResolving[player] = false
+				local _, r = getCharacterParts(player)
+				local efeito = def.Perfect or def.Bom
+				if efeito and efeito.Rebate and r then
+					-- Soco Explosivo: soca a bola de volta pro campo
+					local away = r.Position - ownGoal.Position
+					away = Vector3.new(away.X, 0, away.Z)
+					away = (away.Magnitude > 0.1) and away.Unit or r.CFrame.LookVector
+					ball.Position = r.Position + away * 3 + Vector3.new(0, 2, 0)
+					ball.AssemblyLinearVelocity = away * Config.GK_PUNCH_REBOUND_FORCE + Vector3.new(0, 16, 0)
+				elseif player.Character then
+					setOwner(player)
+				end
+				if _G.RegisterSave then _G.RegisterSave(player) end
+			end)
+			return
+		end
+
+		-- 2) barreira de defensor (Muralha Infinita / GetPulseBlock): a bola para no ar
+		if _G.GetPulseBlock and bloqueadoNoChute ~= recentKickTime then
+			for _, plr in ipairs(Players:GetPlayers()) do
+				if plr == recentKicker or not areOpponents(recentKicker, plr) then continue end
+				local radius = _G.GetPulseBlock(plr)
+				if not radius then continue end
+				local _, blockerRoot = getCharacterParts(plr)
+				if blockerRoot and (blockerRoot.Position - ball.Position).Magnitude <= radius then
+					bloqueadoNoChute = recentKickTime
+					ball.AssemblyLinearVelocity = Vector3.zero
+					ball.AssemblyAngularVelocity = Vector3.zero
+					if Config.PULSE_FORCE_DEBUG_PRINTS then
+						print(string.format("🧱 [Defesa] barreira de %s parou o chute comum de %s", plr.Name, recentKicker.Name))
+					end
+					return
+				end
+			end
+		end
+	end)
+end)()
+
+-- ⚠️ v110 — REDE DE SEGURANÇA CONTRA BOLA NaN. PEDIDO: "a bola sumiu de novo".
+-- Qualquer conta que gere NaN/infinito na velocidade ou na posição manda a bola
+-- pro nada (some da tela e ninguém mais acha). Todo quadro: se a bola ficou
+-- inválida, volta pro último lugar válido, parada, e avisa no Output.
+;(function()
+	local ultimoValido = ball.CFrame
+	local function invalido(v)
+		return v.X ~= v.X or v.Y ~= v.Y or v.Z ~= v.Z
+			or math.abs(v.X) > 1e5 or math.abs(v.Y) > 1e5 or math.abs(v.Z) > 1e5
+	end
+	RunService.Heartbeat:Connect(function()
+		if not ball.Parent then return end
+		-- ⚠️ v110 — PEDIDO: "a bola sumiu e não apareceu no centro, na hora que o GK
+		-- foi arremessar". Com a posse a física da bola vai pro CLIENTE do dono
+		-- (BolaNosPes). Quando o goleiro agarra, a bola fica ANCORADA — e peça
+		-- ancorada não troca de dono de rede, então a devolução pro servidor
+		-- falhava; no arremesso ela voltava pra propriedade AUTOMÁTICA (o jogador
+		-- mais perto) e o cliente dele passava a escrever a bola — até o resgate
+		-- pro centro era sobrescrito. Regra: bola SEM DONO = física do servidor.
+		if owner == nil and not ball.Anchored then
+			local okDono, donoRede = pcall(function() return ball:GetNetworkOwner() end)
+			if okDono and donoRede ~= nil then
+				pcall(function() ball:SetNetworkOwner(nil) end)
+			end
+		end
+		local pos, vel = ball.Position, ball.AssemblyLinearVelocity
+		if invalido(pos) or invalido(vel) or invalido(ball.AssemblyAngularVelocity) then
+			warn(("⚠️ BallController: bola ficou INVÁLIDA (pos %s, vel %s) — restaurada no último ponto válido"):format(tostring(pos), tostring(vel)))
+			if not ball.Anchored then pcall(function() ball:SetNetworkOwner(nil) end) end
+			ball.AssemblyLinearVelocity = Vector3.zero
+			ball.AssemblyAngularVelocity = Vector3.zero
+			ball.CFrame = ultimoValido + Vector3.new(0, 1, 0)
+			return
+		end
+		ultimoValido = ball.CFrame
+	end)
+	-- ⚠️ v110 (bateria da noite): a bola SUMIU de vez (Parent = nil) duas vezes
+	-- logo depois do arremesso do goleiro bot — o Roblox apaga sozinho uma
+	-- peça que a física manda pra posição infinita, e isso acontece DENTRO do
+	-- passo de física, antes do Heartbeat acima conseguir consertar. Então
+	-- confere também ANTES da física (Stepped): valor inválido volta pro
+	-- último ponto bom, e velocidade absurda (nenhum chute passa de ~700
+	-- studs/s) é limitada em vez de deixar a física explodir.
+	local VEL_MAX, GIRO_MAX = 1500, 400
+	RunService.Stepped:Connect(function()
+		if not ball.Parent or ball.Anchored then return end
+		local pos, vel, giro = ball.Position, ball.AssemblyLinearVelocity, ball.AssemblyAngularVelocity
+		if invalido(pos) or invalido(vel) or invalido(giro) then
+			warn(("⚠️ BallController: bola INVÁLIDA antes da física (pos %s, vel %s, giro %s) — restaurada"):format(tostring(pos), tostring(vel), tostring(giro)))
+			pcall(function() ball:SetNetworkOwner(nil) end)
+			ball.AssemblyLinearVelocity = Vector3.zero
+			ball.AssemblyAngularVelocity = Vector3.zero
+			ball.CFrame = ultimoValido + Vector3.new(0, 1, 0)
+			return
+		end
+		if vel.Magnitude > VEL_MAX then
+			warn(("⚠️ BallController: velocidade absurda na bola (%.0f studs/s) — limitada a %d"):format(vel.Magnitude, VEL_MAX))
+			ball.AssemblyLinearVelocity = vel.Unit * VEL_MAX
+		end
+		if giro.Magnitude > GIRO_MAX then
+			ball.AssemblyAngularVelocity = giro.Unit * GIRO_MAX
+		end
+	end)
+end)()
+
+
+-- ============================================================
+-- ⚠️ v111 — ARMAS COM USO DE VERDADE. PEDIDO: "faça todas as armas
+-- funcionar... a arma do Sae e do Rin não tá claro como usa, tem que andar pro
+-- lado e às vezes buga. Tem muitas armas de status — tem que ter utilidade
+-- diversa: um drible criativo, um drible que vai mais longe (o Monstro do
+-- Drible pode ser isso)... só não pode ser um chute picudo igual Hissatsu."
+-- Tudo aqui dentro de uma FUNÇÃO própria: um do...end não basta — os locals
+-- dele ainda contam no limite de 200 registradores do script principal.
+-- As ativas são chamadas pelo InstinctController como _G.ArmaAtiva_<Nome>
+-- (AtivaAction da Arma) e devolvem true ou (false, "motivo pro HUD").
+-- ============================================================
+;(function()
+	local function plano(v, fallback)
+		local p = Vector3.new(v.X, 0, v.Z)
+		if p.Magnitude > 0.05 then return p.Unit end
+		return fallback
+	end
+
+	local function paramsSemGente()
+		local params = RaycastParams.new()
+		params.FilterType = Enum.RaycastFilterType.Exclude
+		params.RespectCanCollide = true
+		local ignorar = { ball }
+		for _, p in ipairs(Players:GetPlayers()) do if p.Character then table.insert(ignorar, p.Character) end end
+		for _, m in ipairs(workspace:GetChildren()) do
+			if m:IsA("Model") and m:FindFirstChildOfClass("Humanoid") then table.insert(ignorar, m) end
+		end
+		params.FilterDescendantsInstances = ignorar
+		return params
+	end
+
+	-- quanto dá pra andar nessa direção sem atravessar parede/barreira
+	local function alcanceLivre(origem, dir, dist)
+		local hit = workspace:Raycast(origem, dir * (dist + 2.5), paramsSemGente())
+		if hit then return math.max(0, (hit.Position - origem).Magnitude - 2.5) end
+		return dist
+	end
+
+	local function vfx(player, nome, extra, dur)
+		if Remotes.ArmaVFX and player.Character then
+			Remotes.ArmaVFX:FireAllClients(player.Character, nome, nil, true, dur or 1, extra)
+		end
+	end
+
+	local function direcaoDaMira(player, root)
+		local mira = _G.GetPulseAimPoint and _G.GetPulseAimPoint(player)
+		if typeof(mira) == "Vector3" and mira == mira then
+			local d = plano(mira - root.Position, nil)
+			if d then return d, mira end
+		end
+		return plano(root.CFrame.LookVector, Vector3.new(0, 0, -1)), nil
+	end
+
+	local function adversarioComBola(player, raio)
+		if not owner or owner == player or not areOpponents(player, owner) then return nil end
+		local _, r = getCharacterParts(owner)
+		local _, meu = getCharacterParts(player)
+		if not r or not meu or (r.Position - meu.Position).Magnitude > raio then return nil end
+		return owner, r
+	end
+
+	-- adversários (jogadores + goleiro bot) — obstáculos da curva
+	local function obstaculos(player)
+		local lista = {}
+		for _, plr in ipairs(Players:GetPlayers()) do
+			if plr ~= player and areOpponents(player, plr) then
+				local _, r = getCharacterParts(plr)
+				if r then table.insert(lista, r.Position) end
+			end
+		end
+		for _, m in ipairs(workspace:GetChildren()) do
+			if m:IsA("Model") and m.Name:sub(1, 6) == "GKBot_" and not (player.Team and m.Name == "GKBot_" .. player.Team.Name) then
+				local r = m:FindFirstChild("HumanoidRootPart")
+				if r then table.insert(lista, r.Position) end
+			end
+		end
+		return lista
+	end
+
+	-- solta a bola do pé na direção de `alvo` (passe/tabela) com a física
+	-- de um chute normal (trava de corpo, auto-repossessão, som, animação)
+	local function lancarBola(player, root, alvo, rapidez)
+		if owner then releaseOwner() end
+		passLock = nil
+		ball.CanCollide = true
+		recentKicker, recentKickTime = player, tick()
+		kickerClearedBody = false
+		hasBodyBlockedThisFlight = false
+		startKickClearance(player)
+		selfPickupLockUntil[player] = tick() + SELF_PICKUP_LOCK_SECONDS
+		lastShotWasInstinct = false
+		pushToucher(player)
+		local dir = plano(alvo - ball.Position, plano(root.CFrame.LookVector, Vector3.new(0, 0, -1)))
+		nudgeBallForwardForKick(dir)
+		local v = _G.VelocidadeBalistica and _G.VelocidadeBalistica(ball.Position, alvo, rapidez)
+		if not v then v = dir * rapidez + Vector3.new(0, rapidez * 0.1, 0) end
+		ball.AssemblyLinearVelocity = v
+		applyCurve(nil, dir)
+		playKickFeedback(rapidez)
+		playAnimation(player, Config.ANIMATIONS.Kick, nil, nil, true)
+	end
+
+	-- =====================================================================
+	-- CURVA (Tiro Destruidor — Rin; Passe Curvo — Sae)
+	-- ⚠️ v111 — BUG "tem que andar pro lado e às vezes buga": o lado vinha do
+	-- MoveDirection no instante do chute. Correndo pra frente (W) ele é quase
+	-- paralelo ao corpo e o sinal do produto escalar virava cara-ou-coroa — a
+	-- bola curvava pro lado errado ou pra dentro do marcador. Agora o lado é
+	-- AUTOMÁTICO: a bola sai pelo lado LIVRE e contorna o adversário (ou o
+	-- goleiro) que está no caminho; sem ninguém no caminho, vem de fora pra
+	-- dentro do canto mirado. A/D só manda se você estiver andando CLARAMENTE
+	-- de lado (não na diagonal da corrida).
+	-- =====================================================================
+	_G.ArmaAplicarCurva = function(player, targetPoint, curva, chuteAGol)
+		local _, root = getCharacterParts(player)
+		if not root then return end
+		local horizontal = Vector3.new(ball.AssemblyLinearVelocity.X, 0, ball.AssemblyLinearVelocity.Z)
+		local distancia = Vector3.new(targetPoint.X - ball.Position.X, 0, targetPoint.Z - ball.Position.Z).Magnitude
+		if horizontal.Magnitude <= 5 or distancia <= 8 then return end
+		local frente = horizontal.Unit
+		local direita = frente:Cross(Vector3.yAxis).Unit
+		local lado = 0
+		local hum = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
+		local mov = hum and hum.MoveDirection or Vector3.zero
+		local lateral = mov:Dot(direita)
+		if mov.Magnitude > 0.2 and math.abs(lateral) > 0.75 then
+			lado = lateral >= 0 and 1 or -1
+		else
+			-- quem está no caminho (até 7 studs da linha, entre a bola e o alvo)
+			local melhor, melhorAlong = nil, math.huge
+			for _, pos in ipairs(obstaculos(player)) do
+				local rel = Vector3.new(pos.X - ball.Position.X, 0, pos.Z - ball.Position.Z)
+				local along = rel:Dot(frente)
+				local desvio = rel:Dot(direita)
+				if along > 3 and along < distancia + 2 and math.abs(desvio) < 7 and along < melhorAlong then
+					melhor, melhorAlong = desvio, along
+				end
+			end
+			if melhor and math.abs(melhor) > 0.6 then
+				lado = melhor > 0 and -1 or 1 -- sai pelo lado LIVRE
+			elseif chuteAGol and player.Team and enemyGoalOf(player.Team.Name) then
+				local golAdv = enemyGoalOf(player.Team.Name)
+				lado = ((targetPoint - golAdv.Position):Dot(direita) >= 0) and 1 or -1 -- de fora pra dentro do canto
+			else
+				lado = 1
+			end
+		end
+		local ang = math.rad(16 * math.clamp(curva, 0.2, 1.5))
+		local rapidez = horizontal.Magnitude
+		local tempoAteAlvo = distancia / (rapidez * math.cos(ang))
+		local aberto = frente * (rapidez * math.cos(ang)) + direita * (lado * rapidez * math.sin(ang))
+		ball.AssemblyLinearVelocity = aberto + Vector3.new(0, ball.AssemblyLinearVelocity.Y, 0)
+		-- aceleração que zera o desvio lateral exatamente em tempoAteAlvo
+		local puxao = 2 * rapidez * math.sin(ang) / math.max(tempoAteAlvo, 0.1)
+		curveGeneration += 1
+		local minhaCurva = curveGeneration
+		local decorrido = 0
+		local conexaoCurva
+		conexaoCurva = RunService.Heartbeat:Connect(function(dt)
+			decorrido += dt
+			if minhaCurva ~= curveGeneration or owner ~= nil or decorrido > tempoAteAlvo * 1.25
+				or ball.AssemblyLinearVelocity.Magnitude < 8 then
+				conexaoCurva:Disconnect()
+				return
+			end
+			ball.AssemblyLinearVelocity += -direita * lado * puxao * dt
+		end)
+		return lado
+	end
+
+	-- =====================================================================
+	-- PIQUE → ARRANQUE: tiro curto de velocidade (com ou sem a bola)
+	-- =====================================================================
+	_G.ArmaAtiva_Arranque = function(player, effect)
+		if isStunned(player) then return false, "atordoado" end
+		local _, root = getCharacterParts(player)
+		if not root then return false end
+		local dir = plano(root.AssemblyLinearVelocity, nil) or plano(root.CFrame.LookVector, Vector3.new(0, 0, -1))
+		local dist = alcanceLivre(root.Position, dir, effect.Distancia or 16)
+		if dist < 2 then return false, "sem espaço pra arrancar" end
+		sendDisplacement(player, dir * dist, effect.Tempo or 0.35)
+		if _G.ArmaImpulsoVelocidade then _G.ArmaImpulsoVelocidade(player, effect.SpeedMult or 1.25, effect.Duracao or 1.6) end
+		vfx(player, "Pique@arranque", { Dir = dir }, (effect.Duracao or 1.6))
+		return true
+	end
+
+	-- =====================================================================
+	-- MONSTRO DO DRIBLE (Bachira) → DRIBLE DO MONSTRO: três cortes em zigue-
+	-- zague pra frente (~30 studs), sem poder ser desarmado no meio, e quem
+	-- estiver no caminho cai (tornozelo quebrado)
+	-- =====================================================================
+	_G.ArmaAtiva_DribleMonstro = function(player, effect)
+		if owner ~= player then return false, "precisa estar com a bola" end
+		if isStunned(player) then return false, "atordoado" end
+		if GKAreaUtil.IsEffectiveGK(player) then return false, "goleiro na área não dribla" end
+		if _G.IsPulseInProgress and _G.IsPulseInProgress(player) then return false end
+		local _, root = getCharacterParts(player)
+		if not root then return false end
+		local frente = direcaoDaMira(player, root)
+		local direita = frente:Cross(Vector3.yAxis).Unit
+		local cortes = effect.Cortes or 3
+		local passo = effect.PassoCorte or 10
+		local largura = effect.LarguraCorte or 4
+		local tempoCorte = effect.TempoCorte or 0.3
+		local stun = effect.StunNoCaminho or 1.3
+		local total = cortes * tempoCorte
+		if _G.GrantPulseIframe then _G.GrantPulseIframe(player, total + 0.2) end
+		dribbleMoveCooldowns[player] = tick()
+		vfx(player, "Monstro do Drible@drible", { Dir = frente, Cortes = cortes, Tempo = tempoCorte }, total)
+		local derrubados = {}
+		for i = 1, cortes do
+			task.delay((i - 1) * tempoCorte, function()
+				if owner ~= player or not player.Parent then return end
+				local _, r = getCharacterParts(player)
+				if not r then return end
+				local lateral = (i == cortes) and 0 or ((i % 2 == 1) and 1 or -1)
+				local alvo = frente * passo + direita * (lateral * largura)
+				local dist = alcanceLivre(r.Position, alvo.Unit, alvo.Magnitude)
+				playDribbleAnimation(player, lateral > 0 and "Right" or (lateral < 0 and "Left" or "Forward"), tempoCorte)
+				sendDisplacement(player, alvo.Unit * dist, tempoCorte)
+				-- quem está no caminho desse corte cai
+				for _, plr in ipairs(Players:GetPlayers()) do
+					if plr == player or derrubados[plr] or not areOpponents(player, plr) then continue end
+					local _, o = getCharacterParts(plr)
+					if o and (o.Position - (r.Position + alvo * 0.5)).Magnitude <= (effect.RaioCaminho or 7) then
+						derrubados[plr] = true
+						stunPlayer(plr, stun)
+						ragdollPlayer(plr, math.min(stun, Config.ANKLE_BREAKER_RAGDOLL_DURATION or 1))
+					end
+				end
+			end)
+		end
+		return true
+	end
+
+	-- =====================================================================
+	-- PASSO FURTIVO → SUMIR: some da vista dos adversários por alguns
+	-- segundos (o cliente deles te desenha quase transparente e sem nome)
+	-- =====================================================================
+	_G.ArmaAtiva_Sumir = function(player, effect)
+		if not player.Character then return false end
+		if owner == player then return false, "só sem a bola" end
+		local dur = effect.Duracao or 3.5
+		player.Character:SetAttribute("FurtivoAte", workspace:GetServerTimeNow() + dur)
+		vfx(player, "Passo Furtivo@sumir", nil, dur)
+		return true
+	end
+
+	-- =====================================================================
+	-- TABELA → UM-DOIS: toca no companheiro e a bola VOLTA na sua frente,
+	-- de primeira. Sem companheiro perto, faz a tabela com a SUA SOMBRA
+	-- (igual os chutes em grupo sozinho).
+	-- =====================================================================
+	_G.ArmaAtiva_Tabela = function(player, effect)
+		if owner ~= player then return false, "precisa estar com a bola" end
+		if isStunned(player) then return false, "atordoado" end
+		local _, root = getCharacterParts(player)
+		if not root then return false end
+		local frente = direcaoDaMira(player, root)
+		-- companheiro mais perto na frente
+		local parceiro, ponto, menor = nil, nil, effect.Raio or 50
+		for _, plr in ipairs(Players:GetPlayers()) do
+			if plr == player or areOpponents(player, plr) then continue end
+			local _, r = getCharacterParts(plr)
+			if r then
+				local rel = r.Position - root.Position
+				local d = rel.Magnitude
+				if d < menor and d > 6 and plano(rel, frente):Dot(frente) > -0.2 then
+					parceiro, ponto, menor = plr, r.Position, d
+				end
+			end
+		end
+		local sombra = parceiro == nil
+		if sombra then
+			-- a sombra aparece na diagonal, do lado com mais espaço
+			local direita = frente:Cross(Vector3.yAxis).Unit
+			local lado = alcanceLivre(root.Position, (frente + direita).Unit, 16) >= alcanceLivre(root.Position, (frente - direita).Unit, 16) and 1 or -1
+			local dirSombra = (frente * 0.8 + direita * 0.6 * lado).Unit
+			ponto = root.Position + dirSombra * alcanceLivre(root.Position, dirSombra, 15)
+		end
+		local chao = root.Position.Y - 2.5
+		local alvoIda = Vector3.new(ponto.X, chao + 1, ponto.Z)
+		local ida = (alvoIda - ball.Position).Magnitude
+		local rapidez = math.clamp(ida * 2.2 + 30, 55, 110)
+		lancarBola(player, root, alvoIda, rapidez)
+		vfx(player, "Tabela@ida", { De = root.Position, Ponto = alvoIda, Sombra = sombra }, 1.4)
+		local tempoIda = ida / rapidez + 0.05
+		task.delay(tempoIda, function()
+			if not player.Parent then return end
+			-- a bola ainda está com o parceiro/sombra? (ninguém do outro time pegou)
+			if owner and owner ~= parceiro then return end
+			if not owner and (ball.Position - alvoIda).Magnitude > 9 then return end
+			local _, meu = getCharacterParts(player)
+			if not meu then return end
+			local minhaFrente = plano(meu.AssemblyLinearVelocity, nil) or frente
+			local volta = meu.Position + minhaFrente * (effect.Adiantar or 12)
+			volta = Vector3.new(volta.X, chao + 1, volta.Z)
+			local distVolta = (volta - ball.Position).Magnitude
+			if owner then releaseOwner() end
+			ball.CanCollide = true
+			recentKicker, recentKickTime = parceiro or player, tick()
+			kickerClearedBody = false
+			hasBodyBlockedThisFlight = false
+			selfPickupLockUntil[player] = nil
+			local v = _G.VelocidadeBalistica and _G.VelocidadeBalistica(ball.Position, volta, math.clamp(distVolta * 2.2 + 30, 55, 110))
+			ball.AssemblyLinearVelocity = v or (plano(volta - ball.Position, frente) * 60)
+			applyCurve(nil, plano(volta - ball.Position, frente))
+			playKickFeedback(60)
+			if parceiro then playAnimation(parceiro, Config.ANIMATIONS.Kick, nil, nil, true) end
+			vfx(player, "Tabela@volta", { De = ball.Position, Ponto = volta, Sombra = sombra }, 1)
+		end)
+		return true
+	end
+
+	-- =====================================================================
+	-- PULMÃO DE AÇO → SEGUNDO FÔLEGO: enche o fôlego na hora
+	-- =====================================================================
+	_G.ArmaAtiva_SegundoFolego = function(player, effect)
+		local s, m = player:FindFirstChild("Stamina"), player:FindFirstChild("MaxStamina")
+		if not s or not m then return false end
+		if s.Value >= m.Value - 1 then return false, "fôlego já está cheio" end
+		s.Value = m.Value
+		vfx(player, "Pulmão de Aço@folego", nil, 1)
+		return true
+	end
+
+	-- =====================================================================
+	-- PASSE DO PRODÍGIO (Sae) → PASSE CURVO: aperta a tecla e a bola vai
+	-- CURVANDO até o ponto mirado — se tiver companheiro perto da mira, até o
+	-- pé dele — contornando quem estiver no meio. Quem recebe chuta mais forte.
+	-- =====================================================================
+	_G.ArmaAtiva_PasseCurvo = function(player, effect)
+		if owner ~= player then return false, "precisa estar com a bola" end
+		if isStunned(player) then return false, "atordoado" end
+		local _, root = getCharacterParts(player)
+		if not root then return false end
+		local frente, mira = direcaoDaMira(player, root)
+		local alvo = mira or (root.Position + frente * 40)
+		local companheiro, menor = nil, effect.RaioCompanheiro or 18
+		for _, plr in ipairs(Players:GetPlayers()) do
+			if plr == player or areOpponents(player, plr) then continue end
+			local _, r = getCharacterParts(plr)
+			if r and (r.Position - alvo).Magnitude < menor then companheiro, menor = plr, (r.Position - alvo).Magnitude end
+		end
+		local chao = root.Position.Y - 2.5
+		if companheiro then
+			local _, r = getCharacterParts(companheiro)
+			alvo = r.Position + plano(r.AssemblyLinearVelocity, Vector3.zero) * 0.35 * math.min(r.AssemblyLinearVelocity.Magnitude, 30)
+		end
+		alvo = Vector3.new(alvo.X, chao + 1, alvo.Z)
+		local dist = (alvo - ball.Position).Magnitude
+		if dist < 10 then return false, "mire mais longe (curva precisa de espaço)" end
+		local rapidez = math.clamp(dist * 1.6 + 35, 60, Config.KICK_MAX_FORCE * getKickForceMultiplier(player))
+		lancarBola(player, root, alvo, rapidez)
+		_G.ArmaAplicarCurva(player, alvo, effect.Curva or 1.2, false)
+		vfx(player, "Passe do Prodígio", nil, 1.6)
+		if companheiro and effect.CompanheiroForcaMult and _G.SetPulseTeammateBuff then
+			_G.SetPulseTeammateBuff(companheiro, effect.CompanheiroForcaMult, 6)
+		end
+		return true
+	end
+
+	-- =====================================================================
+	-- MARCAÇÃO CERRADA (Jingo) → COLAR: por alguns segundos você gruda no
+	-- adversário com a bola, sempre entre ele e o seu gol
+	-- =====================================================================
+	_G.ArmaAtiva_Colar = function(player, effect)
+		if isStunned(player) then return false, "atordoado" end
+		local alvo = adversarioComBola(player, effect.Raio or 25)
+		if not alvo then return false, string.format("nenhum adversário com a bola a até %d studs", effect.Raio or 25) end
+		local dur = effect.Duracao or 3
+		local fim = tick() + dur
+		if _G.ArmaImpulsoVelocidade then _G.ArmaImpulsoVelocidade(player, effect.SpeedMult or 1.15, dur) end
+		vfx(player, "Marcação Cerrada@colar", { Alvo = alvo.Character }, dur)
+		task.spawn(function()
+			while tick() < fim and player.Parent and alvo.Parent do
+				task.wait(0.1)
+				if owner ~= alvo or isStunned(player) then break end
+				local _, meu = getCharacterParts(player)
+				local _, dele = getCharacterParts(alvo)
+				if not meu or not dele then break end
+				local gol = player.Team and ownGoalOf(player.Team.Name)
+				local proteger = gol and plano(gol.Position - dele.Position, Vector3.zero) or Vector3.zero
+				local ponto = dele.Position + proteger * (effect.Distancia or 3.5)
+				local falta = Vector3.new(ponto.X - meu.Position.X, 0, ponto.Z - meu.Position.Z)
+				if falta.Magnitude > 0.8 then
+					local passo = math.min(falta.Magnitude, (effect.VelocidadeColar or 34) * 0.1)
+					sendDisplacement(player, falta.Unit * passo, 0.12)
+				end
+			end
+		end)
+		return true
+	end
+
+	-- =====================================================================
+	-- LEITURA DE PASSE (Aiku) → INTERCEPTAR: com a bola solta em movimento
+	-- perto, você dispara pro ponto por onde ela vai passar e domina
+	-- =====================================================================
+	_G.ArmaAtiva_Interceptar = function(player, effect)
+		if isStunned(player) then return false, "atordoado" end
+		if owner then return false, "só com a bola solta (passe ou chute no ar)" end
+		local _, root = getCharacterParts(player)
+		if not root then return false end
+		local raio = effect.Raio or 38
+		local velDash = effect.VelocidadeDash or 70
+		local g = workspace.Gravity * Config.BALL_GRAVITY_MULTIPLIER
+		local p0, v0 = ball.Position, ball.AssemblyLinearVelocity
+		local chaoY = root.Position.Y - 2.5
+		local melhorT, melhorPonto = nil, nil
+		for i = 0, 24 do
+			local t = i * 0.05
+			local p = p0 + v0 * t + Vector3.new(0, -0.5 * g * t * t, 0)
+			if p.Y < chaoY + 0.5 then p = Vector3.new(p.X, chaoY + 1, p.Z) end
+			if p.Y > chaoY + 7 then continue end -- alto demais pra dominar
+			local d = Vector3.new(p.X - root.Position.X, 0, p.Z - root.Position.Z).Magnitude
+			if d <= raio and d <= velDash * math.max(t, 0.25) + 3 then
+				melhorT, melhorPonto = t, p
+				break
+			end
+		end
+		if not melhorPonto then return false, "a bola não passa perto o bastante" end
+		local falta = Vector3.new(melhorPonto.X - root.Position.X, 0, melhorPonto.Z - root.Position.Z)
+		local dir = plano(falta, plano(root.CFrame.LookVector, Vector3.new(0, 0, -1)))
+		local dist = alcanceLivre(root.Position, dir, math.max(0, falta.Magnitude - 1.5))
+		local tempo = math.clamp(melhorT, 0.18, 0.6)
+		sendDisplacement(player, dir * dist, tempo)
+		avisarAcao(player.Character, "CorridaHissatsu", tempo)
+		vfx(player, "Leitura de Passe@interceptar", { Dir = dir }, tempo)
+		task.delay(tempo + 0.02, function()
+			if owner or not player.Parent or isStunned(player) then return end
+			local _, r = getCharacterParts(player)
+			if r and (ball.Position - r.Position).Magnitude <= (effect.RaioDominio or 7) then
+				ball.AssemblyLinearVelocity = Vector3.zero
+				setOwner(player)
+				pushToucher(player)
+			end
+		end)
+		return true
+	end
+
+	-- =====================================================================
+	-- ANTECIPAÇÃO FANTASMA (Aiku) → PASSO FANTASMA: some e reaparece NA
+	-- FRENTE do adversário com a bola, fechando o caminho pro gol
+	-- =====================================================================
+	_G.ArmaAtiva_PassoFantasma = function(player, effect)
+		if isStunned(player) then return false, "atordoado" end
+		local alvo, dele = adversarioComBola(player, effect.Raio or 28)
+		if not alvo then return false, string.format("nenhum adversário com a bola a até %d studs", effect.Raio or 28) end
+		local _, meu = getCharacterParts(player)
+		if not meu then return false end
+		local gol = player.Team and ownGoalOf(player.Team.Name)
+		local frenteDele = plano(dele.AssemblyLinearVelocity, nil) or (gol and plano(gol.Position - dele.Position, nil)) or plano(dele.CFrame.LookVector, Vector3.new(0, 0, -1))
+		local ponto = dele.Position + frenteDele * (effect.Distancia or 4.5)
+		local falta = Vector3.new(ponto.X - meu.Position.X, 0, ponto.Z - meu.Position.Z)
+		local dir = plano(falta, frenteDele)
+		local dist = alcanceLivre(meu.Position, dir, falta.Magnitude)
+		vfx(player, "Antecipação Fantasma@passo", { De = meu.Position, Para = meu.Position + dir * dist }, 0.6)
+		sendDisplacement(player, dir * dist, effect.Tempo or 0.14)
+		return true
+	end
+
+	-- =====================================================================
+	-- SAÍDA RÁPIDA (goleiro) → SAÍDA DO GOL: dispara na direção da bola e,
+	-- se ela estiver solta ao alcance no fim, agarra
+	-- =====================================================================
+	_G.ArmaAtiva_SaidaDoGol = function(player, effect)
+		if isStunned(player) then return false, "atordoado" end
+		if owner == player then return false, "você já está com a bola" end
+		local _, root = getCharacterParts(player)
+		if not root then return false end
+		local falta = Vector3.new(ball.Position.X - root.Position.X, 0, ball.Position.Z - root.Position.Z)
+		local maximo = effect.Distancia or 24
+		if falta.Magnitude > (effect.Raio or 45) then return false, "a bola está longe demais" end
+		local dir = plano(falta, plano(root.CFrame.LookVector, Vector3.new(0, 0, -1)))
+		local dist = alcanceLivre(root.Position, dir, math.min(maximo, math.max(0, falta.Magnitude - 1.5)))
+		local tempo = effect.Tempo or 0.35
+		sendDisplacement(player, dir * dist, tempo)
+		avisarAcao(player.Character, "CorridaHissatsu", tempo)
+		vfx(player, "Saída Rápida@saida", { Dir = dir }, tempo)
+		task.delay(tempo + 0.02, function()
+			if owner or not player.Parent then return end
+			local _, r = getCharacterParts(player)
+			if r and (ball.Position - r.Position).Magnitude <= (effect.RaioAgarrar or 7) and ball.Position.Y < r.Position.Y + 5 then
+				ball.AssemblyLinearVelocity = Vector3.zero
+				setOwner(player)
+				pushToucher(player)
+			end
+		end)
+		return true
+	end
+end)()

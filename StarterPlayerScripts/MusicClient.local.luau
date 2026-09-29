@@ -145,6 +145,18 @@ local geracaoDaFaixa = 0
 
 local tocarFaixa -- declarada antes: agendarFimDaFaixa chama ela de volta
 
+-- ⚠️ v110 FIX: esta função era chamada mas nunca tinha sido criada ("attempt
+-- to call a nil value" na linha do agendarFimDaFaixa — a faixa nunca era
+-- cortada/emendada). Espera o áudio carregar (até 15s) pra ler o TimeLength.
+local function esperarCarregar(som)
+	if not som then return false end
+	local limite = os.clock() + 15
+	while not som.IsLoaded and os.clock() < limite do
+		task.wait(0.1)
+	end
+	return som.IsLoaded and som.TimeLength > 0
+end
+
 local function agendarFimDaFaixa(minhaGeracao, inicioSegundos)
 	task.spawn(function()
 		if not esperarCarregar(secondaryMusic) then return end

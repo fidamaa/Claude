@@ -105,6 +105,9 @@ bb.StudsOffset = Vector3.new(0, 0, 0)
 bb.MaxDistance = 500
 bb.AlwaysOnTop = true
 bb.LightInfluence = 0
+-- ⚠️ v104: o letreiro agora é o do MarcadoresLobby.local.luau (maior,
+-- tamanho fixo na tela, um por destino). Aqui fica só o feixe de luz.
+bb.Enabled = false
 bb.Parent = ancora
 
 local function cantos(inst, raio)

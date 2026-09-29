@@ -415,6 +415,10 @@ local MOVEMENT_ANIMATIONS = { "Idle", "Walk", "Run", "Jump", "Fall", "GKIdle" }
 local RUN_ANIMATION_MIN_SPEED = (Config.NORMAL_SPEED + Config.SPRINT_SPEED) / 2
 
 local function overrideMovementAnimations(character)
+	-- ⚠️ v96: com a animação por código ligada, andar/correr/parado/pulo são
+	-- do AnimadorProcedural (cliente) — tocar estas tracks aqui era uma das
+	-- três fontes que se embolavam no mesmo corpo.
+	if Config.ANIMACAO_PROCEDURAL then return end
 	local humanoid = character:WaitForChild("Humanoid", 5)
 	if not humanoid then return end
 
@@ -723,6 +727,22 @@ local function onPlayerAdded(player)
 				player:SetAttribute(Config.ELEMENT_ATTRIBUTE_NAME, snapshot.Element)
 			end
 
+			-- ⚠️ v110 — PEDIDO: "implemente o nome personalizado que já tem nos
+			-- slots dentro do jogo" + cosméticos/Flow equipados no Lobby. O
+			-- nome do slot vira o atributo "NomePersonagem" (placa de nome,
+			-- placar, chat); cada cosmético vira "Cosm_<Slot>" (ver
+			-- Cosmeticos.luau — o CosmeticosServer/Client aplicam).
+			if typeof(snapshot.SlotName) == "string" and snapshot.SlotName ~= "" then
+				player:SetAttribute("NomePersonagem", string.sub(snapshot.SlotName, 1, 24))
+			end
+			if typeof(snapshot.Cosmeticos) == "table" then
+				for slotCosm, idCosm in pairs(snapshot.Cosmeticos) do
+					if typeof(slotCosm) == "string" and typeof(idCosm) == "string" then
+						player:SetAttribute("Cosm_" .. slotCosm, idCosm)
+					end
+				end
+			end
+
 			-- Pulso/Instinto equipados no Lobby (ver RollServer.legacy.luau
 			-- de lá e MatchDataTransfer.legacy.luau) — repassa pro
 			-- PulseController/InstinctController deste place. Esses scripts
@@ -738,6 +758,13 @@ local function onPlayerAdded(player)
 				-- dos 2 slots ativos recebe cada Pulso/Instinto) — por isso
 				-- aqui a partida NUNCA recebe EquippedPulse3/EquippedInstinct3,
 				-- mesmo que o jogador tenha ExtraPulseSlot/ExtraInstinctSlot.
+				-- ⚠️ v106: o task.defer não garante que o PulseController/
+				-- InstinctController já carregaram — se ainda não, o jogador
+				-- ficava SEM as Hissatsus/Armas a partida inteira, sem aviso.
+				-- Espera eles existirem (até 15s) e avisa a HUD (LoadoutVersao).
+				local limite = os.clock() + 15
+				while (not _G.SetPlayerLoadout or not _G.SetPlayerInstincts) and os.clock() < limite do task.wait(0.2) end
+				if not _G.SetPlayerLoadout then warn("[Loadout] PulseController não carregou — " .. player.Name .. " ficou sem Hissatsu") end
 				if _G.SetPlayerLoadout then
 					local slot1 = typeof(snapshot.EquippedPulse1) == "string" and snapshot.EquippedPulse1 or nil
 					local slot2 = typeof(snapshot.EquippedPulse2) == "string" and snapshot.EquippedPulse2 or nil
@@ -752,6 +779,7 @@ local function onPlayerAdded(player)
 					end
 					_G.SetPlayerInstincts(player, lista)
 				end
+				player:SetAttribute("LoadoutVersao", (player:GetAttribute("LoadoutVersao") or 0) + 1)
 			end)
 		end
 	end

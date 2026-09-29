@@ -30,6 +30,16 @@ local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+-- ⚠️ v110: string.upper não põe acento em maiúscula ("Fúria" virava "FúRIA").
+-- Converte também as letras acentuadas (UTF-8 à..þ → À..Þ).
+local function maiusculas(s)
+	s = string.upper(tostring(s))
+	return (s:gsub("\195([\160-\190])", function(c)
+		local b = string.byte(c)
+		if b ~= 183 then return "\195" .. string.char(b - 32) end
+	end))
+end
+
 local Config = require(ReplicatedStorage:WaitForChild("FootballConfig"))
 local AbilityAura = require(ReplicatedStorage:WaitForChild("AbilityAura")) -- ⚠️ v45: aura de contorno pulsante (sem pintar o corpo)
 local PulseData = require(ReplicatedStorage:WaitForChild("PulseInstinctData"))
@@ -176,6 +186,50 @@ armaNome.TextColor3 = Color3.fromRGB(255, 255, 255)
 armaNome.Text = ""
 armaNome.Parent = armaCard
 
+-- ===================== HISSATSUS (acima da Arma) =====================
+-- ⚠️ v107 — PEDIDO: "os dois slots têm que aparecer na tela da partida (ex.:
+-- Tornado de Fogo e Sumiço embaixo)" + "coloca qual é o elemento de cada
+-- Hissatsu". A barra de baixo só mostrava o slot 1 (a ponte do slot 2 era
+-- vazia). Agora um cartão com as duas linhas: número, nome na cor da
+-- raridade e o elemento na cor dele.
+local COR_ELEMENTO = {
+	Fogo = Color3.fromRGB(255, 125, 45), Vento = Color3.fromRGB(140, 232, 210), Natureza = Color3.fromRGB(115, 212, 110),
+	Luz = Color3.fromRGB(255, 226, 115), Void = Color3.fromRGB(175, 115, 255),
+}
+local hissatsuCard = Instance.new("Frame")
+hissatsuCard.Name = "HissatsuCard"
+hissatsuCard.AnchorPoint = Vector2.new(0, 1)
+hissatsuCard.Position = UDim2.new(0, px(16), 1, px(-76))
+hissatsuCard.Size = UDim2.new(0, px(232), 0, px(66))
+hissatsuCard.BackgroundColor3 = Color3.fromRGB(18, 20, 28)
+hissatsuCard.BackgroundTransparency = 0.18
+hissatsuCard.BorderSizePixel = 0
+hissatsuCard.Visible = false
+hissatsuCard.Parent = screenGui
+arredondar(hissatsuCard)
+contorno(hissatsuCard, Color3.fromRGB(255, 255, 255), 0.82)
+local hissatsuCardPad = Instance.new("UIPadding")
+hissatsuCardPad.PaddingLeft = UDim.new(0, px(16))
+hissatsuCardPad.PaddingRight = UDim.new(0, px(14))
+hissatsuCardPad.Parent = hissatsuCard
+local hissatsuCardTitulo = armaTitulo:Clone()
+hissatsuCardTitulo.Text = "HISSATSUS"
+hissatsuCardTitulo.Parent = hissatsuCard
+local hissatsuCardLinhas = {}
+for i = 1, 2 do
+	local l = armaNome:Clone()
+	l.Name = "Slot" .. i
+	l.Position = UDim2.new(0, 0, 0, px(21 + (i - 1) * 20))
+	l.Size = UDim2.new(1, 0, 0, px(18))
+	l.TextSize = px(13)
+	l.RichText = true
+	l.Parent = hissatsuCard
+	hissatsuCardLinhas[i] = l
+end
+local function corHex(c)
+	return string.format("#%02X%02X%02X", math.floor(c.R * 255), math.floor(c.G * 255), math.floor(c.B * 255))
+end
+
 -- ===================== BARRAS DE BAIXO =====================
 -- Fábrica única: as duas barras são irmãs, só mudam de lado e de cor.
 local function criarBarra(nome, ancoraX, offsetX, cor, rotulo)
@@ -277,7 +331,7 @@ local hissatsuEnergiaTexto = nil
 
 function atualizarRotuloHissatsu()
 	local partes = { "HISSATSU" }
-	if hissatsuNome then table.insert(partes, string.upper(hissatsuNome)) end
+	if hissatsuNome then table.insert(partes, maiusculas(hissatsuNome)) end
 	if hissatsuEnergiaTexto then table.insert(partes, hissatsuEnergiaTexto) end
 	hissatsuRotulo.Text = table.concat(partes, " · ")
 end
@@ -336,22 +390,38 @@ local function refreshInstinctLine()
 end
 
 local instinctModeBannerActive = false
+-- ⚠️ v110: o Flow escolhido na Loja aparece no rótulo ("FLOW · BACHIRA · 40%")
+local CosmeticosHUD = nil
+pcall(function() CosmeticosHUD = require(ReplicatedStorage:WaitForChild("Cosmeticos", 5)) end)
+local function nomeDoFlow()
+	local item = CosmeticosHUD and CosmeticosHUD.Equipado(Players.LocalPlayer, "Flow")
+	if not item then return "FLOW", nil end
+	local curto = item.Nome:gsub("^Flow d[oa] ", "")
+	return "FLOW · " .. maiusculas(curto), item.Tema and item.Tema.Cor
+end
+local ultimoPercentFlow = 0
 local function refreshInstinctModeLabel(meterPercent)
+	local rotulo, corFlow = nomeDoFlow()
 	if instinctModeBannerActive then
 		-- ⚠️ v67 — PEDIDO: "eu não quero que isso seja modo instinto. Vai ser
 		-- FLOW, igual ao Blue Lock."
-		instinctModeLabel.Text = "FLOW ATIVO"
-		instinctModeLabel.TextColor3 = Color3.fromRGB(120, 210, 255)
+		instinctModeLabel.Text = rotulo .. " · ATIVO"
+		instinctModeLabel.TextColor3 = corFlow or Color3.fromRGB(120, 210, 255)
 	else
-		instinctModeLabel.Text = (meterPercent or 0) >= 100 and "FLOW · PRONTO" or ("FLOW · %d%%"):format(meterPercent or 0)
+		instinctModeLabel.Text = (meterPercent or 0) >= 100 and (rotulo .. " · PRONTO") or (rotulo .. (" · %d%%"):format(meterPercent or 0))
 		instinctModeLabel.TextColor3 = (meterPercent or 0) >= 100
 			and Color3.fromRGB(120, 210, 255) or Color3.fromRGB(140, 150, 170)
 	end
 end
 
+Players.LocalPlayer:GetAttributeChangedSignal("Cosm_Flow"):Connect(function()
+	refreshInstinctModeLabel(instinctModeBannerActive and 100 or ultimoPercentFlow)
+end)
+
 Remotes.InstinctModeFeedback.OnClientEvent:Connect(function(kind, extra)
 	if kind == "MeterUpdate" then
 		local percent = tonumber(extra) or 0
+		ultimoPercentFlow = percent
 		instinctModeBarFill.Size = UDim2.new(math.clamp(percent / 100, 0, 1), 0, 1, 0)
 		instinctModeBarFill.BackgroundColor3 = (percent >= 100) and Color3.fromRGB(255, 210, 90) or Color3.fromRGB(120, 255, 140)
 		if not instinctModeBannerActive then
@@ -492,19 +562,40 @@ local function refreshAbilitiesPanel()
 	-- ⚠️ v6: tecla real dos slots de Pulso é "1"/"2" (ver HissatsuInput.
 	-- local.luau) — Q/E/R eram do sistema antigo (nunca chegou a ter
 	-- input de verdade ligado).
-	local pulse1Def = findPulse(equipped.Pulse1)
-	if pulse1Def then
-		pulse1Line.Text = "1: " .. pulse1Def.Name .. " (" .. pulse1Def.Rarity .. ")"
-		pulse1Line.TextColor3 = RARITY_COLOR[pulse1Def.Rarity] or Color3.fromRGB(255, 255, 255)
-	else
-		pulse1Line.Text = "1: (vazio)"
-		pulse1Line.TextColor3 = Color3.fromRGB(150, 150, 150)
+	-- ⚠️ v106 — PEDIDO: "os dois têm que aparecer na tela da partida — Fire
+	-- Tornado e, embaixo, Sumiço". O slot 2 ficava SEMPRE em branco (sobra da
+	-- época de 1 Hissatsu só). Agora as duas linhas, e a de goleiro avisa que
+	-- só funciona no gol.
+	local function linha(label, numero, def)
+		-- ⚠️ v107: cartão dos dois slots (ver HissatsuCard)
+		local l = hissatsuCardLinhas[numero]
+		if l then
+			if def then
+				local corNome = RARITY_COLOR[def.Rarity] or Color3.fromRGB(255, 255, 255)
+				local elem = def.Element and string.format('  <font color="%s" size="%d">%s</font>',
+					corHex(COR_ELEMENTO[def.Element] or Color3.fromRGB(200, 200, 200)), px(11), maiusculas(def.Element)) or ""
+				local gk = def.RoleRequired == "GK" and string.format('  <font color="#8C96AA" size="%d">GOLEIRO</font>', px(10)) or ""
+				l.Text = string.format('<font color="#8C96AA">%d</font>  <font color="%s">%s</font>%s%s', numero, corHex(corNome), def.Name, elem, gk)
+			else
+				l.Text = string.format('<font color="#8C96AA">%d  (vazio)</font>', numero)
+			end
+			local algum = false
+			for _, x in ipairs(hissatsuCardLinhas) do
+				if not string.find(x.Text, "(vazio)", 1, true) and x.Text ~= "" then algum = true end
+			end
+			hissatsuCard.Visible = algum
+		end
+		if def then
+			local extra = def.RoleRequired == "GK" and "  · goleiro" or ""
+			label.Text = numero .. ": " .. def.Name .. " (" .. def.Rarity .. ")" .. extra
+			label.TextColor3 = RARITY_COLOR[def.Rarity] or Color3.fromRGB(255, 255, 255)
+		else
+			label.Text = numero .. ": (vazio)"
+			label.TextColor3 = Color3.fromRGB(150, 150, 150)
+		end
 	end
-
-	-- PEDIDO: só 1 Pulso equipado por vez agora — slot 2 nunca mais é
-	-- preenchido (ver RollServer.legacy.luau no Lobby), então essa linha
-	-- fica sempre em branco em vez de mostrar "2: (vazio)" à toa.
-	pulse2Line.Text = ""
+	linha(pulse1Line, 1, findPulse(equipped.Pulse1))
+	linha(pulse2Line, 2, findPulse(equipped.Pulse2))
 
 	-- ⚠️ v76: junta os nomes de TODOS os slots de Arma equipados (até 3),
 	-- não só um — "Apostador, Xerife" em vez de só o primeiro. O "ATIVO"
@@ -512,9 +603,15 @@ local function refreshAbilitiesPanel()
 	-- quando QUALQUER um dos equipados dispara (ver InstinctFeedback
 	-- mais abaixo).
 	local nomes = {}
+	-- ⚠️ v111 — PEDIDO: "não tá claro como é que você usa". Arma de tecla
+	-- mostra a tecla do slot (E = slot 1, R = slot 2) do lado do nome.
+	local TECLA_DO_SLOT = { Instinct1 = "E", Instinct2 = "R" }
 	for _, campo in ipairs({ "Instinct1", "Instinct2", "Instinct3" }) do
 		local def = findInstinct(equipped[campo])
-		if def then table.insert(nomes, def.Name) end
+		if def then
+			local tecla = def.Tecla and TECLA_DO_SLOT[campo]
+			table.insert(nomes, tecla and (def.Name .. " [" .. tecla .. "]") or def.Name)
+		end
 	end
 	if #nomes > 0 then
 		instinctBaseText = "Arma: " .. table.concat(nomes, ", ")
@@ -549,6 +646,8 @@ task.spawn(function()
 end)
 
 player:GetAttributeChangedSignal("Role"):Connect(refreshAbilitiesPanel)
+-- ⚠️ v106: o servidor avisa quando os slots chegaram (pode ser depois do spawn)
+player:GetAttributeChangedSignal("LoadoutVersao"):Connect(loadEquippedAbilities)
 
 -- ===== FEEDBACK DO SERVIDOR: Pulso (cooldown real) e Instinto (ativo) =====
 -- REWORK "PULSO": o cooldown agora começa no instante em que o botão é
@@ -626,7 +725,24 @@ Remotes.PulseFeedback.OnClientEvent:Connect(function(kind, extra)
 		end
 		return
 	end
+	-- ⚠️ v108: aviso de texto do servidor (ex.: Zona Morta sem companheiros / falhou)
+	if kind == "Aviso" and typeof(extra) == "string" then
+		showInstinctReason(extra)
+		return
+	end
+	-- ⚠️ v110 (debugger): cooldowns das Hissatsus zerados — some a contagem
+	if kind == "CooldownsZerados" then
+		for id, data in pairs(activeCooldowns) do
+			if id:sub(1, 6) == "Pulse_" then
+				data.GuiLabel:Destroy()
+				activeCooldowns[id] = nil
+			end
+		end
+		return
+	end
 	if kind ~= "Used" and kind ~= "Activated" and kind ~= "Consumed" then return end
+	-- ⚠️ v110 (debugger "sem cooldown"): o servidor não conta, o HUD também não
+	if player:GetAttribute("DebugSemCooldown") then return end
 	local pulseName = extra
 	local def = findPulse(pulseName)
 	if not def or not def.Cooldown then return end
@@ -649,12 +765,17 @@ Remotes.GambleTimerFeedback.OnClientEvent:Connect(function(secondsUntilNextRoll)
 	end
 end)
 
-Remotes.InstinctFeedback.OnClientEvent:Connect(function(active, name, reason)
+Remotes.InstinctFeedback.OnClientEvent:Connect(function(active, name, reason, cooldown)
 	if name ~= equipped.Instinct1 and name ~= equipped.Instinct2 and name ~= equipped.Instinct3 then return end
 	instinctActive = active and true or false
 	refreshInstinctLine()
 	if not active and reason then
 		showInstinctReason(reason)
+	end
+	-- ⚠️ v111: arma de tecla usada — conta o cooldown no painel
+	if active and typeof(cooldown) == "number" and cooldown > 0.5 then
+		local tecla = (name == equipped.Instinct2) and "R" or "E"
+		startCooldown("Arma_" .. name, name .. " (" .. tecla .. ")", cooldown)
 	end
 end)
 
@@ -698,11 +819,16 @@ UserInputService.InputBegan:Connect(function(input, gameProcessedEvent)
 		return
 	end
 
-	if input.KeyCode == DASH_KEY and not hasPossession then
-		startCooldown("Tackle", "Dash", Config.TACKLE_COOLDOWN) -- ⚠️ NOVO: F = Dash (o carrinho)
+	-- ⚠️ v86: Q = carrinho SEM bola / drible COM bola; F = dash (sempre).
+	if input.KeyCode == DASH_KEY then
+		startCooldown("Dash", "Dash", Config.DASH_COOLDOWN)
 	end
-	if DRIBBLE_KEYS[input.KeyCode] and hasPossession then
-		startCooldown("Dribble", "Drible", Config.DRIBBLE_MOVE_COOLDOWN)
+	if DRIBBLE_KEYS[input.KeyCode] then
+		if hasPossession then
+			startCooldown("Dribble", "Drible", Config.DRIBBLE_MOVE_COOLDOWN)
+		else
+			startCooldown("Tackle", "Carrinho", Config.TACKLE_COOLDOWN)
+		end
 	end
 end)
 

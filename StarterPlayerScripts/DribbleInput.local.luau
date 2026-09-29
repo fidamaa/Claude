@@ -17,6 +17,10 @@
 	getDribbleDirectionFromInput em BallController.legacy.luau). Q parado,
 	sem WASD, = drible pra frente.
 
+	⚠️ v86: SEM a bola o Q é o carrinho (FootballClient.local.luau); a finta
+	pra frente toca a animação de trás ao contrário, e o personagem não fica
+	mais travado durante a finta (continua andando, ver ApplyDisplacement).
+
 	NÃO faz nada se o jogador é GK EFETIVO (Role == "GK" E dentro da
 	própria área — ver GKAreaUtil.lua) — pra ele, Q + direção vira
 	mergulho (ver GKInput.local.luau). Goleiro FORA da área volta a usar
@@ -47,6 +51,9 @@ UserInputService.InputBegan:Connect(function(input, gameProcessedEvent)
 	if gameProcessedEvent then return end
 	if input.KeyCode ~= DRIBBLE_KEY then return end
 	if GKAreaUtil.IsEffectiveGK(player) then return end -- GK dentro da área: Q vira mergulho, ver GKInput.local.luau
+	-- ⚠️ v86: sem a bola o Q é o CARRINHO (FootballClient.local.luau) — aqui
+	-- só a finta, que só existe com a bola no pé.
+	if _G.FootballHasPossession and not _G.FootballHasPossession() then return end
 
 	AttemptDribbleMove:FireServer(currentMoveDirection())
 end)
@@ -54,7 +61,7 @@ end)
 -- ⚠️ MOBILE: exposto pros botões de drible em MobileControls.local.luau.
 -- Com nome (Left/Back/Right) continua a finta fixa de antes; sem nome, usa
 -- a direção do joystick, igual ao Q no teclado.
-local VALID_MOVES = { Left = true, Back = true, Right = true }
+local VALID_MOVES = { Left = true, Back = true, Right = true, Forward = true } -- ⚠️ v86: + Forward
 _G.MobileDribble = function(moveName)
 	if GKAreaUtil.IsEffectiveGK(player) then return end
 	if moveName == nil then

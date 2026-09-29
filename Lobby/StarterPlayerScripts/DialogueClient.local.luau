@@ -2,32 +2,40 @@
 	DialogueClient (LocalScript)
 	LOCAL: StarterPlayerScripts (place Lobby)
 
-	Sistema de diálogo PRÓPRIO (substitui qualquer modelo de diálogo
-	pego pronto na internet) — serve pra TODOS os NPCs do jogo, cada um
-	só precisa da tag "Dialogue" + opcionalmente o atributo DialogueId
-	(ver NPCDialogueSetup.lua no servidor e DialogueData.lua com as
-	falas). Tudo construído por código, mesmo padrão do
-	CharacterClient/ShopClient — não depende de nada pronto no Explorer.
+	Sistema de diálogo PRÓPRIO — serve pra TODOS os NPCs do jogo, cada um só
+	precisa da tag "Dialogue" + opcionalmente o atributo DialogueId (ver
+	NPCDialogueSetup no servidor e DialogueData com as falas). Tudo
+	construído por código.
 
-	O QUE ACONTECE AO CONVERSAR COM UM NPC:
-	1. Tela funde rápido pra preto (evita corte seco de câmera).
-	2. Câmera vira Scriptable e centra no NPC (leve enquadramento tipo
-	   "sobre o ombro" do jogador).
-	3. O personagem do JOGADOR fica translúcido — SÓ NA SUA TELA
-	   (LocalTransparencyModifier, client-only de verdade: quem está do
-	   lado te vê 100% normal) — pra não tampar o enquadramento na
-	   câmera.
-	4. Jogador é travado (WalkSpeed/JumpPower = 0) enquanto conversa.
-	5. Caixa de diálogo aparece com o nome do NPC e o texto "digitando"
-	   letra por letra; clique avança ou pula a animação de texto.
-	6. Ao fechar: desfaz tudo (câmera, transparência, movimento) com o
-	   mesmo fade.
+	⚠️ v101 — PEDIDO: "tem esse erro no lobby, eu não consigo abrir nenhum
+	diálogo... tire essa tela preta de espera pra abrir as coisas, apertou,
+	conversou, abriu. e melhore o design, combinando com o design atual do
+	lobby."
 
-	ESPAÇO PRA ANIMAÇÃO (ainda não usado): cada nó de DialogueData pode
-	ter NpcAnimationId/PlayerAnimationId — quando vocês tiverem as
-	animações prontas, é só preencher esses campos lá que o
-	playNodeAnimations() abaixo já sabe tocar (por enquanto não faz nada
-	se estiverem vazios, de propósito).
+	CAUSA DO "NÃO ABRE": o Lobby está com StreamingEnabled. O NPC existe no
+	cliente, mas as PEÇAS dele só chegam quando você se aproxima. O script
+	antigo procurava o ProximityPrompt de cada NPC UMA vez, desistia depois
+	de 10s ("não tem nenhuma BasePart... depois de 10s") e nunca mais
+	ligava o botão — o prompt aparecia, você apertava, e nada acontecia.
+	Agora não existe mais "ligar prompt por NPC": o script escuta TODO
+	prompt apertado (ProximityPromptService.PromptTriggered) e, se for o
+	"TalkPrompt" de um Model com a tag Dialogue, abre a conversa. Não
+	importa quando o NPC carregou, nem se saiu e voltou do streaming.
+
+	FLUXO NOVO (sem tela preta):
+	  1. Apertou E: a caixa sobe na hora e a câmera desliza até o NPC.
+	  2. Texto "digitando" (rápido); clique/E/Espaço/Enter completa ou avança.
+	  3. Escolhas numeradas (1, 2, 3...) dentro da própria caixa.
+	  4. Escolha que ABRE algo (Loja, Roll, Missões, Ficha): a caixa fecha e a
+	     tela abre no mesmo instante — sem a fala extra "aqui está" pra clicar.
+	  5. Esc ou o X fecha.
+
+	VISUAL: mesma paleta do Roll/Matchmaking/MissionTracker (painel escuro,
+	borda discreta, acento azul, Gotham).
+
+	ESPAÇO PRA ANIMAÇÃO: cada nó de DialogueData pode ter NpcAnimationId/
+	PlayerAnimationId (playNodeAnimations abaixo toca se estiverem
+	preenchidos).
 ]]
 
 local Players = game:GetService("Players")
@@ -35,6 +43,18 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local CollectionService = game:GetService("CollectionService")
 local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local ProximityPromptService = game:GetService("ProximityPromptService")
+
+-- ⚠️ v110: string.upper não põe acento em maiúscula ("Fúria" virava "FúRIA").
+-- Converte também as letras acentuadas (UTF-8 à..þ → À..Þ).
+local function maiusculas(s)
+	s = string.upper(tostring(s))
+	return (s:gsub("\195([\160-\190])", function(c)
+		local b = string.byte(c)
+		if b ~= 183 then return "\195" .. string.char(b - 32) end
+	end))
+end
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -45,196 +65,217 @@ local DialogueData = require(ReplicatedStorage:WaitForChild("DialogueData"))
 local DIALOGUE_TAG = "Dialogue"
 local PROMPT_NAME = "TalkPrompt"
 
-local TYPE_CHAR_INTERVAL = 0.02 -- segundos por letra na animação de "digitando"
-local FADE_TIME = 0.22
+local TYPE_CHAR_INTERVAL = 0.012 -- segundos por letra ("digitando" rápido)
 local CHARACTER_DIALOGUE_TRANSPARENCY = 0.75
-local CAMERA_TWEEN_TIME = 0.45
+local CAMERA_TWEEN_TIME = 0.35
+local BOX_ANIM_TIME = 0.18
+
+-- Paleta do Lobby (mesma do RollClient/MatchmakingClient/MissionTrackerHUD)
+local COR_PAINEL      = Color3.fromRGB(13, 15, 22)
+local COR_CARTAO      = Color3.fromRGB(21, 24, 34)
+local COR_CARTAO_ALT  = Color3.fromRGB(27, 31, 43)
+local COR_BORDA       = Color3.fromRGB(34, 38, 52)
+local COR_ACENTO      = Color3.fromRGB(76, 156, 255)
+local COR_TEXTO       = Color3.fromRGB(238, 241, 248)
+local COR_TEXTO_FRACO = Color3.fromRGB(120, 128, 148)
 
 -- ========================================
--- Ações que um nó de diálogo pode disparar (Action = "Nome" no
--- DialogueData.lua). Hoje só abre a Loja (ShopClient.lua expõe
--- _G.OpenShop — mesmo _G, client e client sempre compartilham o mesmo
--- ambiente global dentro de um jogador).
+-- Ações que um nó de diálogo pode disparar (Action = "Nome" no DialogueData)
 -- ========================================
+local function chamarGlobal(nome, origem)
+	return function()
+		if _G[nome] then
+			_G[nome]()
+		else
+			warn(string.format("DialogueClient: ação chamada mas _G.%s não existe (%s carregou?)", nome, origem))
+		end
+	end
+end
 local ACTION_HANDLERS = {
-	OpenShop = function()
-		if _G.OpenShop then
-			_G.OpenShop()
-		else
-			warn("DialogueClient: ação OpenShop chamada mas _G.OpenShop não existe (ShopClient carregou?)")
-		end
-	end,
-	OpenRoll = function()
-		if _G.OpenRoll then
-			_G.OpenRoll()
-		else
-			warn("DialogueClient: ação OpenRoll chamada mas _G.OpenRoll não existe (RollClient carregou?)")
-		end
-	end,
-	OpenQuests = function()
-		if _G.OpenQuests then
-			_G.OpenQuests()
-		else
-			warn("DialogueClient: ação OpenQuests chamada mas _G.OpenQuests não existe (QuestClient carregou?)")
-		end
-	end,
-	-- ⚠️ v68: abre a ficha do personagem pela fala do kogamalotigo, no lugar
-	-- do botão flutuante "PERSONAGEM (P)" que foi removido.
-	OpenCharacter = function()
-		if _G.OpenCharacter then
-			_G.OpenCharacter()
-		else
-			warn("DialogueClient: ação OpenCharacter chamada mas _G.OpenCharacter não existe (CharacterClient carregou?)")
-		end
-	end,
+	OpenShop = chamarGlobal("OpenShop", "ShopClient"),
+	OpenRoll = chamarGlobal("OpenRoll", "RollClient"),
+	OpenQuests = chamarGlobal("OpenQuests", "QuestClient"),
+	-- ⚠️ v68: a ficha do personagem abre pela fala do kogamalotigo
+	OpenCharacter = chamarGlobal("OpenCharacter", "CharacterClient"),
 }
 
 -- ========================================
--- FADE (tela preta rápida pra mascarar cortes de câmera)
+-- ajudantes de estilo
 -- ========================================
-local fadeGui = Instance.new("ScreenGui")
-fadeGui.Name = "DialogueFade"
-fadeGui.IgnoreGuiInset = true
-fadeGui.DisplayOrder = 100
-fadeGui.ResetOnSpawn = false
-fadeGui.Parent = playerGui
-
-local fadeFrame = Instance.new("Frame")
-fadeFrame.Size = UDim2.fromScale(1, 1)
-fadeFrame.BackgroundColor3 = Color3.new(0, 0, 0)
-fadeFrame.BackgroundTransparency = 1
-fadeFrame.ZIndex = 100
-fadeFrame.Parent = fadeGui
-
-local function fadeTo(targetTransparency, duration)
-	-- Já estava no valor alvo (ex.: primeira vez que abre o diálogo, o
-	-- fadeFrame já nasce com BackgroundTransparency = 1): não precisa
-	-- animar nada. Isso também evita depender de tween.Completed:Wait()
-	-- travar pra sempre num tween "sem trabalho a fazer" (comportamento
-	-- inconsistente entre versões do Roblox pra tweens no-op).
-	if math.abs(fadeFrame.BackgroundTransparency - targetTransparency) < 0.001 then
-		return
-	end
-
-	local tween = TweenService:Create(fadeFrame, TweenInfo.new(duration, Enum.EasingStyle.Sine), {
-		BackgroundTransparency = targetTransparency,
-	})
-	tween:Play()
-
-	-- Não trava pra sempre se Completed nunca disparar por algum motivo:
-	-- usa o que vier primeiro entre o evento e um timeout um pouco maior
-	-- que a duração do tween.
-	local completedSignal = tween.Completed
-	local fired = false
-	local connection
-	connection = completedSignal:Connect(function()
-		fired = true
-	end)
-	local deadline = os.clock() + duration + 0.3
-	repeat
-		task.wait()
-	until fired or os.clock() >= deadline
-	connection:Disconnect()
-
-	-- Garante o valor final exato mesmo se o timeout tiver sido o motivo
-	-- de sair do loop (tween ainda rodando, mas já perto do fim).
-	fadeFrame.BackgroundTransparency = targetTransparency
+local function cantos(inst, raio)
+	local c = Instance.new("UICorner")
+	c.CornerRadius = UDim.new(0, raio)
+	c.Parent = inst
+	return c
+end
+local function contorno(inst, cor, espessura, transparencia)
+	local s = Instance.new("UIStroke")
+	s.Color = cor
+	s.Thickness = espessura or 1
+	s.Transparency = transparencia or 0
+	s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	s.Parent = inst
+	return s
 end
 
 -- ========================================
--- GUI DA CAIXA DE DIÁLOGO
+-- GUI
 -- ========================================
 local dialogueGui = Instance.new("ScreenGui")
 dialogueGui.Name = "DialogueGui"
 dialogueGui.Enabled = false
 dialogueGui.ResetOnSpawn = false
+dialogueGui.DisplayOrder = 20
 dialogueGui.Parent = playerGui
 
-local box = Instance.new("TextButton") -- TextButton só pra capturar clique em qualquer lugar da caixa
+-- CanvasGroup: dá pra fazer fade da caixa inteira de uma vez
+local grupo = Instance.new("CanvasGroup")
+grupo.Name = "Caixa"
+grupo.AnchorPoint = Vector2.new(0.5, 1)
+grupo.Position = UDim2.new(0.5, 0, 1, -28)
+grupo.Size = UDim2.new(1, -48, 0, 0)
+grupo.AutomaticSize = Enum.AutomaticSize.Y
+grupo.BackgroundTransparency = 1
+grupo.Parent = dialogueGui
+local limite = Instance.new("UISizeConstraint")
+limite.MaxSize = Vector2.new(780, math.huge)
+limite.Parent = grupo
+
+local box = Instance.new("TextButton") -- TextButton: clique em qualquer lugar avança
 box.Name = "Box"
 box.AutoButtonColor = false
 box.Text = ""
-box.Size = UDim2.new(1, -160, 0, 170)
-box.Position = UDim2.new(0.5, 0, 1, -40)
-box.AnchorPoint = Vector2.new(0.5, 1)
-box.BackgroundColor3 = Color3.fromRGB(18, 18, 26)
-box.BackgroundTransparency = 0.08
-box.Parent = dialogueGui
-Instance.new("UICorner", box).CornerRadius = UDim.new(0, 16)
-local boxStroke = Instance.new("UIStroke", box)
-boxStroke.Color = Color3.fromRGB(90, 200, 255)
-boxStroke.Thickness = 1.5
+box.Size = UDim2.new(1, 0, 0, 0)
+box.AutomaticSize = Enum.AutomaticSize.Y
+box.BackgroundColor3 = COR_PAINEL
+box.BackgroundTransparency = 0.04
+box.Parent = grupo
+cantos(box, 10)
+contorno(box, COR_BORDA, 1, 0.1)
+local boxPad = Instance.new("UIPadding")
+boxPad.PaddingLeft = UDim.new(0, 22)
+boxPad.PaddingRight = UDim.new(0, 18)
+boxPad.PaddingTop = UDim.new(0, 14)
+boxPad.PaddingBottom = UDim.new(0, 14)
+boxPad.Parent = box
+local boxLista = Instance.new("UIListLayout")
+boxLista.SortOrder = Enum.SortOrder.LayoutOrder
+boxLista.Padding = UDim.new(0, 10)
+boxLista.Parent = box
 
-local speakerLabel = Instance.new("TextLabel")
-speakerLabel.Size = UDim2.new(1, -40, 0, 28)
-speakerLabel.Position = UDim2.new(0, 22, 0, 14)
-speakerLabel.BackgroundTransparency = 1
-speakerLabel.Text = ""
-speakerLabel.TextColor3 = Color3.fromRGB(90, 200, 255)
-speakerLabel.Font = Enum.Font.GothamBlack
-speakerLabel.TextSize = 18
-speakerLabel.TextXAlignment = Enum.TextXAlignment.Left
-speakerLabel.Parent = box
+-- faixa de acento na borda esquerda (fora do padding, desenhada por cima)
+local faixa = Instance.new("Frame")
+faixa.Name = "Faixa"
+faixa.BackgroundColor3 = COR_ACENTO
+faixa.BorderSizePixel = 0
+faixa.Size = UDim2.new(0, 4, 1, -20)
+faixa.Position = UDim2.new(0, 8, 0, 10)
+faixa.Parent = grupo
+cantos(faixa, 2)
 
+-- cabeçalho: [NOME DO NPC] ........ [X]
+local cabecalho = Instance.new("Frame")
+cabecalho.Name = "Cabecalho"
+cabecalho.BackgroundTransparency = 1
+cabecalho.Size = UDim2.new(1, 0, 0, 26)
+cabecalho.LayoutOrder = 1
+cabecalho.Parent = box
+
+local nomeChip = Instance.new("TextLabel")
+nomeChip.Name = "Nome"
+nomeChip.AutomaticSize = Enum.AutomaticSize.X
+nomeChip.Size = UDim2.new(0, 0, 1, 0)
+nomeChip.BackgroundColor3 = COR_CARTAO_ALT
+nomeChip.Font = Enum.Font.GothamBlack
+nomeChip.TextSize = 13
+nomeChip.TextColor3 = COR_ACENTO
+nomeChip.Text = ""
+nomeChip.Parent = cabecalho
+cantos(nomeChip, 6)
+contorno(nomeChip, COR_ACENTO, 1, 0.55)
+local nomePad = Instance.new("UIPadding")
+nomePad.PaddingLeft = UDim.new(0, 10)
+nomePad.PaddingRight = UDim.new(0, 10)
+nomePad.Parent = nomeChip
+
+local fechar = Instance.new("TextButton")
+fechar.Name = "Fechar"
+fechar.AnchorPoint = Vector2.new(1, 0)
+fechar.Position = UDim2.new(1, 0, 0, 0)
+fechar.Size = UDim2.fromOffset(26, 26)
+fechar.BackgroundColor3 = COR_CARTAO_ALT
+fechar.AutoButtonColor = true
+fechar.Font = Enum.Font.GothamBold
+fechar.TextSize = 14
+fechar.TextColor3 = COR_TEXTO_FRACO
+fechar.Text = "X"
+fechar.Parent = cabecalho
+cantos(fechar, 13)
+
+-- texto da fala
 local textLabel = Instance.new("TextLabel")
-textLabel.Size = UDim2.new(1, -44, 0, 78)
-textLabel.Position = UDim2.new(0, 22, 0, 46)
+textLabel.Name = "Fala"
 textLabel.BackgroundTransparency = 1
-textLabel.Text = ""
-textLabel.TextColor3 = Color3.new(1, 1, 1)
-textLabel.Font = Enum.Font.Gotham
-textLabel.TextSize = 16
+textLabel.Size = UDim2.new(1, 0, 0, 0)
+textLabel.AutomaticSize = Enum.AutomaticSize.Y
+textLabel.Font = Enum.Font.GothamMedium
+textLabel.TextSize = 17
+textLabel.LineHeight = 1.15
+textLabel.TextColor3 = COR_TEXTO
 textLabel.TextWrapped = true
 textLabel.TextXAlignment = Enum.TextXAlignment.Left
 textLabel.TextYAlignment = Enum.TextYAlignment.Top
+textLabel.Text = ""
+textLabel.LayoutOrder = 2
 textLabel.Parent = box
 
+-- escolhas (dentro da caixa)
+local choicesFrame = Instance.new("Frame")
+choicesFrame.Name = "Escolhas"
+choicesFrame.BackgroundTransparency = 1
+choicesFrame.Size = UDim2.new(1, 0, 0, 0)
+choicesFrame.AutomaticSize = Enum.AutomaticSize.Y
+choicesFrame.LayoutOrder = 3
+choicesFrame.Visible = false
+choicesFrame.Parent = box
+local choicesLayout = Instance.new("UIListLayout")
+choicesLayout.Padding = UDim.new(0, 6)
+choicesLayout.SortOrder = Enum.SortOrder.LayoutOrder
+choicesLayout.Parent = choicesFrame
+
+-- rodapé: "▼ continuar"
 local advanceHint = Instance.new("TextLabel")
-advanceHint.Size = UDim2.new(1, -44, 0, 18)
-advanceHint.Position = UDim2.new(0, 22, 1, -24)
+advanceHint.Name = "Continuar"
 advanceHint.BackgroundTransparency = 1
-advanceHint.Text = "▼ clique pra continuar"
-advanceHint.TextColor3 = Color3.fromRGB(150, 150, 165)
+advanceHint.Size = UDim2.new(1, 0, 0, 14)
 advanceHint.Font = Enum.Font.GothamBold
 advanceHint.TextSize = 12
+advanceHint.TextColor3 = COR_TEXTO_FRACO
 advanceHint.TextXAlignment = Enum.TextXAlignment.Right
+advanceHint.Text = "▼  clique ou E pra continuar"
+advanceHint.LayoutOrder = 4
 advanceHint.Visible = false
 advanceHint.Parent = box
 
--- Botões de escolha (empilhados acima da caixa, só aparecem quando o
--- nó atual tem Choices)
-local choicesFrame = Instance.new("Frame")
-choicesFrame.Name = "Choices"
-choicesFrame.Size = UDim2.new(1, -160, 0, 0)
-choicesFrame.AutomaticSize = Enum.AutomaticSize.Y
-choicesFrame.Position = UDim2.new(0.5, 0, 1, -220)
-choicesFrame.AnchorPoint = Vector2.new(0.5, 1)
-choicesFrame.BackgroundTransparency = 1
-choicesFrame.Parent = dialogueGui
-
-local choicesLayout = Instance.new("UIListLayout")
-choicesLayout.Padding = UDim.new(0, 8)
-choicesLayout.VerticalAlignment = Enum.VerticalAlignment.Bottom
-choicesLayout.Parent = choicesFrame
-
 -- ========================================
--- ESTADO DO DIÁLOGO
+-- ESTADO
 -- ========================================
 local isOpen = false
 local currentTree = nil
 local currentNpcModel = nil
-local typeGeneration = 0 -- incrementado a cada render de nó, pra cancelar a digitação anterior
+local currentNodeId = nil
+local typeGeneration = 0
 local isTyping = false
+local botoesEscolha = {}
 
 local savedCameraType = nil
-local savedWalkSpeed = nil
-local savedJumpPower = nil
-local savedJumpHeight = nil
+local savedWalkSpeed, savedJumpPower, savedJumpHeight = nil, nil, nil
 local transparencyConnection = nil
 local cameraFollowConnection = nil
+local hintConnection = nil
 
 -- ========================================
--- TRANSPARÊNCIA LOCAL DO JOGADOR (client-only de verdade)
+-- JOGADOR: translúcido só na sua tela + travado
 -- ========================================
 local function setLocalCharacterTransparency(character, amount)
 	for _, part in ipairs(character:GetDescendants()) do
@@ -247,15 +288,9 @@ end
 local function applyPlayerTransparency()
 	local character = player.Character
 	if not character then return end
-
 	setLocalCharacterTransparency(character, CHARACTER_DIALOGUE_TRANSPARENCY)
-
-	-- Cobre partes que entram DEPOIS (acessórios carregando, por
-	-- exemplo) enquanto o diálogo estiver aberto.
-	transparencyConnection = character.DescendantAdded:Connect(function(descendant)
-		if descendant:IsA("BasePart") then
-			descendant.LocalTransparencyModifier = CHARACTER_DIALOGUE_TRANSPARENCY
-		end
+	transparencyConnection = character.DescendantAdded:Connect(function(d)
+		if d:IsA("BasePart") then d.LocalTransparencyModifier = CHARACTER_DIALOGUE_TRANSPARENCY end
 	end)
 end
 
@@ -264,124 +299,74 @@ local function clearPlayerTransparency()
 		transparencyConnection:Disconnect()
 		transparencyConnection = nil
 	end
-
-	local character = player.Character
-	if character then
-		setLocalCharacterTransparency(character, 0)
-	end
+	if player.Character then setLocalCharacterTransparency(player.Character, 0) end
 end
 
--- ========================================
--- TRAVAR/DESTRAVAR MOVIMENTO
--- ========================================
 local function lockPlayerMovement()
-	local character = player.Character
-	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	local humanoid = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
 	if not humanoid then return end
-
-	savedWalkSpeed = humanoid.WalkSpeed
-	savedJumpPower = humanoid.JumpPower
-	savedJumpHeight = humanoid.JumpHeight
+	savedWalkSpeed, savedJumpPower, savedJumpHeight = humanoid.WalkSpeed, humanoid.JumpPower, humanoid.JumpHeight
 	humanoid.WalkSpeed = 0
 	humanoid.JumpPower = 0
 	humanoid.JumpHeight = 0
 end
 
 local function unlockPlayerMovement()
-	local character = player.Character
-	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	local humanoid = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
 	if not humanoid then return end
-
 	if savedWalkSpeed then humanoid.WalkSpeed = savedWalkSpeed end
 	if savedJumpPower then humanoid.JumpPower = savedJumpPower end
 	if savedJumpHeight then humanoid.JumpHeight = savedJumpHeight end
 end
 
 -- ========================================
--- CÂMERA: centra no NPC com quem está conversando, meio "sobre o
--- ombro" do jogador (por isso a transparência do jogador importa).
+-- CÂMERA: sobre o ombro do jogador, olhando o NPC. Sem espera: se não der
+-- pra calcular agora, a câmera normal fica (nada de tela preta esperando).
 -- ========================================
 local function getHeadPosition(model)
 	local head = model:FindFirstChild("Head")
-	if head then return head.Position end
+	if head and head:IsA("BasePart") then return head.Position end
 	local anchor = model.PrimaryPart or model:FindFirstChildWhichIsA("BasePart", true)
-	return anchor and anchor.Position or Vector3.new()
+	return anchor and anchor.Position or nil
 end
 
 local function computeDialogueCameraCFrame(npcModel)
 	local character = player.Character
 	if not character then return nil end
-
 	local playerHeadPos = getHeadPosition(character)
 	local npcHeadPos = getHeadPosition(npcModel)
+	if not playerHeadPos or not npcHeadPos then return nil end
 
 	local flatDelta = Vector3.new(npcHeadPos.X - playerHeadPos.X, 0, npcHeadPos.Z - playerHeadPos.Z)
 	local flatDir = flatDelta.Magnitude > 0.01 and flatDelta.Unit or Vector3.new(0, 0, -1)
 	local sideDir = flatDir:Cross(Vector3.new(0, 1, 0))
-
 	local desiredOffset = sideDir * 2.3 - flatDir * 0.6 + Vector3.new(0, 0.35, 0)
 
-	-- OUTRA causa de tela preta: nada impedia a câmera de acabar DENTRO
-	-- de uma parede/objeto (o offset é lateral+pra trás do jogador, sem
-	-- checagem nenhuma) — câmera com geometria atravessando o near clip
-	-- plane renderiza tudo preto. Faz um raycast do olho do jogador até
-	-- a posição desejada da câmera; se bater em algo no caminho, para
-	-- um pouco antes do impacto em vez de atravessar.
-	local raycastParams = RaycastParams.new()
-	raycastParams.FilterType = Enum.RaycastFilterType.Exclude
-	raycastParams.FilterDescendantsInstances = { character, npcModel }
-
+	-- não deixa a câmera entrar numa parede (câmera dentro de geometria =
+	-- tela preta)
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.FilterDescendantsInstances = { character, npcModel }
 	local camPos = playerHeadPos + desiredOffset
-	local rayResult = workspace:Raycast(playerHeadPos, desiredOffset, raycastParams)
-	if rayResult then
-		local safeDistance = math.max(rayResult.Distance - 0.3, 0.2)
-		camPos = playerHeadPos + desiredOffset.Unit * safeDistance
+	local hit = workspace:Raycast(playerHeadPos, desiredOffset, params)
+	if hit then
+		camPos = playerHeadPos + desiredOffset.Unit * math.max(hit.Distance - 0.3, 0.2)
 	end
-
-	return CFrame.new(camPos, npcHeadPos)
+	return CFrame.lookAt(camPos, npcHeadPos)
 end
 
--- Espera até dar pra calcular uma CFrame de câmera válida (personagem e
--- NPC com Head/BasePart prontos). Isso existe pra evitar o bug de "tela
--- preta": se a câmera virasse Scriptable ANTES do personagem terminar
--- de carregar, computeDialogueCameraCFrame podia devolver nil e a
--- câmera ficava travada numa CFrame inválida (perto da origem do
--- mundo, dentro de geometria = tudo preto).
-local function waitForValidCameraCFrame(npcModel, timeoutSeconds)
-	local deadline = os.clock() + timeoutSeconds
-	repeat
-		local cf = computeDialogueCameraCFrame(npcModel)
-		if cf then
-			return cf
-		end
-		task.wait(0.1)
-	until os.clock() >= deadline
-	return nil
-end
-
-local function startCameraFollow(npcModel, targetCFrame)
-	if not targetCFrame then
-		-- Não deu pra calcular uma câmera válida a tempo — não troca pra
-		-- Scriptable, o diálogo continua com a câmera normal em vez de
-		-- travar numa posição quebrada.
-		warn("DialogueClient: não consegui calcular a câmera do diálogo (personagem/NPC sem Head?), mantendo a câmera normal.")
-		return
-	end
-
+local function startCameraFollow(npcModel)
+	local alvo = computeDialogueCameraCFrame(npcModel)
+	if not alvo then return end
 	camera.CameraType = Enum.CameraType.Scriptable
-
-	local tween = TweenService:Create(camera, TweenInfo.new(CAMERA_TWEEN_TIME, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-		CFrame = targetCFrame,
-	})
-	tween:Play()
-
-	-- Mantém o enquadramento mesmo se jogador/NPC balançarem um pouco
-	-- (idle animation, etc.) enquanto o diálogo está aberto.
+	local inicio = camera.CFrame
+	local t0 = os.clock()
 	cameraFollowConnection = RunService.RenderStepped:Connect(function()
 		local cf = computeDialogueCameraCFrame(npcModel)
-		if cf then
-			camera.CFrame = cf
-		end
+		if not cf then return end
+		local u = math.clamp((os.clock() - t0) / CAMERA_TWEEN_TIME, 0, 1)
+		u = 1 - (1 - u) ^ 3 -- easeOut: desliza e assenta
+		camera.CFrame = inicio:Lerp(cf, u)
 	end)
 end
 
@@ -394,287 +379,310 @@ local function stopCameraFollow()
 end
 
 -- ========================================
--- ANIMAÇÃO (espaço reservado — ver cabeçalho do arquivo)
+-- ANIMAÇÃO (espaço reservado)
 -- ========================================
 local function playNodeAnimations(node, npcModel)
-	if node.NpcAnimationId then
-		local humanoid = npcModel:FindFirstChildOfClass("Humanoid")
+	local function tocar(model, id)
+		local humanoid = model and model:FindFirstChildOfClass("Humanoid")
 		local animator = humanoid and humanoid:FindFirstChildOfClass("Animator")
 		if animator then
 			local anim = Instance.new("Animation")
-			anim.AnimationId = node.NpcAnimationId
+			anim.AnimationId = id
 			animator:LoadAnimation(anim):Play()
 		end
 	end
-
-	if node.PlayerAnimationId then
-		local character = player.Character
-		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-		local animator = humanoid and humanoid:FindFirstChildOfClass("Animator")
-		if animator then
-			local anim = Instance.new("Animation")
-			anim.AnimationId = node.PlayerAnimationId
-			animator:LoadAnimation(anim):Play()
-		end
-	end
+	if node.NpcAnimationId then tocar(npcModel, node.NpcAnimationId) end
+	if node.PlayerAnimationId then tocar(player.Character, node.PlayerAnimationId) end
 end
 
 -- ========================================
--- TEXTO "DIGITANDO"
+-- TEXTO "DIGITANDO" (pelo número de letras visíveis: não quebra acento)
 -- ========================================
 local function typeText(fullText)
 	typeGeneration += 1
-	local myGeneration = typeGeneration
-
+	local minha = typeGeneration
 	isTyping = true
-	textLabel.Text = ""
-
-	for i = 1, #fullText do
-		if myGeneration ~= typeGeneration then
-			return -- outro nó foi renderizado (ou o jogador pulou) enquanto isso rodava
-		end
-		textLabel.Text = string.sub(fullText, 1, i)
-		task.wait(TYPE_CHAR_INTERVAL)
-	end
-
-	isTyping = false
-end
-
-local function skipTyping(fullText)
-	typeGeneration += 1 -- cancela o loop de typeText em andamento
 	textLabel.Text = fullText
+	textLabel.MaxVisibleGraphemes = 0
+	local total = utf8.len(fullText) or #fullText
+	task.spawn(function()
+		for i = 1, total do
+			if minha ~= typeGeneration then return end
+			textLabel.MaxVisibleGraphemes = i
+			task.wait(TYPE_CHAR_INTERVAL)
+		end
+		if minha == typeGeneration then
+			textLabel.MaxVisibleGraphemes = -1
+			isTyping = false
+		end
+	end)
+end
+
+local function skipTyping()
+	typeGeneration += 1
+	textLabel.MaxVisibleGraphemes = -1
 	isTyping = false
 end
 
 -- ========================================
--- NAVEGAÇÃO NA ÁRVORE DE DIÁLOGO
+-- NAVEGAÇÃO
 -- ========================================
-local closeDialogue -- forward reference
-local currentNodeId = nil -- id do nó exibido agora, usado pelo clique da caixa (avançar/pular digitação)
+local closeDialogue -- forward
+local goToNode -- forward
 
 local function clearChoiceButtons()
-	for _, child in ipairs(choicesFrame:GetChildren()) do
-		if child:IsA("GuiObject") then
-			child:Destroy()
-		end
-	end
+	for _, b in ipairs(botoesEscolha) do b:Destroy() end
+	table.clear(botoesEscolha)
+	choicesFrame.Visible = false
 end
 
--- ⚠️ CORRIGIDO ("a loja abre mas ainda tenho que clicar pra fechar o
--- último diálogo"): o Action (ex: OpenShop/OpenRoll) disparava aqui, no
--- exato instante em que o nó é RENDERIZADO — ou seja, com a caixa de
--- diálogo ainda 100% na tela (ainda digitando aquele texto, isOpen ainda
--- true). O jogador só via o diálogo fechar de verdade num clique
--- SEGUINTE. Agora o Action não dispara mais aqui — fica guardado em
--- pendingAction e só é executado dentro de closeDialogue(), depois que o
--- diálogo já terminou 100% (tela normal de volta, câmera/movimento
--- destravados) — "faça tudo aparecer no final".
-local pendingAction = nil
+local function mostrarEscolhas(node)
+	clearChoiceButtons()
+	for i, choice in ipairs(node.Choices) do
+		local botao = Instance.new("TextButton")
+		botao.Name = "Escolha" .. i
+		botao.LayoutOrder = i
+		botao.Size = UDim2.new(1, 0, 0, 38)
+		botao.BackgroundColor3 = COR_CARTAO
+		botao.AutoButtonColor = false
+		botao.Text = ""
+		botao.Parent = choicesFrame
+		cantos(botao, 8)
+		local borda = contorno(botao, COR_BORDA, 1, 0)
 
-local function goToNode(nodeId)
+		local tecla = Instance.new("TextLabel")
+		tecla.Name = "Tecla"
+		tecla.AnchorPoint = Vector2.new(0, 0.5)
+		tecla.Position = UDim2.new(0, 8, 0.5, 0)
+		tecla.Size = UDim2.fromOffset(22, 22)
+		tecla.BackgroundColor3 = COR_CARTAO_ALT
+		tecla.Font = Enum.Font.GothamBlack
+		tecla.TextSize = 12
+		tecla.TextColor3 = COR_ACENTO
+		tecla.Text = tostring(i)
+		tecla.Parent = botao
+		cantos(tecla, 5)
+
+		local texto = Instance.new("TextLabel")
+		texto.Name = "Texto"
+		texto.BackgroundTransparency = 1
+		texto.Position = UDim2.new(0, 40, 0, 0)
+		texto.Size = UDim2.new(1, -52, 1, 0)
+		texto.Font = Enum.Font.GothamBold
+		texto.TextSize = 15
+		texto.TextColor3 = COR_TEXTO
+		texto.TextXAlignment = Enum.TextXAlignment.Left
+		texto.TextTruncate = Enum.TextTruncate.AtEnd
+		texto.Text = choice.Text
+		texto.Parent = botao
+
+		-- a escolha que abre uma tela ganha a setinha "›"
+		local destino = choice.Next and currentTree.Nodes[choice.Next]
+		if destino and destino.Action then
+			local seta = Instance.new("TextLabel")
+			seta.BackgroundTransparency = 1
+			seta.AnchorPoint = Vector2.new(1, 0.5)
+			seta.Position = UDim2.new(1, -10, 0.5, 0)
+			seta.Size = UDim2.fromOffset(16, 22)
+			seta.Font = Enum.Font.GothamBlack
+			seta.TextSize = 18
+			seta.TextColor3 = COR_ACENTO
+			seta.Text = "›"
+			seta.Parent = botao
+		end
+
+		local info = TweenInfo.new(0.1)
+		botao.MouseEnter:Connect(function()
+			TweenService:Create(botao, info, { BackgroundColor3 = COR_CARTAO_ALT }):Play()
+			TweenService:Create(borda, info, { Color = COR_ACENTO }):Play()
+		end)
+		botao.MouseLeave:Connect(function()
+			TweenService:Create(botao, info, { BackgroundColor3 = COR_CARTAO }):Play()
+			TweenService:Create(borda, info, { Color = COR_BORDA }):Play()
+		end)
+		botao.MouseButton1Click:Connect(function()
+			goToNode(choice.Next)
+		end)
+		table.insert(botoesEscolha, botao)
+	end
+	choicesFrame.Visible = true
+end
+
+goToNode = function(nodeId)
+	if not isOpen then return end
 	currentNodeId = nodeId
-
 	if not nodeId then
 		closeDialogue()
 		return
 	end
-
 	local node = currentTree.Nodes[nodeId]
 	if not node then
 		warn("DialogueClient: nó de diálogo inexistente: " .. tostring(nodeId))
 		closeDialogue()
 		return
 	end
-	clearChoiceButtons()
-	speakerLabel.Text = node.Speaker or currentNpcModel.Name
-	advanceHint.Visible = false
 
+	-- "apertou, conversou, abriu": nó que abre uma tela fecha o diálogo e
+	-- abre NA HORA (a fala desse nó — "aqui está!" — era só mais um clique)
 	if node.Action and ACTION_HANDLERS[node.Action] then
-		pendingAction = ACTION_HANDLERS[node.Action]
+		closeDialogue(ACTION_HANDLERS[node.Action])
+		return
 	end
 
+	nomeChip.Text = maiusculas(node.Speaker or currentNpcModel.Name)
+	clearChoiceButtons()
+	advanceHint.Visible = false
 	playNodeAnimations(node, currentNpcModel)
-
 	typeText(node.Text or "")
 
 	if node.Choices and #node.Choices > 0 then
-		for _, choice in ipairs(node.Choices) do
-			local choiceButton = Instance.new("TextButton")
-			choiceButton.Size = UDim2.new(1, 0, 0, 40)
-			choiceButton.BackgroundColor3 = Color3.fromRGB(32, 32, 44)
-			choiceButton.Text = choice.Text
-			choiceButton.TextColor3 = Color3.new(1, 1, 1)
-			choiceButton.Font = Enum.Font.GothamBold
-			choiceButton.TextSize = 14
-			choiceButton.Parent = choicesFrame
-			Instance.new("UICorner", choiceButton).CornerRadius = UDim.new(0, 10)
-			local stroke = Instance.new("UIStroke", choiceButton)
-			stroke.Color = Color3.fromRGB(90, 200, 255)
-			stroke.Thickness = 1
-
-			choiceButton.MouseButton1Click:Connect(function()
-				goToNode(choice.Next)
-			end)
-		end
+		mostrarEscolhas(node)
 	else
+		advanceHint.Text = node.Next and "▼  clique ou E pra continuar" or "▼  clique ou E pra fechar"
 		advanceHint.Visible = true
 	end
 end
 
--- Clicar na caixa: se ainda tá digitando, completa o texto na hora; se
--- já terminou E o nó é linear (sem Choices), avança pro próximo.
-box.MouseButton1Click:Connect(function()
+-- avançar: completa o texto se ainda estiver digitando; senão segue
+local function avancar()
 	if not isOpen or not currentNodeId then return end
 	local node = currentTree.Nodes[currentNodeId]
 	if not node then return end
-
 	if isTyping then
-		skipTyping(node.Text or "")
-		if not (node.Choices and #node.Choices > 0) then
-			advanceHint.Visible = true
-		end
+		skipTyping()
 		return
 	end
-
 	if not (node.Choices and #node.Choices > 0) then
 		goToNode(node.Next)
+	end
+end
+
+box.MouseButton1Click:Connect(avancar)
+fechar.MouseButton1Click:Connect(function() closeDialogue() end)
+
+local TECLAS_NUMERO = {
+	[Enum.KeyCode.One] = 1, [Enum.KeyCode.Two] = 2, [Enum.KeyCode.Three] = 3, [Enum.KeyCode.Four] = 4,
+	[Enum.KeyCode.KeypadOne] = 1, [Enum.KeyCode.KeypadTwo] = 2, [Enum.KeyCode.KeypadThree] = 3, [Enum.KeyCode.KeypadFour] = 4,
+}
+local abertoEm = 0
+UserInputService.InputBegan:Connect(function(input, processado)
+	if not isOpen then return end
+	-- 1-4 são teclas da barra de itens do Roblox (CoreGui): podem chegar
+	-- marcadas como "processadas" — só ignora de verdade se estiver
+	-- digitando no chat
+	if processado and (not TECLAS_NUMERO[input.KeyCode] or UserInputService:GetFocusedTextBox()) then return end
+	-- o mesmo E que abriu a conversa não pode já avançar a fala
+	if os.clock() - abertoEm < 0.2 then return end
+	local kc = input.KeyCode
+	if kc == Enum.KeyCode.Escape then
+		closeDialogue()
+	elseif kc == Enum.KeyCode.E or kc == Enum.KeyCode.Space or kc == Enum.KeyCode.Return or kc == Enum.KeyCode.ButtonA then
+		avancar()
+	elseif TECLAS_NUMERO[kc] then
+		local node = currentTree.Nodes[currentNodeId]
+		local escolha = node and node.Choices and node.Choices[TECLAS_NUMERO[kc]]
+		if escolha then
+			if isTyping then skipTyping() end
+			goToNode(escolha.Next)
+		end
 	end
 end)
 
 -- ========================================
--- ABRIR / FECHAR DIÁLOGO
+-- ABRIR / FECHAR (sem tela preta)
 -- ========================================
+local function animarEntrada()
+	grupo.GroupTransparency = 1
+	grupo.Position = UDim2.new(0.5, 0, 1, -8)
+	local info = TweenInfo.new(BOX_ANIM_TIME, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+	TweenService:Create(grupo, info, { GroupTransparency = 0, Position = UDim2.new(0.5, 0, 1, -28) }):Play()
+end
+
 local function startDialogue(npcModel, dialogueId)
 	if isOpen then return end
-
 	local tree = DialogueData[dialogueId]
 	if not tree then
-		warn("DialogueClient: nenhuma árvore de diálogo encontrada pra '" .. tostring(dialogueId) .. "' (confira o nome/DialogueId contra as chaves em DialogueData.lua)")
+		warn("DialogueClient: nenhuma árvore de diálogo pra '" .. tostring(dialogueId) .. "' (confira o DialogueId contra as chaves do DialogueData)")
 		return
 	end
 
 	isOpen = true
+	abertoEm = os.clock()
 	currentTree = tree
 	currentNpcModel = npcModel
 	savedCameraType = camera.CameraType
-
-	-- Calcula a câmera ANTES de fundir pra preto — se isso demorar
-	-- (personagem ainda carregando), o jogador só vê a tela normal um
-	-- instante a mais, em vez de ficar preso numa tela preta esperando.
-	local readyCFrame = waitForValidCameraCFrame(npcModel, 3)
-
-	-- BackgroundTransparency: 0 = opaco (preto), 1 = invisível (tela
-	-- normal). O bug do "quadrado preto" gigante era isso invertido aqui
-	-- desde sempre: fadeTo(1) fica INVISÍVEL, não preto — então a tela
-	-- nunca fundia de verdade pro preto no começo, e a chamada seguinte,
-	-- fadeTo(0), deixava tudo OPACO (preto cobrindo a tela) bem na hora
-	-- de mostrar o diálogo, e ficava preso assim.
-	fadeTo(0, FADE_TIME)
+	-- o prompt "Conversar" some enquanto a conversa estiver aberta (senão o
+	-- E que avança o texto reabriria a conversa)
+	ProximityPromptService.Enabled = false
 
 	applyPlayerTransparency()
 	lockPlayerMovement()
-	startCameraFollow(npcModel, readyCFrame)
+	startCameraFollow(npcModel)
+
 	dialogueGui.Enabled = true
-
-	-- IMPORTANTE: popula o texto do primeiro nó ANTES de fundir de volta
-	-- pro visível. Antes disso era ao contrário (fadeTo(0) primeiro,
-	-- goToNode depois) — por um instante a caixa já aparecia visível só
-	-- que com speakerLabel/textLabel ainda vazios, e como o fundo da
-	-- caixa é quase preto (rgb 18,18,26) isso parecia exatamente um
-	-- "quadrado preto" cobrindo a tela bem na hora que o diálogo abria.
 	goToNode(tree.Start)
+	animarEntrada()
 
-	fadeTo(1, FADE_TIME)
+	-- setinha "▼" pulsando
+	hintConnection = RunService.RenderStepped:Connect(function()
+		advanceHint.TextTransparency = 0.25 + 0.35 * (0.5 + 0.5 * math.sin(os.clock() * 5))
+	end)
 end
 
-closeDialogue = function()
+closeDialogue = function(acao)
 	if not isOpen then return end
+	isOpen = false
+	typeGeneration += 1
+	isTyping = false
 
-	fadeTo(0, FADE_TIME)
-
-	dialogueGui.Enabled = false
+	if hintConnection then
+		hintConnection:Disconnect()
+		hintConnection = nil
+	end
 	clearChoiceButtons()
 	stopCameraFollow()
 	clearPlayerTransparency()
 	unlockPlayerMovement()
+	dialogueGui.Enabled = false
+	ProximityPromptService.Enabled = true
 
-	isOpen = false
 	currentTree = nil
 	currentNpcModel = nil
 	currentNodeId = nil
 
-	fadeTo(1, FADE_TIME)
-
-	-- ⚠️ NOVO: só agora, com o diálogo 100% fechado (tela normal, câmera e
-	-- movimento já destravados), dispara o Action pendente (ex: abrir a
-	-- Loja/Roll) — pedido: "coloque pra abrir a loja ou o menu de spin só
-	-- quando terminar o diálogo 100%... faça tudo aparecer no final".
-	if pendingAction then
-		local action = pendingAction
-		pendingAction = nil
-		action()
+	-- abre a tela pedida (Loja/Roll/Missões/Ficha) no mesmo instante
+	if typeof(acao) == "function" then
+		acao()
 	end
 end
 
 -- ========================================
--- LIGAR OS NPCs (tag "Dialogue") AOS SEUS ProximityPrompts
+-- NPCs: escuta QUALQUER prompt apertado (funciona com StreamingEnabled —
+-- ver o cabeçalho)
 -- ========================================
-local connectedPrompts = {}
-
--- Acha a BasePart que serve de "âncora" pro ProximityPrompt. Tentado
--- várias vezes por um tempo (não só uma vez): o NPC pode estar tagueado
--- ANTES das suas partes terminarem de replicar pro cliente (streaming,
--- ou o Model acabou de entrar no Workspace), então checar só uma vez no
--- instante 0 dava falso negativo mesmo em NPCs montados certinho.
-local function waitForAnchorPart(npcModel, timeoutSeconds)
-	local deadline = os.clock() + timeoutSeconds
-	repeat
-		local anchorPart = npcModel.PrimaryPart
-			or npcModel:FindFirstChild("HumanoidRootPart")
-			or npcModel:FindFirstChildWhichIsA("BasePart", true)
-		if anchorPart then
-			return anchorPart
+local function npcDoPrompt(prompt)
+	if prompt.Name ~= PROMPT_NAME then return nil end
+	local atual = prompt.Parent
+	while atual and atual ~= workspace do
+		if atual:IsA("Model") and CollectionService:HasTag(atual, DIALOGUE_TAG) then
+			return atual
 		end
-		task.wait(0.25)
-	until os.clock() >= deadline
+		atual = atual.Parent
+	end
 	return nil
 end
 
-local function connectNpc(npcModel)
-	if connectedPrompts[npcModel] then return end
+ProximityPromptService.PromptTriggered:Connect(function(prompt, quem)
+	if quem ~= player then return end
+	local npcModel = npcDoPrompt(prompt)
+	if not npcModel then return end
+	local dialogueId = npcModel:GetAttribute("DialogueId") or npcModel.Name
+	startDialogue(npcModel, dialogueId)
+end)
 
-	task.spawn(function()
-		local anchorPart = waitForAnchorPart(npcModel, 10)
-		if not anchorPart then
-			warn("DialogueClient: '" .. npcModel:GetFullName() .. "' não tem nenhuma BasePart (nem PrimaryPart, nem HumanoidRootPart) depois de 10s — confira se o Model tem alguma parte de verdade.")
-			return
-		end
-
-		local prompt = anchorPart:FindFirstChild(PROMPT_NAME) or anchorPart:WaitForChild(PROMPT_NAME, 10)
-		if not prompt then
-			warn("DialogueClient: '" .. npcModel:GetFullName() .. "' não tem ProximityPrompt '" .. PROMPT_NAME .. "' (NPCDialogueSetup.lua rodou no servidor?)")
-			return
-		end
-
-		connectedPrompts[npcModel] = prompt.Triggered:Connect(function()
-			local dialogueId = npcModel:GetAttribute("DialogueId") or npcModel.Name
-			startDialogue(npcModel, dialogueId)
-		end)
-	end)
-end
-
-for _, npcModel in ipairs(CollectionService:GetTagged(DIALOGUE_TAG)) do
-	connectNpc(npcModel)
-end
-
-CollectionService:GetInstanceAddedSignal(DIALOGUE_TAG):Connect(connectNpc)
-
-CollectionService:GetInstanceRemovedSignal(DIALOGUE_TAG):Connect(function(npcModel)
-	local connection = connectedPrompts[npcModel]
-	if connection then
-		connection:Disconnect()
-		connectedPrompts[npcModel] = nil
-	end
+-- se o personagem morrer/renascer no meio da conversa, fecha limpo
+player.CharacterAdded:Connect(function()
+	if isOpen then closeDialogue() end
 end)
 
 print("✅ DialogueClient carregado.")

@@ -155,41 +155,82 @@ Players.PlayerRemoving:Connect(function(player)
 end)
 
 -- ===== CONVITE DE GRUPO =====
+-- ⚠️ v104 — PEDIDO: "não consigo convidar as pessoas pra party, eu clico em
+-- convidar, mas eles não recebem". Duas causas:
+--   1) nenhum cliente escutava ReceivePartyInvite (a janela de convite sumiu
+--      no redesenho do MatchmakingClient) — agora é o ConviteGrupoClient,
+--      que funciona em QUALQUER lugar do lobby, não só na zona da fila;
+--   2) aqui, convite pra quem já estava em outro grupo (mesmo só por ter
+--      aceitado um convite antes) era jogado fora em silêncio. Agora vai
+--      normalmente — aceitar tira a pessoa do grupo antigo (código abaixo).
+-- Quem convida recebe um aviso (PartyAviso) do que aconteceu, sempre.
+local function avisar(plr, textoAviso, tipo)
+	if plr and plr.Parent then
+		Remotes.PartyAviso:FireClient(plr, textoAviso, tipo or "info")
+	end
+end
+
 Remotes.InviteToParty.OnServerEvent:Connect(function(player, targetPlayer)
-	if typeof(targetPlayer) ~= "Instance" or not targetPlayer:IsA("Player") then return end
+	if typeof(targetPlayer) ~= "Instance" or not targetPlayer:IsA("Player") or targetPlayer.Parent ~= Players then return end
 	if targetPlayer == player then return end
+	ensureSoloParty(player)
+	ensureSoloParty(targetPlayer)
 
 	local myLeader = partyLeaderOf[player.UserId]
 	if isInQueue(myLeader) then
-		warn(player.Name .. " tentou convidar alguém com o grupo já na fila.")
+		avisar(player, "Saia da fila antes de convidar alguém.", "erro")
 		return
 	end
 	if #partyMembers[myLeader] >= Config.MAX_PARTY_SIZE then
-		warn(player.Name .. " tentou convidar, mas o grupo já está no limite (" .. Config.MAX_PARTY_SIZE .. ").")
+		avisar(player, ("Seu grupo já está cheio (%d)."):format(Config.MAX_PARTY_SIZE), "erro")
 		return
 	end
-	if partyLeaderOf[targetPlayer.UserId] ~= targetPlayer.UserId then
-		warn(targetPlayer.Name .. " já está em outro grupo, convite ignorado.")
+	local leaderDoAlvo = partyLeaderOf[targetPlayer.UserId]
+	if leaderDoAlvo == myLeader then
+		avisar(player, targetPlayer.DisplayName .. " já está no seu grupo.", "info")
+		return
+	end
+	if isInQueue(leaderDoAlvo) then
+		avisar(player, targetPlayer.DisplayName .. " está na fila com outro grupo.", "erro")
 		return
 	end
 
 	pendingInvite[targetPlayer.UserId] = { FromUserId = player.UserId, ExpiresAt = tick() + Config.PARTY_INVITE_TIMEOUT }
-	Remotes.ReceivePartyInvite:FireClient(targetPlayer, player.Name, player.UserId)
+	Remotes.ReceivePartyInvite:FireClient(targetPlayer, player.Name, player.UserId, Config.PARTY_INVITE_TIMEOUT, player.DisplayName)
+	avisar(player, "Convite enviado para " .. targetPlayer.DisplayName .. ".", "ok")
 end)
 
 Remotes.RespondToPartyInvite.OnServerEvent:Connect(function(player, accepted)
 	local invite = pendingInvite[player.UserId]
 	pendingInvite[player.UserId] = nil
-	if not invite or tick() > invite.ExpiresAt then return end
-	if not accepted then return end
-
+	if not invite then return end
 	local inviter = getPlayerByUserId(invite.FromUserId)
-	if not inviter then return end
+	if tick() > invite.ExpiresAt then
+		avisar(player, "Esse convite expirou.", "erro")
+		return
+	end
+	if not accepted then
+		avisar(inviter, player.DisplayName .. " recusou o convite.", "erro")
+		return
+	end
+
+	if not inviter then
+		avisar(player, "Quem te convidou saiu do servidor.", "erro")
+		return
+	end
+	ensureSoloParty(player)
 
 	local inviterLeader = partyLeaderOf[inviter.UserId]
 	local myLeader = partyLeaderOf[player.UserId]
-	if isInQueue(inviterLeader) or (myLeader and isInQueue(myLeader)) then return end
-	if not partyMembers[inviterLeader] or #partyMembers[inviterLeader] >= Config.MAX_PARTY_SIZE then return end
+	if isInQueue(inviterLeader) or (myLeader and isInQueue(myLeader)) then
+		avisar(player, "Não deu pra entrar: o grupo está na fila.", "erro")
+		return
+	end
+	if not partyMembers[inviterLeader] or #partyMembers[inviterLeader] >= Config.MAX_PARTY_SIZE then
+		avisar(player, "Não deu pra entrar: o grupo está cheio.", "erro")
+		return
+	end
+	if myLeader == inviterLeader then return end
 
 	-- Sai do grupo atual (se não for sozinho) antes de entrar no do convidador.
 	if myLeader then
@@ -206,9 +247,17 @@ Remotes.RespondToPartyInvite.OnServerEvent:Connect(function(player, accepted)
 		end
 	end
 
+	-- o "grupo solo" antigo dele não existe mais
+	if partyMembers[player.UserId] and #partyMembers[player.UserId] <= 1 then partyMembers[player.UserId] = nil end
 	partyLeaderOf[player.UserId] = inviterLeader
 	table.insert(partyMembers[inviterLeader], player.UserId)
 	broadcastPartyState(inviterLeader)
+	for _, userId in ipairs(partyMembers[inviterLeader]) do
+		if userId ~= player.UserId then
+			avisar(getPlayerByUserId(userId), player.DisplayName .. " entrou no grupo.", "ok")
+		end
+	end
+	avisar(player, "Você entrou no grupo de " .. inviter.DisplayName .. ".", "ok")
 end)
 
 Remotes.LeaveParty.OnServerEvent:Connect(function(player)
@@ -232,12 +281,25 @@ Remotes.LeaveParty.OnServerEvent:Connect(function(player)
 end)
 
 -- ===== FILA =====
+local regiaoCache = {} -- [UserId] = região (LocalizationService é uma chamada que pode demorar)
+local function regiaoDe(player)
+	if not regiaoCache[player.UserId] then regiaoCache[player.UserId] = regionOf(player) end
+	return regiaoCache[player.UserId]
+end
+Players.PlayerRemoving:Connect(function(p) regiaoCache[p.UserId] = nil end)
+
 local function buildQueueItem(leaderUserId, leaderPlayer)
 	local memberUserIds = {}
+	local goleiros = 0
 	for _, userId in ipairs(partyMembers[leaderUserId]) do
 		table.insert(memberUserIds, userId)
+		local plr = getPlayerByUserId(userId)
+		if plr and _G.JogadorQuerGK and _G.JogadorQuerGK(plr) then goleiros += 1 end
 	end
 	return {
+		-- ⚠️ v104: quantos do grupo vão jogar de goleiro (ver Matchmaker:
+		-- equilíbrio de GK entre os dois times)
+		GK = goleiros,
 		LeaderUserId = leaderUserId,
 		Members = memberUserIds,
 		QueuedAt = os.time(),
@@ -245,7 +307,7 @@ local function buildQueueItem(leaderUserId, leaderPlayer)
 		-- grupos da mesma região (proxy de ping parecido) e de nível
 		-- parecido (Wins) antes de cair pra combinação livre de sempre —
 		-- ver regionOf/averageWinsOf acima.
-		Region = regionOf(leaderPlayer),
+		Region = regiaoDe(leaderPlayer),
 		AvgWins = averageWinsOf(memberUserIds),
 	}
 end
@@ -265,6 +327,36 @@ Remotes.JoinQueue.OnServerEvent:Connect(function(player, modeId)
 	if isInQueue(leaderUserId) then return end
 
 	local groupSize = #partyMembers[leaderUserId]
+
+	-- ⚠️ v104 — SALA PERSONALIZADA: não entra em fila nenhuma. Reserva um
+	-- server só pra este grupo e manda todo mundo da party pra lá. Ninguém
+	-- de fora entra (o server é reservado e só este grupo tem o código).
+	if mode.IsPrivate then
+		local assignments = {}
+		for i, userId in ipairs(partyMembers[leaderUserId]) do
+			assignments[tostring(userId)] = Config.TEAM_NAMES[((i - 1) % 2) + 1]
+		end
+		local ok, accessCode = pcall(function()
+			return game:GetService("TeleportService"):ReserveServerAsync(Config.GAME_PLACE_ID)
+		end)
+		if not ok or not accessCode then
+			warn("Sala personalizada: falha ao reservar server: " .. tostring(accessCode))
+			Remotes.PartyAviso:FireClient(player, "Não deu pra criar a sala agora. Tente de novo.", "erro")
+			return
+		end
+		if _G.TeleportarPartidaLocal then
+			_G.TeleportarPartidaLocal({
+				MatchId = game:GetService("HttpService"):GenerateGUID(false),
+				ModeId = modeId,
+				TotalPlayers = groupSize,
+				AccessCode = accessCode,
+				Assignments = assignments,
+				Privada = true,
+			})
+		end
+		return
+	end
+
 	if not mode.IsFreeRoom and groupSize > mode.PerTeam then
 		warn(("Grupo de %d jogadores não cabe no modo %s (máx %d por time)."):format(groupSize, mode.Id, mode.PerTeam))
 		return
@@ -280,7 +372,7 @@ Remotes.JoinQueue.OnServerEvent:Connect(function(player, modeId)
 		return
 	end
 
-	queuedGroups[leaderUserId] = { ModeId = modeId }
+	queuedGroups[leaderUserId] = { ModeId = modeId, Regiao = item.Region, Tamanho = groupSize }
 
 	for _, userId in ipairs(partyMembers[leaderUserId]) do
 		local plr = getPlayerByUserId(userId)
@@ -343,3 +435,101 @@ _G.IsGroupQueued = function(leaderUserId) return queuedGroups[leaderUserId] ~= n
 _G.ClearQueuedGroup = function(leaderUserId) queuedGroups[leaderUserId] = nil end
 
 print("✅ MatchmakingQueue carregado.")
+
+-- ===== ⚠️ v104: CONTAGEM DE QUEM ESTÁ PROCURANDO =====
+-- PEDIDO: "coloca um texto embaixo de cada modo (3v3, 5v5, 7v7) indicando
+-- quantas pessoas estão procurando partida nesse momento, e embaixo quantas
+-- pessoas do seu país (latência igual à sua) — aí o cara prioriza as que ele
+-- tem mais chance de cair com ping melhor."
+-- Cada server de Lobby escreve a SUA contagem (grupos em queuedGroups, por
+-- modo e região) numa chave própria (JobId) de um SortedMap do MemoryStore,
+-- com validade curta; todos leem o mapa inteiro e somam. Cada jogador
+-- recebe o total do modo e o da região DELE.
+task.spawn(function()
+	local HttpService = game:GetService("HttpService")
+	local ok, mapa = pcall(function()
+		return MemoryStoreService:GetSortedMap(Config.CONTAGEM_FILA_MAPA)
+	end)
+	if not ok then warn("ContagemFila: sem MemoryStore: " .. tostring(mapa)) return end
+	local chave = game.JobId ~= "" and game.JobId or ("studio_" .. HttpService:GenerateGUID(false))
+	local intervalo = Config.CONTAGEM_FILA_INTERVALO or 5
+
+	while true do
+		-- 1) minha contagem
+		local minha = {}
+		for _, info in pairs(queuedGroups) do
+			local m = minha[info.ModeId] or { T = 0, R = {} }
+			minha[info.ModeId] = m
+			local n = info.Tamanho or 1
+			m.T += n
+			local r = info.Regiao or "UNKNOWN"
+			m.R[r] = (m.R[r] or 0) + n
+		end
+		pcall(function() mapa:SetAsync(chave, minha, intervalo * 4) end)
+
+		-- 2) soma de todos os servers
+		local total = {}
+		local okLer, itens = pcall(function()
+			return mapa:GetRangeAsync(Enum.SortDirection.Ascending, 200)
+		end)
+		if okLer and type(itens) == "table" then
+			for _, item in ipairs(itens) do
+				if type(item.value) == "table" then
+					for modeId, m in pairs(item.value) do
+						local s = total[modeId] or { T = 0, R = {} }
+						total[modeId] = s
+						s.T += tonumber(m.T) or 0
+						if type(m.R) == "table" then
+							for r, n in pairs(m.R) do s.R[r] = (s.R[r] or 0) + (tonumber(n) or 0) end
+						end
+					end
+				end
+			end
+		end
+
+		-- 3) manda pra cada jogador (total + a região dele)
+		for _, plr in ipairs(Players:GetPlayers()) do
+			local regiao = regiaoDe(plr)
+			local porModo = {}
+			for modeId in pairs(Config.MODES) do
+				local s = total[modeId]
+				porModo[modeId] = { Total = s and s.T or 0, Regiao = s and (s.R[regiao] or 0) or 0 }
+			end
+			Remotes.ContagemFila:FireClient(plr, porModo, regiao)
+		end
+		task.wait(intervalo)
+	end
+end)
+
+-- ===== ⚠️ v104: "QUERO JOGAR DE GOLEIRO" NA TELA DE PARTIDA =====
+-- PEDIDO: "não entro como GK se eu não marcar que eu quero ser GK". A
+-- marcação é a mesma do slot (activeSlot.Role = "GK" / "LINE", ver
+-- SetSlotRole em PlayerDataManager) — aqui só dá um atalho na tela de
+-- partida pro personagem ATIVO. Bloqueado com o grupo na fila (o item da
+-- fila já foi montado com a contagem de goleiros).
+local function enviarEstadoGoleiro(player)
+	local data = _G.GetPlayerData and _G.GetPlayerData(player)
+	local slot = data and type(data.CharacterSlots) == "table" and data.CharacterSlots[data.ActiveSlot]
+	local marcado = type(slot) == "table" and slot.Role == "GK" or false
+	local automatico = _G.GKAutomaticoPorHissatsu and _G.GKAutomaticoPorHissatsu(player) or false
+	Remotes.EstadoGoleiro:FireClient(player, marcado, automatico)
+end
+
+Remotes.DefinirGoleiro.OnServerEvent:Connect(function(player, quer)
+	if typeof(quer) == "boolean" then
+		local leader = partyLeaderOf[player.UserId]
+		if leader and isInQueue(leader) then
+			avisar(player, "Saia da fila pra trocar de posição.", "erro")
+		else
+			local data = _G.GetPlayerData and _G.GetPlayerData(player)
+			local slot = data and type(data.CharacterSlots) == "table" and data.CharacterSlots[data.ActiveSlot]
+			if type(slot) == "table" then
+				slot.Role = quer and "GK" or "LINE"
+				player:SetAttribute("Role", slot.Role)
+				if _G.UpdatePlayerNametag then task.spawn(_G.UpdatePlayerNametag, player) end
+				if _G.RequestSave then task.spawn(_G.RequestSave, player) end
+			end
+		end
+	end
+	enviarEstadoGoleiro(player)
+end)

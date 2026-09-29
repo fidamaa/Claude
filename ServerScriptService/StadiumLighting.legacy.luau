@@ -262,8 +262,11 @@ local function applyPreset(presetName)
 	-- Technology é somente-leitura em runtime — não dá pra consertar daqui,
 	-- só avisar. Sem Future, boa parte do preset (sombra de qualidade, luz
 	-- do céu, reflexo do ambiente) simplesmente não é renderizada.
-	if Lighting.Technology ~= Enum.Technology.Future then
-		warn(("🎨 [Iluminação] ⚠️ Lighting.Technology está em '%s'. Pra iluminação ficar como foi desenhada, abra o Studio, selecione Lighting no Explorer e mude Technology pra Future. Script nenhum consegue mudar isso em runtime."):format(Lighting.Technology.Name))
+	-- ⚠️ v110 FIX: nem LER o Technology o script pode ("cannot read 'Technology'
+	-- (lacking capability)") — o erro parava o resto do script depois do preset.
+	local okTec, tecnologia = pcall(function() return Lighting.Technology end)
+	if okTec and tecnologia ~= Enum.Technology.Future then
+		warn(("🎨 [Iluminação] ⚠️ Lighting.Technology está em '%s'. Pra iluminação ficar como foi desenhada, abra o Studio, selecione Lighting no Explorer e mude Technology pra Future. Script nenhum consegue mudar isso em runtime."):format(tecnologia.Name))
 	end
 end
 

@@ -219,9 +219,11 @@ local Data = {}
 --                  de Remotes.UsePulse). Pulso instantâneo NÃO lê
 --                  Bom/Perfect — não existe qualidade pra medir.
 --   Scaling      — ⚠️ NOVO: fórmula de POTÊNCIA da Hissatsu por atributo.
---                  Ex.: { Kick = 0.6, Technique = 0.4 } = 60% Chute + 40%
---                  Técnica. Atributos aceitos: Physical, Kick,
---                  DribbleSkill, Speed, Technique (pesos somando 1).
+--                  Ex.: { Kick = 0.57, Physical = 0.43 }. Atributos aceitos:
+--                  Physical, Kick, DribbleSkill, Speed (pesos somando 1).
+--                  ⚠️ v98: Técnica REMOVIDA — cada Hissatsu escala pelos
+--                  atributos da própria categoria (drible->Drible,
+--                  defesa/goleiro->Físico, chute->Chute).
 --                  Energy e Stamina NÃO entram: Energia é o CUSTO, não a
 --                  força (PEDIDO: "Não fazer mais Energia = Hissatsu mais
 --                  forte"). A nota ponderada escala a força do chute, o
@@ -267,10 +269,20 @@ Data.Pulses = {
 		Name = "Raio Um",
 		Rarity = "Common",
 		Element = "Luz",
-		Description = "Raio Um sai em menos de um segundo de preparo — o chute mais rápido do jogo, o único que dá pra soltar com um zagueiro em cima — mas é o mais fraco de todos em força.",
+		Description = "Raio Um é chute de DUPLA: precisa de 1 companheiro perto, e os dois acertam o QTE juntos. Sai rápido — dá pra soltar com um zagueiro em cima — mas é o mais fraco em força.",
 		Action = "Shot",
-		Scaling = { Kick = 0.5, Technique = 0.5 }, -- ⚠️ NOVO: fórmula de potência (chute rápido e preciso)
-		Cooldown = 30,
+		Scaling = { Kick = 1 }, -- ⚠️ v98: sem Técnica (removida) — só os atributos da categoria · antes: Kick = 0.5, Technique = 0.5
+		Cooldown = 25, -- ⚠️ v107: mítica no máximo 90s ("dar pra usar umas duas, três vezes na partida"; era 30)
+		-- ⚠️ v100 — PEDIDO: "você começa as cutscenes das próximas habilidades".
+		-- Cutscene própria (HissatsuCutscenes.RaioUm); com ela o salto de
+		-- AirLaunchHeight é pulado — quem pula é a cutscene.
+		Cutscene = "RaioUm",
+		-- ⚠️ v110 — PEDIDO: "veja quais chutes são de dupla e inclua a mecânica pra
+		-- precisar de duas pessoas". Wiki: Inazuma 1gou = 2 usuários. Mesma mecânica
+		-- da Zona Morta (def.Trio): sem 1 companheiro(s) perto nem sai; eles
+		-- recebem o mesmo QTE; alguém errou = chute fraco e torto.
+		Trio = { Raio = 45, Companheiros = 1, ForcaBase = 1.15, PorPerfeito = 0.12, ForcaSeFalhar = 0.3 },
+		-- ⚠️ v108: PrepTime de volta ao antigo ("saía rápido demais, sem chance de tomar carrinho")
 		QTE = { Kind = "Tap", PrepTime = 0.8, HitWindow = 1.6, HitCount = 3 },
 		Bom = { ForceMult = 1.25, AimDeviationMult = 0.9 },
 		Perfect = { ForceMult = 1.45, AimDeviationMult = 0.6 },
@@ -286,8 +298,8 @@ Data.Pulses = {
 		Element = "Natureza",
 		Description = "Cabeça de Kung Fu para a bola no ar perto de você, te faz saltar, e solta a cabeçada com muito mais alcance que a normal quando você acerta os cliques do QTE.",
 		Action = "Header",
-		Scaling = { Kick = 0.4, Physical = 0.3, Technique = 0.3 }, -- ⚠️ NOVO: fórmula de potência (finalização aérea: força, corpo e domínio)
-		Cooldown = 30,
+		Scaling = { Kick = 0.57, Physical = 0.43 }, -- ⚠️ v98: sem Técnica (removida) — só os atributos da categoria · antes: Kick = 0.4, Physical = 0.3, Technique = 0.3
+		Cooldown = 25, -- ⚠️ v107: mítica no máximo 90s ("dar pra usar umas duas, três vezes na partida"; era 30)
 		-- ⚠️ v14 PEDIDO: "não dá pra fazer uma cabeçada com o Quick Time
 		-- Event, não faz sentido... ou faz a bola paralisar no ar e rolar o
 		-- Quick Time Event." FreezeBall trava a bola no instante do aperto
@@ -297,6 +309,7 @@ Data.Pulses = {
 		-- que "preparar" — o tempo todo é a cabeçada em si.
 		FreezeBall = true,
 		AirLaunchHeight = 12,
+		-- ⚠️ v108: PrepTime de volta ao antigo ("saía rápido demais, sem chance de tomar carrinho")
 		QTE = { Kind = "Tap", PrepTime = 0.4, HitWindow = 1.6, HitCount = 3 },
 		Bom = { HeaderForceMult = 1.5, HeaderRangeAdd = 6, HeaderMinHeight = -2, AimDeviationMult = 0.6 },
 		Perfect = { HeaderForceMult = 1.9, HeaderRangeAdd = 10, HeaderMinHeight = -4, AimDeviationMult = 0.25 },
@@ -312,9 +325,14 @@ Data.Pulses = {
 		Element = "Void",
 		Description = "Sumiço faz a bola desaparecer no meio do voo e só reaparecer perto do gol — o goleiro não consegue acompanhar o que não está vendo, a menos que já esteja no canto certo por sorte.",
 		Action = "Shot",
-		Scaling = { Technique = 0.6, Kick = 0.4 }, -- ⚠️ NOVO: fórmula de potência (truque de execução, mais técnica que força)
-		Cooldown = 45,
-		QTE = { Kind = "Tap", PrepTime = 2.0, HitWindow = 2.0, HitCount = 4 },
+		Scaling = { Kick = 1 }, -- ⚠️ v98: sem Técnica (removida) — só os atributos da categoria · antes: Technique = 0.6, Kick = 0.4
+		Cooldown = 35, -- ⚠️ v107: mítica no máximo 90s ("dar pra usar umas duas, três vezes na partida"; era 45)
+		-- ⚠️ v100 — PEDIDO: "você começa as cutscenes das próximas habilidades".
+		-- Cutscene própria (HissatsuCutscenes.Sumico); com ela o salto de
+		-- AirLaunchHeight é pulado — quem pula é a cutscene.
+		Cutscene = "Sumico",
+		-- ⚠️ v108: PrepTime de volta ao antigo ("saía rápido demais, sem chance de tomar carrinho")
+		QTE = { Kind = "Tap", PrepTime = 2, HitWindow = 2.0, HitCount = 4 },
 		Bom = { ForceMult = 1.4, VanishSeconds = 0.35, IgnoreGKChance = 0.1 },
 		Perfect = { ForceMult = 1.6, VanishSeconds = 0.6, IgnoreGKChance = 0.25 },
 	},
@@ -330,9 +348,14 @@ Data.Pulses = {
 		Description = "Impulso de Maré te faz saltar numa onda e bater no ar, empurrando pra trás qualquer marcador colado em você — usada com dois marcadores em cima, os dois voam e o rebote fica seu.",
 		Action = "Shot",
 		Scaling = { Kick = 0.6, Physical = 0.4 }, -- ⚠️ NOVO: fórmula de potência (empurra marcador: força de chute + corpo)
-		Cooldown = 45,
+		Cooldown = 35, -- ⚠️ v107: mítica no máximo 90s ("dar pra usar umas duas, três vezes na partida"; era 45)
+		-- ⚠️ v100 — PEDIDO: "você começa as cutscenes das próximas habilidades".
+		-- Cutscene própria (HissatsuCutscenes.ImpulsoDeMare); com ela o salto de
+		-- AirLaunchHeight é pulado — quem pula é a cutscene.
+		Cutscene = "ImpulsoDeMare",
 		-- Salto baixo: no anime ele quica pra cima da onda, não decola.
 		AirLaunchHeight = 10,
+		-- ⚠️ v108: PrepTime de volta ao antigo ("saía rápido demais, sem chance de tomar carrinho")
 		QTE = { Kind = "Tap", PrepTime = 2.2, HitWindow = 2.2, HitCount = 4 },
 		Bom = { ForceMult = 1.45, KnockbackRadius = 20, KnockbackForce = 40 },
 		Perfect = { ForceMult = 1.7, KnockbackRadius = 30, KnockbackForce = 65, CurveMult = 1.2 },
@@ -350,13 +373,20 @@ Data.Pulses = {
 		Element = "Fogo",
 		Description = "Tornado de Fogo te faz saltar, girar no ar e bater de cima, envolvendo a bola num redemoinho que queima quem estiver no CAMINHO dela (não em volta de você) — quem tentar bloquear na frente paga o preço.",
 		Action = "Shot",
-		Scaling = { Kick = 0.7, Technique = 0.3 }, -- ⚠️ NOVO: fórmula de potência (potência acima de tudo)
-		Cooldown = 60,
+		Scaling = { Kick = 1 }, -- ⚠️ v98: sem Técnica (removida) — só os atributos da categoria · antes: Kick = 0.7, Technique = 0.3
+		Cooldown = 50, -- ⚠️ v107: mítica no máximo 90s ("dar pra usar umas duas, três vezes na partida"; era 60)
 		-- ⚠️ v14 PEDIDO: "o Fire Tornado é pro cara poder pular, girar e
 		-- jogar do ar". AirLaunchHeight lança o jogador no fim do preparo e
 		-- o segura no ápice até o QTE resolver (ver launchIntoAir em
 		-- PulseController) — a animação do giro entra por cima disso.
 		AirLaunchHeight = 14,
+		-- ⚠️ v87 — PEDIDO: "faça a cutscene do Fire Tornado". Depois do
+		-- preparo e do QTE, roda a cutscene (HissatsuCutscenes.luau) com
+		-- todo mundo parado, e o chute sai no último quadro dela. Com
+		-- cutscene, o salto de AirLaunchHeight é pulado: quem pula é a
+		-- própria cutscene.
+		Cutscene = "FireTornado",
+		-- ⚠️ v108: PrepTime de volta ao antigo ("saía rápido demais, sem chance de tomar carrinho")
 		QTE = { Kind = "Tap", PrepTime = 2.6, HitWindow = 2.4, HitCount = 5 },
 		Bom = { ForceMult = 1.7, CurveMult = 1.4, CorridorStun = { Width = 16, Duration = 0.5 } },
 		Perfect = { ForceMult = 2.0, CurveMult = 1.8, CorridorStun = { Width = 24, Duration = 0.9 } },
@@ -373,8 +403,13 @@ Data.Pulses = {
 		Element = "Vento",
 		Description = "Fúria Glacial congela o caminho da bola — qualquer um na linha do chute trava no lugar, e se o goleiro encostar nela, congela junto e deixa o rebote livre.",
 		Action = "Shot",
-		Scaling = { Kick = 0.6, Technique = 0.4 }, -- ⚠️ NOVO: fórmula de potência (chute pesado e mirado)
-		Cooldown = 60,
+		Scaling = { Kick = 1 }, -- ⚠️ v98: sem Técnica (removida) — só os atributos da categoria · antes: Kick = 0.6, Technique = 0.4
+		Cooldown = 50, -- ⚠️ v107: mítica no máximo 90s ("dar pra usar umas duas, três vezes na partida"; era 60)
+		-- ⚠️ v100 — PEDIDO: "você começa as cutscenes das próximas habilidades".
+		-- Cutscene própria (HissatsuCutscenes.FuriaGlacial); com ela o salto de
+		-- AirLaunchHeight é pulado — quem pula é a cutscene.
+		Cutscene = "FuriaGlacial",
+		-- ⚠️ v108: PrepTime de volta ao antigo ("saía rápido demais, sem chance de tomar carrinho")
 		QTE = { Kind = "Tap", PrepTime = 2.4, HitWindow = 2.2, HitCount = 5 },
 		Bom = { ForceMult = 1.65, AimDeviationMult = 0.5, CorridorFreeze = { Width = 14, Duration = 0.6 } },
 		Perfect = { ForceMult = 1.9, AimDeviationMult = 0.25, CorridorFreeze = { Width = 21, Duration = 1.0 } },
@@ -390,20 +425,34 @@ Data.Pulses = {
 		Name = "Zona Morta",
 		Rarity = "Legendary",
 		Element = "Void",
-		Description = "Zona Morta te faz subir alto e bater de cima com força que CRESCE conforme mais companheiros estiverem perto de você no momento do chute — sozinho é fraco, com dois do lado é o mais forte fora do Mítico.",
+		Description = "Zona Morta precisa de TRÊS: você e 2 companheiros perto. Os três fazem o QTE ao mesmo tempo — se alguém errar, ela falha; se todos acertarem, sai com muita força, e cada perfeito dos companheiros deixa ainda mais forte.",
 		Action = "Shot",
-		Scaling = { Kick = 0.5, Technique = 0.5 }, -- ⚠️ NOVO: fórmula de potência (chute coordenado)
-		Cooldown = 90,
+		Scaling = { Kick = 1 }, -- ⚠️ v98: sem Técnica (removida) — só os atributos da categoria · antes: Kick = 0.5, Technique = 0.5
+		Cooldown = 70, -- ⚠️ v107: mítica no máximo 90s ("dar pra usar umas duas, três vezes na partida"; era 90)
+		-- ⚠️ v100 — PEDIDO: "você começa as cutscenes das próximas habilidades".
+		-- Cutscene própria (HissatsuCutscenes.ZonaMorta); com ela o salto de
+		-- AirLaunchHeight é pulado — quem pula é a cutscene.
+		Cutscene = "ZonaMorta",
 		-- No anime são três jogadores girando no ar em formação triangular —
 		-- é a segunda maior altura do jogo, atrás só da Galáxia.
 		AirLaunchHeight = 16,
+		-- ⚠️ v108: PrepTime de volta ao antigo ("saía rápido demais, sem chance de tomar carrinho")
 		QTE = { Kind = "Tap", PrepTime = 2.8, HitWindow = 2.4, HitCount = 5 },
-		-- +45% por companheiro dentro de 22 studs, até 2 (ou seja, até
-		-- 1.9x em cima do ForceMult abaixo). Os companheiros que entram na
-		-- conta também ganham carga de Instinto (ver applyAlliesScale).
-		AlliesScale = { Radius = 55, PerAlly = 0.45, Max = 2 },
-		Bom = { ForceMult = 1.3, CurveMult = 1.3 },
-		Perfect = { ForceMult = 1.55, CurveMult = 1.6, AimDeviationMult = 0.3 },
+		-- ⚠️ v108 — PEDIDO: "a Death Zone precisa de três jogadores. Se tiver três
+		-- perto e eles apertarem no momento certo, ela sai com bastante força; se
+		-- alguém errar, ela não acontece; se alguém der perfeito, sai mais forte
+		-- ainda." (No anime são três girando no ar em triângulo.) Saiu o
+		-- AlliesScale (+45% por companheiro, opcional). Agora (PulseController, Trio):
+		--   • sem 2 companheiros do time a até Raio studs: nem ativa (sem custo);
+		--   • os 2 mais perto recebem o MESMO QTE, na mesma janela;
+		--   • alguém não fechou os cliques: FALHA — o chute sai fraco e torto;
+		--   • todos fecharam: força x ForcaBase, + PorPerfeito por companheiro
+		--     com perfeito (o perfeito de quem chuta já é o Perfect abaixo).
+		Trio = { Raio = 55, Companheiros = 2, ForcaBase = 1.2, PorPerfeito = 0.12, ForcaSeFalhar = 0.3 },
+		-- ⚠️ v105: era 1.3/1.55 — mais fraca que a épica (Tornado 1.7/2.0); Lendária
+		-- tem que ficar acima (regra da mesma raridade, ver DEFESA_DANO_POR_ACERTO)
+		Bom = { ForceMult = 2.05, CurveMult = 1.3 },
+		Perfect = { ForceMult = 2.35, CurveMult = 1.6, AimDeviationMult = 0.3 },
 	},
 
 	-- The Galaxy (ザ・ギャラクシー): a hissatsu de maior custo do primeiro
@@ -415,15 +464,119 @@ Data.Pulses = {
 		Name = "Galáxia",
 		Rarity = "Mythic",
 		Element = "Luz",
-		Description = "Galáxia te faz subir mais alto que qualquer outra técnica e, acertando o timing, a bola atravessa o goleiro sem ele participar — só uma guarda Mítica segura isso. O preparo é o mais longo do jogo: você fica parado e exposto o tempo todo.",
+		Description = "Galáxia é chute de TRIO: precisa de 2 companheiros perto, e os três acertam o QTE juntos. Vocês sobem mais alto que qualquer técnica e, acertando o timing, a bola atravessa o goleiro — só uma guarda Mítica segura. O preparo é o mais longo do jogo.",
 		Action = "Shot",
-		Scaling = { Kick = 0.6, Technique = 0.4 }, -- ⚠️ NOVO: fórmula de potência (exemplo do pedido: 60% Chute + 40% Técnica)
-		Cooldown = 120,
+		Scaling = { Kick = 1 }, -- ⚠️ v98: sem Técnica (removida) — só os atributos da categoria · antes: Kick = 0.6, Technique = 0.4
+		Cooldown = 90, -- ⚠️ v107: mítica no máximo 90s ("dar pra usar umas duas, três vezes na partida"; era 120)
+		-- ⚠️ v100 — PEDIDO: "você começa as cutscenes das próximas habilidades".
+		-- Cutscene própria (HissatsuCutscenes.Galaxia); com ela o salto de
+		-- AirLaunchHeight é pulado — quem pula é a cutscene.
+		Cutscene = "Galaxia",
+		-- ⚠️ v110 — PEDIDO: "veja quais chutes são de dupla e inclua a mecânica pra
+		-- precisar de duas pessoas". Wiki: The Galaxy = 3 usuários. Mesma mecânica
+		-- da Zona Morta (def.Trio): sem 2 companheiro(s) perto nem sai; eles
+		-- recebem o mesmo QTE; alguém errou = chute fraco e torto.
+		Trio = { Raio = 55, Companheiros = 2, ForcaBase = 1.2, PorPerfeito = 0.12, ForcaSeFalhar = 0.3 },
 		AirLaunchHeight = 18, -- a maior do jogo
 
-		QTE = { Kind = "Tap", PrepTime = 3.0, HitWindow = 1.9, HitCount = 6 },
-		Bom = { ForceMult = 2.0, IgnoreGKChance = 0.35 },
-		Perfect = { ForceMult = 2.4, IgnoreGKChance = 1, CurveMult = 1.5 },
+		-- ⚠️ v108: PrepTime de volta ao antigo ("saía rápido demais, sem chance de tomar carrinho")
+		QTE = { Kind = "Tap", PrepTime = 3, HitWindow = 1.9, HitCount = 6 },
+		Bom = { ForceMult = 2.35, IgnoreGKChance = 0.35 },
+		Perfect = { ForceMult = 2.65, IgnoreGKChance = 1, CurveMult = 1.5 },
+	},
+
+
+	-- ========================================================
+	-- ⚠️ v109 — CHUTES NOVOS (pedido: "pelo menos duas de cada raridade em cada
+	-- categoria, cada uma com um elemento diferente; pesquisa na Wiki")
+	-- ========================================================
+
+	-- Dragon Tornado (ドラゴントルネード, Fogo, 2 usuários): um chuta a bola pro alto
+	-- com o dragão azul de olhos vermelhos; o outro sobe girando com fogo nas
+	-- pernas e bate de voleio — o dragão vira um dragão de FOGO. VERBO: queimar o
+	-- caminho — quem estiver no corredor do chute fica atordoado. Parceiro na
+	-- cutscene: o companheiro mais perto (ou uma sombra), igual o Raio Um.
+	{
+		Name = "Tornado do Dragão",
+		Rarity = "Legendary",
+		Element = "Fogo",
+		Description = "Tornado do Dragão é chute de DUPLA: precisa de 1 companheiro perto, e os dois acertam o QTE juntos. O dragão azul dele lança a bola pro alto e você sobe girando em fogo pra bater de voleio — a bola vira um dragão de fogo que ATORDOA todo mundo no caminho.",
+		Action = "Shot",
+		Scaling = { Kick = 1 },
+		Cooldown = 70,
+		Cutscene = "DragaoTornado",
+		-- ⚠️ v110 — PEDIDO: "veja quais chutes são de dupla e inclua a mecânica pra
+		-- precisar de duas pessoas". Wiki: Dragon Tornado = 2 usuários. Mesma mecânica
+		-- da Zona Morta (def.Trio): sem 1 companheiro(s) perto nem sai; eles
+		-- recebem o mesmo QTE; alguém errou = chute fraco e torto.
+		Trio = { Raio = 45, Companheiros = 1, ForcaBase = 1.15, PorPerfeito = 0.12, ForcaSeFalhar = 0.3 },
+		AirLaunchHeight = 15,
+		QTE = { Kind = "Tap", PrepTime = 2.7, HitWindow = 2.4, HitCount = 5 },
+		Bom = { ForceMult = 2.1, CurveMult = 1.2, CorridorStun = { Width = 12, Duration = 0.9 } },
+		Perfect = { ForceMult = 2.4, CurveMult = 1.4, AimDeviationMult = 0.3, CorridorStun = { Width = 16, Duration = 1.3 } },
+	},
+
+	-- Gaia Break (ガイアブレイク, Montanha -> Natureza, 3 usuários): energia
+	-- amarela, a bola sobe e as ROCHAS do campo grudam nela formando uma massa de
+	-- espinhos; os três saltam e batem juntos. VERBO: quebrar defesa — a bola de
+	-- pedra tira parte do dano de QUALQUER defesa (QuebraDefesa, ver danoDaDefesa
+	-- no PulseController). Os outros dois vértices: companheiros perto ou sombras.
+	{
+		Name = "Ruptura de Gaia",
+		Rarity = "Mythic",
+		Element = "Natureza",
+		Description = "Ruptura de Gaia é chute de TRIO: precisa de 2 companheiros perto, e os três acertam o QTE juntos. As rochas do campo grudam na bola e formam uma massa de pedra que QUEBRA defesas: toda Hissatsu de goleiro/defesa tira bem menos força dela.",
+		Action = "Shot",
+		Scaling = { Kick = 1 },
+		Cooldown = 90,
+		Cutscene = "GaiaBreak",
+		-- ⚠️ v110 — PEDIDO: "veja quais chutes são de dupla e inclua a mecânica pra
+		-- precisar de duas pessoas". Wiki: Gaia Break = 3 usuários. Mesma mecânica
+		-- da Zona Morta (def.Trio): sem 2 companheiro(s) perto nem sai; eles
+		-- recebem o mesmo QTE; alguém errou = chute fraco e torto.
+		Trio = { Raio = 55, Companheiros = 2, ForcaBase = 1.2, PorPerfeito = 0.12, ForcaSeFalhar = 0.3 },
+		AirLaunchHeight = 14,
+		QTE = { Kind = "Tap", PrepTime = 3, HitWindow = 2.0, HitCount = 6 },
+		Bom = { ForceMult = 2.3, QuebraDefesa = 0.25 },
+		Perfect = { ForceMult = 2.6, QuebraDefesa = 0.4, CurveMult = 1.2 },
+	},
+
+	-- Ryuusei Blade (流星ブレード, Fogo, 1 usuário — Hiroto/Gran): ⚠️ v110 —
+	-- PEDIDO: "o chute de meteoro do alienígena de cabelo vermelho podia ser pelo
+	-- menos lendário" + "troca a Meteor Blade pra LENDÁRIA". Lendária solo.
+	{
+		Name = "Lâmina Meteoro",
+		Rarity = "Legendary",
+		Element = "Fogo",
+		Description = "Lâmina Meteoro é uma Lendária que você chuta SOZINHO: salta, gira no ar e bate de voleio — a bola vira um feixe vermelho em forma de lâmina, explodindo pelo caminho até o gol.",
+		Action = "Shot",
+		Scaling = { Kick = 1 },
+		Cooldown = 70,
+		Cutscene = "LaminaMeteoro",
+		AirLaunchHeight = 14,
+		QTE = { Kind = "Tap", PrepTime = 2.6, HitWindow = 2.0, HitCount = 5 },
+		Bom = { ForceMult = 2.0, CurveMult = 1.1 },
+		Perfect = { ForceMult = 2.25, CurveMult = 1.2, AimDeviationMult = 0.3 },
+	},
+
+	-- Tenkuu Otoshi (天空落とし, Fogo, 1 usuário — Hiroto): ⚠️ v110 — PEDIDO: "coloca
+	-- a outra Hissatsu dele, uma que sai um monte de galáxias" + "devia ter pelo
+	-- menos um MÍTICO que dê pra chutar sozinho, apesar de ser mais fraco". A
+	-- Mítica SOLO: mais fraca que as de trio (Galáxia/Gaia), mas sem depender de
+	-- ninguém. VERBO: potência pura.
+	{
+		Name = "Queda Celestial",
+		Rarity = "Mythic",
+		Element = "Fogo",
+		Description = "Queda Celestial é a Mítica que você chuta SOZINHO: põe a mão no campo e tudo vira espaço, salta girando e chuta com o Sol aceso atrás — a bola sai num feixe roxo e azul de planetas e estrelas. Mais fraca que as Míticas de trio, mas não depende de ninguém.",
+		Action = "Shot",
+		Scaling = { Kick = 1 },
+		Cooldown = 90,
+		Cutscene = "QuedaCelestial",
+		AirLaunchHeight = 8,
+		QTE = { Kind = "Tap", PrepTime = 2.8, HitWindow = 2.0, HitCount = 6 },
+		Bom = { ForceMult = 2.2, CurveMult = 1.1 },
+		Perfect = { ForceMult = 2.45, CurveMult = 1.25, AimDeviationMult = 0.3 },
 	},
 
 	-- ========================================================
@@ -440,8 +593,8 @@ Data.Pulses = {
 		Element = "Vento",
 		Description = "Residual deixa um vulto seu pra trás por um instante — nenhum carrinho te acerta nessa janela. Distância normal de drible: serve pra escapar da pressão, não pra ganhar campo.",
 		Action = "DribbleMove",
-		Scaling = { DribbleSkill = 0.7, Technique = 0.3 }, -- ⚠️ NOVO: fórmula de potência (drible de manutenção)
-		Cooldown = 30,
+		Scaling = { DribbleSkill = 1 }, -- ⚠️ v98: sem Técnica (removida) — só os atributos da categoria · antes: DribbleSkill = 0.7, Technique = 0.3
+		Cooldown = 25, -- ⚠️ v107: mítica no máximo 90s ("dar pra usar umas duas, três vezes na partida"; era 30)
 		Effect = { SelfIframe = 0.8, AnkleRangeAdd = 2, DistanceMult = 1.1 },
 	},
 
@@ -459,7 +612,7 @@ Data.Pulses = {
 		Description = "Vendaval dá um arranque curto que DEVOLVE energia em vez de gastar — é o que mantém suas outras habilidades disponíveis até o fim do jogo, já que a energia só enche de novo no intervalo.",
 		Action = "DribbleMove",
 		Scaling = { DribbleSkill = 0.6, Speed = 0.4 }, -- ⚠️ NOVO: fórmula de potência (arranque)
-		Cooldown = 45,
+		Cooldown = 35, -- ⚠️ v107: mítica no máximo 90s ("dar pra usar umas duas, três vezes na partida"; era 45)
 		-- ⚠️ v67 — REFEITA. PEDIDO: "não está claro como o drible funciona. Ele
 		-- só dá um driblezinho e recarrega a estamina, é isso? Por que um
 		-- drible recarregaria a estamina? Não tem sentido. Põe um drible que
@@ -487,8 +640,8 @@ Data.Pulses = {
 		Element = "Void",
 		Description = "Névoa deixa uma nuvem no chão por onde você passa — qualquer perseguidor que atravessar ela fica mais lento. Você não ganha velocidade, é o perseguidor que perde.",
 		Action = "DribbleMove",
-		Scaling = { DribbleSkill = 0.6, Technique = 0.4 }, -- ⚠️ NOVO: fórmula de potência (drible de controle)
-		Cooldown = 60,
+		Scaling = { DribbleSkill = 1 }, -- ⚠️ v98: sem Técnica (removida) — só os atributos da categoria · antes: DribbleSkill = 0.6, Technique = 0.4
+		Cooldown = 50, -- ⚠️ v107: mítica no máximo 90s ("dar pra usar umas duas, três vezes na partida"; era 60)
 		-- ⚠️ v67 — REFEITA. PEDIDO: "a Névoa está colocando uma área no chão,
 		-- não pode ser assim. Ela é uma área que deixa o PRÓPRIO JOGADOR
 		-- invisível ali dentro. Faz um cilindro maior em volta e deixa o cara
@@ -514,7 +667,7 @@ Data.Pulses = {
 		Description = "Foice de Vento derruba de verdade (não é empurrão) todo mundo em volta com um corte de vento — funciona até sem ninguém marcando, então também serve só pra abrir espaço.",
 		Action = "DribbleMove",
 		Scaling = { DribbleSkill = 0.5, Physical = 0.5 }, -- ⚠️ NOVO: fórmula de potência (derruba de verdade: drible + corpo)
-		Cooldown = 90,
+		Cooldown = 70, -- ⚠️ v107: mítica no máximo 90s ("dar pra usar umas duas, três vezes na partida"; era 90)
 		-- ⚠️ v67 — AJUSTADA. PEDIDO: "eu testei mais ou menos, não sei direito
 		-- como funciona. Não era pra empurrar os jogadores que estão na minha
 		-- frente? Ou é em volta de mim? É muito perto? Não entendi."
@@ -551,17 +704,95 @@ Data.Pulses = {
 		-- efeitos (ver executeBuff/applyExtraEffectKeys): congela e pronto,
 		-- o deslocamento é 100% do jogador.
 		Action = "Buff",
-		Scaling = { DribbleSkill = 0.5, Technique = 0.5 }, -- ⚠️ NOVO: fórmula de potência (atravessar o campo com a bola)
+		Scaling = { DribbleSkill = 1 }, -- ⚠️ v98: sem Técnica (removida) — só os atributos da categoria · antes: DribbleSkill = 0.5, Technique = 0.5
 		-- Sem Action="DribbleMove", a dica de posição cairia em DF (ver
 		-- Data.GetPulsePositionHint). Ela continua sendo uma Hissatsu de
 		-- drible na identidade, então força MF.
 		PositionHint = "MF",
-		Cooldown = 120,
+		Cooldown = 90, -- ⚠️ v107: mítica no máximo 90s ("dar pra usar umas duas, três vezes na partida"; era 120)
 		Effect = {
 			SelfIframe = 2.5, -- ⚠️ v24: acompanha a duração da parada de tempo
 			TimeStopRadius = 220,
 			TimeStopDuration = 2.5,
 		},
+	},
+
+
+	-- ========================================================
+	-- ⚠️ v109 — DRIBLES NOVOS (um por raridade, elemento diferente do que já existia)
+	-- ========================================================
+
+	-- Heat Tackle (ヒートタックル, Fogo): um véu de chamas em espiral sobe do chão e
+	-- ele avança com ele, jogando o marcador longe. VERBO: atropelar em fogo.
+	{
+		Name = "Investida em Chamas",
+		Rarity = "Common",
+		Element = "Fogo",
+		Description = "Investida em Chamas te cobre com um véu de fogo e você avança JOGANDO LONGE quem estiver colado — o drible de quem não desvia, atravessa.",
+		Action = "DribbleMove",
+		Scaling = { DribbleSkill = 0.6, Physical = 0.4 },
+		Cooldown = 25,
+		Effect = { DistanceMult = 1.35, SelfIframe = 0.6, KnockbackRadius = 8, KnockbackForce = 45 },
+	},
+
+	-- Illusion Ball (イリュージョンボール, Floresta -> Natureza): dá um mortal com a
+	-- bola, cria duas ILUSÕES dela girando em volta, e sai pro lado enquanto o
+	-- marcador olha a bola errada. VERBO: confundir — quebra o tornozelo de
+	-- quem estiver por perto, de mais longe que um drible normal.
+	{
+		Name = "Bola Ilusão",
+		Rarity = "Rare",
+		Element = "Natureza",
+		Description = "Bola Ilusão cria duas bolas falsas girando em volta de você — quem estiver perto se confunde e cai (quebra de tornozelo de longe) enquanto você passa com a de verdade.",
+		Action = "DribbleMove",
+		Scaling = { DribbleSkill = 1 },
+		Cooldown = 35,
+		Effect = { DistanceMult = 1.5, SelfIframe = 1.0, AnkleRangeAdd = 6 },
+	},
+
+	-- Zigzag Spark (ジグザグスパーク, Vento): pula de um lado pro outro juntando
+	-- faíscas azuis e solta um raio em ZIGUE-ZAGUE que paralisa o marcador de
+	-- joelhos. VERBO: paralisar à distância.
+	{
+		Name = "Faísca Zigue-Zague",
+		Rarity = "Epic",
+		Element = "Vento",
+		Description = "Faísca Zigue-Zague junta faíscas pulando de um lado pro outro e solta um raio em zigue-zague que PARALISA os marcadores em volta por um bom tempo.",
+		Action = "DribbleMove",
+		Scaling = { DribbleSkill = 0.7, Speed = 0.3 },
+		Cooldown = 50,
+		Effect = { DistanceMult = 1.6, SelfIframe = 0.6, StunRadius = 16, StunDuration = 1.4 },
+	},
+
+	-- Sprint Warp (スプリントワープ, Void): dispara levantando poeira e se TELEPORTA
+	-- em zigue-zague na frente do marcador, deixando rajadas de vento pra trás.
+	-- VERBO: sumir e reaparecer longe — o drible que mais ganha campo.
+	{
+		Name = "Dobra Veloz",
+		Rarity = "Legendary",
+		Element = "Void",
+		Description = "Dobra Veloz te teleporta em zigue-zague bem mais longe que qualquer drible, intocável durante a dobra, e ainda sai correndo mais rápido por alguns segundos.",
+		Action = "DribbleMove",
+		Scaling = { DribbleSkill = 0.5, Speed = 0.5 },
+		Cooldown = 70,
+		Effect = { DistanceMult = 2.4, SelfIframe = 1.2, SpeedBoostMult = 1.3, SpeedBoostDuration = 2.5 },
+	},
+
+	-- Meteor Shower (メテオシャワー, Fogo): salta, bate de bicicleta e a bola se
+	-- divide em SEIS meteoros que caem nos marcadores, jogando todos longe.
+	-- VERBO: bombardear a área.
+	{
+		Name = "Chuva de Meteoros",
+		Rarity = "Mythic",
+		Element = "Fogo",
+		Description = "Chuva de Meteoros divide a bola em seis meteoros que caem em volta de você — todo marcador perto é DERRUBADO e jogado longe, e você passa intocável.",
+		Action = "DribbleMove",
+		Scaling = { DribbleSkill = 0.6, Physical = 0.4 },
+		Cooldown = 90,
+		-- ⚠️ v110: com cutscene (sobe com a bola, bicicleta, meteoros, crateras) —
+		-- o drible e a derrubada saem no fim dela. Ver HissatsuCutscenes.ChuvaDeMeteoros.
+		Cutscene = "ChuvaDeMeteoros",
+		Effect = { DistanceMult = 1.8, SelfIframe = 1.6, RagdollRadius = 24, RagdollDuration = 1.8, KnockbackRadius = 24, KnockbackForce = 55 },
 	},
 
 	-- ========================================================
@@ -580,13 +811,18 @@ Data.Pulses = {
 		Description = "Rasteira dá um carrinho com bem mais alcance que o normal e cooldown curto — não tem efeito especial, é a defesa de todo dia.",
 		Action = "Tackle",
 		Scaling = { Physical = 0.6, Speed = 0.4 }, -- ⚠️ NOVO: fórmula de potência (carrinho de alcance)
-		Cooldown = 30,
+		Cooldown = 25, -- ⚠️ v107: mítica no máximo 90s ("dar pra usar umas duas, três vezes na partida"; era 30)
 		-- ⚠️ v43: TackleRangeAdd é o que faz a Rasteira ser "carrinho seco COM
 		-- BEM MAIS ALCANCE que o normal", que é a única coisa que ela promete.
 		-- Isso estava só na descrição — nenhuma chave existia, então o alcance
 		-- dela era o mesmo de um carrinho comum (Config.TACKLE_RANGE = 12.1).
 		-- +7 leva pra ~19.1, que é o "bem mais" sem virar desarme à distância
 		-- (pra isso existe a Costura de Sombra, com RootRadius 46).
+		-- ⚠️ v110: todo carrinho de Hissatsu é um dash reto na MIRA, em qualquer
+		-- lugar (ver _G.PulseExecuteTackle); ImpactoAtraso = instante do golpe na
+		-- animação, quando o efeito acontece.
+		ImpactoAtraso = 0,
+		Deslocamento = "Carrinho",
 		Effect = { KnockbackRadius = 5, KnockbackForce = 22, TackleRangeAdd = 7 },
 	},
 
@@ -598,12 +834,13 @@ Data.Pulses = {
 	-- diferente de tudo (ver Action="Root" / executeRoot).
 	{
 		Name = "Costura de Sombra",
+		Image = "rbxassetid://92156730116981", -- ⚠️ v104: arte do artista (pacote "Imagens (2)")
 		Rarity = "Rare",
 		Element = "Void",
-		Description = "Costura de Sombra prende os pés do adversário no chão à distância, sem precisar encostar nele — ele não se move, mas continua com a bola, então você ainda precisa ir buscar.",
+		Description = "Costura de Sombra manda sua SOMBRA correndo reta pelo chão na direção da mira — o primeiro adversário que ela alcançar fica PRESO 1.5s (alterne A/D pra segurar até 2s). Você também fica parado segurando a sombra, e ela não rouba a bola: serve pra TRAVAR o avanço dele.",
 		Action = "Root",
-		Scaling = { Physical = 0.5, Technique = 0.5 }, -- ⚠️ NOVO: fórmula de potência (prende à distância)
-		Cooldown = 45,
+		Scaling = { Physical = 1 }, -- ⚠️ v98: sem Técnica (removida) — só os atributos da categoria · antes: Physical = 0.5, Technique = 0.5
+		Cooldown = 35, -- ⚠️ v107: mítica no máximo 90s ("dar pra usar umas duas, três vezes na partida"; era 45)
 		Effect = { RootRadius = 46, RootDuration = 1.3 },
 	},
 
@@ -618,8 +855,8 @@ Data.Pulses = {
 		Element = "Natureza",
 		Description = "Teia espalha uma teia no chão por vários segundos — quem pisar nela fica lento, e quanto mais tenta correr, pior fica. Monte ela ANTES, no caminho que o atacante vai usar.",
 		Action = "Buff",
-		Scaling = { Physical = 0.5, Technique = 0.5 }, -- ⚠️ NOVO: fórmula de potência (zona de marcação)
-		Cooldown = 60,
+		Scaling = { Physical = 1 }, -- ⚠️ v98: sem Técnica (removida) — só os atributos da categoria · antes: Physical = 0.5, Technique = 0.5
+		Cooldown = 50, -- ⚠️ v107: mítica no máximo 90s ("dar pra usar umas duas, três vezes na partida"; era 60)
 		Duration = 8,
 		Effect = {
 			ZoneSlowRadius = 42,
@@ -639,8 +876,8 @@ Data.Pulses = {
 		Element = "Natureza",
 		Description = "Muralha Infinita levanta uma parede na frente do gol que CRESCE com companheiros perto de você — sozinho é comum, com apoio nenhum chute passa. Você fica preso no lugar enquanto ela estiver de pé.",
 		Action = "Buff",
-		Scaling = { Physical = 0.7, Technique = 0.3 }, -- ⚠️ NOVO: fórmula de potência (exemplo do pedido: 70% Físico + 30% Técnica)
-		Cooldown = 90,
+		Scaling = { Physical = 1 }, -- ⚠️ v98: sem Técnica (removida) — só os atributos da categoria · antes: Physical = 0.7, Technique = 0.3
+		Cooldown = 70, -- ⚠️ v107: mítica no máximo 90s ("dar pra usar umas duas, três vezes na partida"; era 90)
 		Duration = 5,
 		FreezeSelf = true,
 		AlliesScale = { Radius = 45, PerAlly = 0.5, Max = 2 },
@@ -657,13 +894,102 @@ Data.Pulses = {
 		Name = "Investida Titânica",
 		Rarity = "Mythic",
 		Element = "Fogo",
-		Description = "Investida Titânica dispara você reto pra frente atrás de qualquer adversário no caminho — alterne A/D rápido: cada acerto aumenta sua hitbox e o tempo de perseguição. Você não controla a direção depois de disparar.",
+		Description = "Investida Titânica é um dashzão reto pra frente, sem a bola, que DERRUBA todo adversário no caminho (não para no primeiro). Se tomar a bola de alguém, ninguém tira de você até o fim da investida. Alterne A/D rápido pra ir MAIS RÁPIDO (não mais longe).",
 		Action = "Tackle",
 		Scaling = { Physical = 0.7, Speed = 0.3 }, -- ⚠️ NOVO: fórmula de potência (investida de corpo)
-		Cooldown = 120,
+		Cooldown = 90, -- ⚠️ v107: mítica no máximo 90s ("dar pra usar umas duas, três vezes na partida"; era 120)
 		QTE = { Kind = "MashAD", Duration = 2.5, RequiredAlternations = 8 },
+		-- ⚠️ v108 — PEDIDO: "a arrancada precisa ir mais longe — duas vezes mais
+		-- longe, ela é mítica. Derruba mais gente no caminho. Com a bola, ninguém
+		-- tira (iframe). Apertando A e D rápido ele vai mais rápido, não mais longe.
+		-- Tackle não precisa de cutscene." Ver _G.StartPulseDashTackle.
+		DistanciaMult = 2,   -- 2x a distância de antes
+		VelocidadeMash = 1,  -- com todas as alternâncias: até 2x mais rápido
+		MultiAlvo = true,    -- derruba todo mundo no caminho, cada um uma vez
 		Bom = { HitboxRadius = 5, ExtraPersistSeconds = 0.4, KnockbackRadius = 7, KnockbackForce = 50, RagdollRadius = 7, RagdollDuration = 1.4 },
 		Perfect = { HitboxRadius = 9, ExtraPersistSeconds = 1.4, KnockbackRadius = 10, KnockbackForce = 75, RagdollRadius = 10, RagdollDuration = 2.2, StunRadius = 26, StunDuration = 0.5 },
+	},
+
+
+	-- ========================================================
+	-- ⚠️ v109 — DEFESAS NOVAS (uma por raridade, elemento diferente)
+	-- ========================================================
+
+	-- Super Shikofumi (スーパーしこふみ, Fogo): pisão de sumô — ondas de choque
+	-- amarelas e um PÉ GIGANTE que achata o adversário. VERBO: tremer o chão.
+	{
+		Name = "Pisão de Sumô",
+		Rarity = "Common",
+		Element = "Fogo",
+		Description = "Pisão de Sumô dá um pisão que manda ondas de choque pelo chão — todo mundo perto perde o equilíbrio (atordoado) e o carrinho sai com alcance extra.",
+		Action = "Tackle",
+		Scaling = { Physical = 1 },
+		Cooldown = 25,
+		ImpactoAtraso = 0.38, -- o pisão
+		Deslocamento = "Passo",
+		Effect = { TackleRangeAdd = 3, StunRadius = 14, StunDuration = 0.9 },
+	},
+
+	-- Spinning Cut (スピニングカット, Vento): chute giratório que manda um corte em
+	-- meia-lua no chão; dele sobe um muro de fogo azul que joga o atacante longe.
+	-- VERBO: cortar o caminho.
+	{
+		Name = "Corte Giratório",
+		Rarity = "Rare",
+		Element = "Vento",
+		Description = "Corte Giratório manda uma meia-lua de energia azul pelo chão — dela sobe um muro que JOGA LONGE quem estiver na frente, e o carrinho alcança mais.",
+		Action = "Tackle",
+		Scaling = { Physical = 0.7, Speed = 0.3 },
+		Cooldown = 35,
+		ImpactoAtraso = 0,
+		Deslocamento = "Projetil", -- a meia-lua corre na mira
+		Effect = { TackleRangeAdd = 6, KnockbackRadius = 12, KnockbackForce = 55 },
+	},
+
+	-- Frozen Steal (フローズンスティール, Vento): carrinho com a perna coberta de
+	-- gelo que congela o chão e o adversário. VERBO: congelar no desarme.
+	{
+		Name = "Roubo Congelante",
+		Rarity = "Epic",
+		Element = "Vento",
+		Description = "Roubo Congelante dá um carrinho que cobre o chão de gelo e CONGELA quem estiver perto — o atacante fica preso no lugar enquanto você sai com a bola.",
+		Action = "Tackle",
+		Scaling = { Physical = 1 },
+		Cooldown = 50,
+		ImpactoAtraso = 0.05,
+		Deslocamento = "Carrinho",
+		Effect = { TackleRangeAdd = 7, FreezeRadius = 11, FreezeDuration = 1.4 },
+	},
+
+	-- Photon Flash (フォトンフラッシュ, Fogo): junta faíscas de luz girando e solta
+	-- um CLARÃO que cega o adversário na hora do roubo. VERBO: cegar em área.
+	{
+		Name = "Clarão de Fótons",
+		Rarity = "Legendary",
+		Element = "Fogo",
+		Description = "Clarão de Fótons solta um clarão de luz que CEGA (atordoa) todos os adversários num raio grande, e o carrinho alcança bem longe.",
+		Action = "Tackle",
+		Scaling = { Physical = 0.6, Speed = 0.4 },
+		Cooldown = 70,
+		ImpactoAtraso = 0.56, -- o clarão
+		Deslocamento = "Corrida",
+		Effect = { TackleRangeAdd = 9, StunRadius = 26, StunDuration = 1.6 },
+	},
+
+	-- Snow Angel (スノーエンジェル, Vento): salta sobre o adversário girando as
+	-- pernas num véu de vento gelado, com cortes de gelo e neve — prende em
+	-- gelo. VERBO: nevasca que congela a área inteira.
+	{
+		Name = "Anjo da Neve",
+		Rarity = "Mythic",
+		Element = "Vento",
+		Description = "Anjo da Neve salta girando num véu de vento gelado — todos os adversários num raio enorme ficam CONGELADOS e o carrinho alcança muito longe.",
+		Action = "Tackle",
+		Scaling = { Physical = 0.6, Speed = 0.4 },
+		Cooldown = 90,
+		ImpactoAtraso = 0, -- (a animação começa no salto: cai junto com a chegada)
+		Deslocamento = "Salto",
+		Effect = { TackleRangeAdd = 10, FreezeRadius = 28, FreezeDuration = 2.2, SelfIframe = 1 },
 	},
 
 	-- ========================================================
@@ -697,7 +1023,7 @@ Data.Pulses = {
 		Description = "Soco Explosivo (só goleiro) sempre rebate a bola pro campo em vez de segurar — é a guarda mais barata e a que recarrega mais rápido, ao custo de sempre sobrar rebote.",
 		Action = "Buff",
 		Scaling = { Physical = 0.8, Kick = 0.2 }, -- ⚠️ NOVO: fórmula de potência (goleiro que soca)
-		Cooldown = 30,
+		Cooldown = 25, -- ⚠️ v107: mítica no máximo 90s ("dar pra usar umas duas, três vezes na partida"; era 30)
 		Duration = 4,
 		QTE = { Kind = "TimingBar", Duration = 4.5, PerfectStart = 0.38, PerfectEnd = 0.62, GoodPadding = 0.16, SweepPeriod = 0.9, RequiredHits = 4, GuardSize = 0.4 },
 		-- ⚠️ v39: `Rebate` é o sinal EXPLÍCITO de "essa guarda nunca segura a
@@ -724,8 +1050,8 @@ Data.Pulses = {
 		-- lados, e sofre com bola por cima.
 		Description = "Muralha de Maré (só goleiro) levanta uma parede de água larga que cobre muito mais espaço pros lados que qualquer outra guarda — bola por cima ainda passa.",
 		Action = "Buff",
-		Scaling = { Physical = 0.7, Technique = 0.3 }, -- ⚠️ NOVO: fórmula de potência (goleiro)
-		Cooldown = 45,
+		Scaling = { Physical = 1 }, -- ⚠️ v98: sem Técnica (removida) — só os atributos da categoria · antes: Physical = 0.7, Technique = 0.3
+		Cooldown = 35, -- ⚠️ v107: mítica no máximo 90s ("dar pra usar umas duas, três vezes na partida"; era 45)
 		Duration = 5,
 		QTE = { Kind = "TimingBar", Duration = 4.2, PerfectStart = 0.4, PerfectEnd = 0.6, GoodPadding = 0.14, SweepPeriod = 0.8, RequiredHits = 5, GuardSize = 0.75 },
 		Bom = { DiveRadiusAdd = 2 },
@@ -744,8 +1070,8 @@ Data.Pulses = {
 		-- é a resposta específica pra canhão de fora da área.
 		Description = "Punho Gigante (só goleiro) te transforma num gigante que soca a bola contra o chão — quanto mais longe veio o chute, mais fácil segura. Feita pra canhão de fora da área.",
 		Action = "Buff",
-		Scaling = { Physical = 0.7, Technique = 0.3 }, -- ⚠️ NOVO: fórmula de potência (goleiro)
-		Cooldown = 60,
+		Scaling = { Physical = 1 }, -- ⚠️ v98: sem Técnica (removida) — só os atributos da categoria · antes: Physical = 0.7, Technique = 0.3
+		Cooldown = 50, -- ⚠️ v107: mítica no máximo 90s ("dar pra usar umas duas, três vezes na partida"; era 60)
 		Duration = 5,
 		QTE = { Kind = "TimingBar", Duration = 4.0, PerfectStart = 0.4, PerfectEnd = 0.6, GoodPadding = 0.13, SweepPeriod = 0.75, RequiredHits = 5, GuardSize = 0.55 },
 		Bom = { DiveRadiusAdd = 3, MinShotDistance = 30 },
@@ -761,8 +1087,8 @@ Data.Pulses = {
 		RoleRequired = "GK",
 		Description = "Mão Divina (só goleiro) arma uma guarda parada na sua frente — quando o chute bater nela, começa o timing; acertando, a bola gruda na mão sem rebote nenhum.",
 		Action = "Buff",
-		Scaling = { Physical = 0.7, Technique = 0.3 }, -- ⚠️ NOVO: fórmula de potência (goleiro)
-		Cooldown = 90,
+		Scaling = { Physical = 1 }, -- ⚠️ v98: sem Técnica (removida) — só os atributos da categoria · antes: Physical = 0.7, Technique = 0.3
+		Cooldown = 70, -- ⚠️ v107: mítica no máximo 90s ("dar pra usar umas duas, três vezes na partida"; era 90)
 		Duration = 5,
 		QTE = { Kind = "TimingBar", Duration = 4.0, PerfectStart = 0.4, PerfectEnd = 0.6, GoodPadding = 0.12, SweepPeriod = 0.7, RequiredHits = 5, GuardSize = 0.5 },
 		Bom = { DiveRadiusAdd = 3 },
@@ -776,15 +1102,110 @@ Data.Pulses = {
 	-- vinha de lugar nenhum.
 	{
 		Name = "Mão do Demônio",
+		Image = "rbxassetid://87089969736115", -- ⚠️ v104: arte do artista (pacote "Imagens (2)")
 		Rarity = "Mythic",
 		Element = "Void",
 		RoleRequired = "GK",
 		Description = "Mão do Demônio (só goleiro) é a guarda máxima — acertando o timing, NADA passa, nem a Galáxia (que normalmente ignora o goleiro). A única resposta a um chute Mítico.",
 		Action = "Buff",
-		Scaling = { Physical = 0.7, Technique = 0.3 }, -- ⚠️ NOVO: fórmula de potência (goleiro)
-		Cooldown = 120,
+		Scaling = { Physical = 1 }, -- ⚠️ v98: sem Técnica (removida) — só os atributos da categoria · antes: Physical = 0.7, Technique = 0.3
+		Cooldown = 90, -- ⚠️ v107: mítica no máximo 90s ("dar pra usar umas duas, três vezes na partida"; era 120)
 		Duration = 6,
 		QTE = { Kind = "TimingBar", Duration = 3.5, PerfectStart = 0.42, PerfectEnd = 0.58, GoodPadding = 0.1, SweepPeriod = 0.65, RequiredHits = 5, GuardSize = 0.6 },
+		Bom = { DiveRadiusAdd = 4.5, MinShotDistance = 15 },
+		Perfect = { DiveRadiusAdd = 8, GuaranteedCatch = true, MinShotDistance = 25 },
+	},
+
+	-- ========================================================
+	-- ⚠️ v109 — GOLEIRO NOVOS (um por raridade, elemento diferente)
+	-- ========================================================
+
+	-- Ice Block (アイスブロック, Vento): junta energia de gelo na mão (um floco de
+	-- neve) e soca a bola, CONGELANDO ela. VERBO: segurar barato — a comum que
+	-- segura (a outra comum, o Soco Explosivo, sempre rebate).
+	{
+		Name = "Bloco de Gelo",
+		Rarity = "Common",
+		Element = "Vento",
+		RoleRequired = "GK",
+		Description = "Bloco de Gelo (só goleiro) junta um floco de gelo na mão e soca a bola, congelando ela — a guarda comum que SEGURA a bola em vez de rebater.",
+		Action = "Buff",
+		Scaling = { Physical = 1 },
+		Cooldown = 25,
+		Duration = 4,
+		QTE = { Kind = "TimingBar", Duration = 4.5, PerfectStart = 0.38, PerfectEnd = 0.62, GoodPadding = 0.16, SweepPeriod = 0.9, RequiredHits = 4, GuardSize = 0.4 },
+		Bom = { DiveRadiusAdd = 1.5 },
+		Perfect = { DiveRadiusAdd = 2.5, GuaranteedCatch = true },
+	},
+
+	-- Nekketsu Punch (熱血パンチ, Fogo): puxa o braço e soca a bola com o punho em
+	-- chamas. VERBO: rebater longe — rebate com mais força e cobre mais que o
+	-- Soco Explosivo.
+	{
+		Name = "Soco Ardente",
+		Rarity = "Rare",
+		Element = "Fogo",
+		RoleRequired = "GK",
+		Description = "Soco Ardente (só goleiro) é um soco único em chamas que REBATE a bola pra longe, com guarda maior que a do Soco Explosivo.",
+		Action = "Buff",
+		Scaling = { Physical = 0.8, Kick = 0.2 },
+		Cooldown = 35,
+		Duration = 5,
+		QTE = { Kind = "TimingBar", Duration = 4.2, PerfectStart = 0.4, PerfectEnd = 0.6, GoodPadding = 0.14, SweepPeriod = 0.8, RequiredHits = 5, GuardSize = 0.55 },
+		Bom = { DiveRadiusAdd = 2.5, Rebate = true },
+		Perfect = { DiveRadiusAdd = 3.5, Rebate = true },
+	},
+
+	-- Power Shield (パワーシールド, Fogo): salta, cai socando o chão e levanta um
+	-- ESCUDO de onda de choque com faíscas. VERBO: cúpula — a guarda mais ALTA
+	-- (pega bola por cima que a Muralha de Maré deixa passar).
+	{
+		Name = "Escudo de Força",
+		Rarity = "Epic",
+		Element = "Fogo",
+		RoleRequired = "GK",
+		Description = "Escudo de Força (só goleiro) soca o chão e levanta uma CÚPULA de energia — pega até bola alta por cima, e rebate o chute de volta pro campo.",
+		Action = "Buff",
+		Scaling = { Physical = 1 },
+		Cooldown = 50,
+		Duration = 5,
+		QTE = { Kind = "TimingBar", Duration = 4.0, PerfectStart = 0.4, PerfectEnd = 0.6, GoodPadding = 0.13, SweepPeriod = 0.75, RequiredHits = 5, GuardSize = 0.65 },
+		Bom = { DiveRadiusAdd = 3, Rebate = true },
+		Perfect = { DiveRadiusAdd = 4.5, Rebate = true },
+	},
+
+	-- Seigi no Tekken / Fist of Justice (正義の鉄拳, Vento): junta energia amarela
+	-- no punho, pisa pra trás e solta um PUNHO dourado gigante contra a bola.
+	-- VERBO: rebater com o punho gigante.
+	{
+		Name = "Punho da Justiça",
+		Rarity = "Legendary",
+		Element = "Vento",
+		RoleRequired = "GK",
+		Description = "Punho da Justiça (só goleiro) solta um punho dourado gigante contra a bola — acertando o timing ele segura, senão rebate forte.",
+		Action = "Buff",
+		Scaling = { Physical = 0.8, Kick = 0.2 },
+		Cooldown = 70,
+		Duration = 5,
+		QTE = { Kind = "TimingBar", Duration = 4.0, PerfectStart = 0.4, PerfectEnd = 0.6, GoodPadding = 0.12, SweepPeriod = 0.7, RequiredHits = 5, GuardSize = 0.55 },
+		Bom = { DiveRadiusAdd = 3.5, Rebate = true },
+		Perfect = { DiveRadiusAdd = 5, GuaranteedCatch = true },
+	},
+
+	-- Fuujin Raijin (風神雷神, Vento): bate os punhos (raio num, vento no outro) e
+	-- solta um relâmpago de um lado e uma tempestade de vento do outro, que
+	-- prendem a bola no meio. VERBO: prender no meio de duas forças.
+	{
+		Name = "Deuses do Vento e Trovão",
+		Rarity = "Mythic",
+		Element = "Vento",
+		RoleRequired = "GK",
+		Description = "Deuses do Vento e Trovão (só goleiro) solta um relâmpago de um lado e uma tempestade do outro que PRENDEM a bola no meio — a outra guarda mítica, com a maior área do jogo.",
+		Action = "Buff",
+		Scaling = { Physical = 1 },
+		Cooldown = 90,
+		Duration = 6,
+		QTE = { Kind = "TimingBar", Duration = 3.5, PerfectStart = 0.42, PerfectEnd = 0.58, GoodPadding = 0.1, SweepPeriod = 0.65, RequiredHits = 5, GuardSize = 0.7 },
 		Bom = { DiveRadiusAdd = 4.5, MinShotDistance = 15 },
 		Perfect = { DiveRadiusAdd = 8, GuaranteedCatch = true, MinShotDistance = 25 },
 	},
@@ -816,19 +1237,28 @@ Data.Instincts = {
 	-- ========== Common (4) ==========
 	{
 		Name = "Pique",
+		Posicao = "FW", -- ⚠️ v110: posição da Arma (2 por raridade em cada posição)
 		Image = "rbxassetid://82375927843223", -- ⚠️ v77: arte do artista (ver pedido do usuário)
 		Rarity = "Common",
 		Cor = Color3.fromRGB(255, 106, 61),
-		Description = "Pique aumenta sua velocidade em 20% e recupera fôlego mais rápido durante o 1º segundo de uma arrancada, pra ganhar vantagem no impulso inicial contra seus marcadores — depois disso, precisa de 4s parado correndo pra valer de novo.",
-		Passiva = "No 1º segundo de corrida: +20% de velocidade e fôlego recuperando mais rápido. Depois disso precisa de 4s parado de correr pra valer de novo.",
-		Trigger = "Instant",
-		Condition = { MaxSecondsAfterSprintStart = 1 },
-		CooldownSeconds = 4,
-		Effect = { SpeedMult = 1.20, StaminaRegenMult = 1.25 },
+		-- ⚠️ v111 — PEDIDO: "tem muitas armas de status... tem que ter utilidade
+		-- diversa". Era +20% no 1º segundo de corrida (só número). Virou uma
+		-- ARRANCADA de verdade na tecla: um tiro curto pra frente (com ou sem a
+		-- bola) e o corpo segue mais rápido por 1.6s.
+		Description = "Pique: aperte a tecla da Arma e você dá um tiro curto de 16 studs pra frente (com ou sem a bola) e continua 25% mais rápido por 1,6s — pra sair da marcação no arranque.",
+		Ativa = "Tecla da Arma: arrancada de 16 studs pra onde você está correndo + 25% de velocidade por 1,6s.",
+		Trigger = "Botao",
+		Tecla = "R",
+		Condition = {},
+		Effect = {},
+		AtivaAction = "Arranque",
+		AtivaEffect = { Distancia = 16, Tempo = 0.35, SpeedMult = 1.25, Duracao = 1.6 },
+		AtivaCooldown = 7,
 	},
 
 	{
 		Name = "Domínio",
+		Posicao = "MF", -- ⚠️ v110: posição da Arma (2 por raridade em cada posição)
 		Image = "rbxassetid://100014626629607", -- ⚠️ v77: arte do artista (ver pedido do usuário)
 		Rarity = "Common",
 		Cor = Color3.fromRGB(199, 203, 209),
@@ -845,6 +1275,7 @@ Data.Instincts = {
 
 	{
 		Name = "Reflexo",
+		Posicao = "GK", -- ⚠️ v110: posição da Arma (2 por raridade em cada posição)
 		Image = "rbxassetid://81787426005468", -- ⚠️ v77: arte do artista (ver pedido do usuário)
 		Rarity = "Common",
 		Cor = Color3.fromRGB(255, 159, 10),
@@ -872,6 +1303,7 @@ Data.Instincts = {
 	-- te dar velocidade, ele te ensina onde parar.
 	{
 		Name = "Zona de Ouro",
+		Posicao = "FW", -- ⚠️ v110: posição da Arma (2 por raridade em cada posição)
 		Rarity = "Common",
 		Cor = Color3.fromRGB(245, 200, 66),
 		Description = "Zona de Ouro dá mira quase perfeita e +15% de força quando você chuta a gol a ~124 studs de distância, num ângulo de ~40° — fora dessa posição exata, você é um jogador normal.",
@@ -903,6 +1335,7 @@ Data.Instincts = {
 	-- ========== Rare (4) ==========
 	{
 		Name = "Chute Direto",
+		Posicao = "FW", -- ⚠️ v110: posição da Arma (2 por raridade em cada posição)
 		Rarity = "Rare",
 		Cor = Color3.fromRGB(59, 111, 224),
 		Description = "Chute Direto finaliza sozinho, com força alta e mira perfeita, se você apertar R em até 1 segundo depois de receber a bola — não precisa dominar pra finalizar.",
@@ -924,10 +1357,11 @@ Data.Instincts = {
 
 	{
 		Name = "Monstro do Drible",
+		Posicao = "MF", -- ⚠️ v110: posição da Arma (2 por raridade em cada posição)
 		Image = "rbxassetid://136729033024503", -- ⚠️ v77: arte do artista (ver pedido do usuário)
 		Rarity = "Rare",
 		Cor = Color3.fromRGB(245, 197, 24),
-		Description = "Monstro do Drible aumenta o alcance da sua finta em +6 no campo de ataque e garante stun mais longo em quem estiver perto — sempre, não só às vezes.",
+		Description = "Monstro do Drible (Bachira): com a bola, a tecla da Arma faz o Drible do Monstro — 3 cortes em zigue-zague (~30 studs) pra onde você mira, sem poder ser desarmado no meio, e quem estiver no caminho cai. De bônus, sua finta (Q) no campo de ataque alcança +6 e derruba por mais tempo quem der carrinho.",
 		-- ⚠️ v5.4: era uma Ativa separada (AtivaAction="DribbleMove") que
 		-- rodava a finta DE NOVO por cima da finta manual que o jogador já
 		-- tinha apertado — a segunda sobrescrevia a primeira sem herdar o
@@ -939,10 +1373,23 @@ Data.Instincts = {
 		Trigger = "DribbleMove",
 		Condition = { AttackingHalf = true },
 		Effect = { AnkleRangeAdd = 6, AnkleStunAdd = 1.4, AlwaysStun = true },
+		-- ⚠️ v111 — PEDIDO: "um drible que vai mais longe especificamente, por
+		-- exemplo, o Monstro do Drible pode ser isso". Com a bola, a tecla faz o
+		-- DRIBLE DO MONSTRO (Bachira): 3 cortes em zigue-zague pra frente (~30
+		-- studs), ninguém desarma no meio, e quem estiver no caminho cai.
+		Ativa = "Tecla da Arma, com a bola: Drible do Monstro — 3 cortes em zigue-zague (~30 studs) na direção da mira; ninguém te desarma no meio e quem estiver no caminho cai.",
+		Tecla = "R",
+		AtivaSoNaTecla = true,
+		AtivaCondition = { RequirePossession = true },
+		AtivaAction = "DribleMonstro",
+		AtivaEffect = { Cortes = 3, PassoCorte = 10, LarguraCorte = 4, TempoCorte = 0.3, StunNoCaminho = 1.3, RaioCaminho = 7 },
+		AtivaCooldown = 12,
 	},
 
 	{
 		Name = "Xerife",
+		Posicao = "DF", -- ⚠️ v110: posição da Arma (2 por raridade em cada posição)
+		Image = "rbxassetid://88481477010009", -- ⚠️ v104: arte do artista (pacote "Imagens (2)")
 		Rarity = "Rare",
 		Cor = Color3.fromRGB(52, 199, 89),
 		Description = "Xerife aumenta sua chance de desarme em +25% em carrinhos dentro da própria área — você lê o atacante antes dele decidir.",
@@ -967,6 +1414,8 @@ Data.Instincts = {
 	-- geometria do campo — ver goalkeeperOffGuard em BallController.
 	{
 		Name = "Olho de Predador",
+		Posicao = "FW", -- ⚠️ v110: posição da Arma (2 por raridade em cada posição)
+		Image = "rbxassetid://114746657450118", -- ⚠️ v104: arte do artista (pacote "Imagens (2)")
 		Rarity = "Rare",
 		Cor = Color3.fromRGB(190, 30, 45),
 		Description = "Olho de Predador dá +20% de força e mira muito mais limpa quando o goleiro está fora de posição (adiantado ou deslocado pro lado errado) — 20% de chance dele nem alcançar a bola.",
@@ -979,6 +1428,7 @@ Data.Instincts = {
 	-- ========== Epic (3) ==========
 	{
 		Name = "Metavisão",
+		Posicao = "MF", -- ⚠️ v110: posição da Arma (2 por raridade em cada posição)
 		Image = "rbxassetid://123335535687893", -- ⚠️ v77: arte do artista (ver pedido do usuário)
 		Rarity = "Epic",
 		Cor = Color3.fromRGB(127, 212, 255),
@@ -1004,6 +1454,7 @@ Data.Instincts = {
 
 	{
 		Name = "Ego do Rei",
+		Posicao = "FW", -- ⚠️ v110: posição da Arma (2 por raridade em cada posição)
 		Rarity = "Epic",
 		Cor = Color3.fromRGB(168, 85, 247),
 		Description = "Ego do Rei dá +30% de força e mira bem mais limpa em chutes carregados até o máximo, de fora da área — você não passa, chuta.",
@@ -1039,18 +1490,30 @@ Data.Instincts = {
 	-- Premia sumir do jogo pra reaparecer no lugar certo.
 	{
 		Name = "Passo Furtivo",
+		Posicao = "MF", -- ⚠️ v110: posição da Arma (2 por raridade em cada posição)
 		Rarity = "Epic",
 		Cor = Color3.fromRGB(99, 102, 241),
-		Description = "Passo Furtivo dá +25% de velocidade, +5 de alcance de recepção e fôlego recuperando mais rápido sempre que você está sem a bola e nenhum adversário está olhando na sua direção.",
+		Description = "Passo Furtivo: sem a bola, a tecla da Arma te faz SUMIR da vista dos adversários por 3,5s. E sempre que ninguém está te olhando (inclusive sumido), você ganha +25% de velocidade e +5 de alcance pra receber.",
 		Passiva = "Sem a posse da bola e com NENHUM adversário olhando na sua direção: +25% de velocidade, +5 de alcance de recepção e fôlego recuperando mais rápido.",
 		Trigger = "Instant",
 		Condition = { RequireUnseen = true, RequireNoPossession = true },
 		Effect = { SpeedMult = 1.25, PickupRadiusAdd = 5, StaminaRegenMult = 1.2 },
+		-- ⚠️ v111: tecla = SUMIR (Stealth, Blue Lock) — some da vista dos
+		-- adversários por 3,5s (quase transparente e sem nome pra eles) e, como
+		-- ninguém te vê, o bônus acima liga junto.
+		Ativa = "Tecla da Arma, sem a bola: some da vista dos adversários por 3,5s (quase invisível e sem nome pra eles) — e o bônus de velocidade liga junto.",
+		Tecla = "R",
+		AtivaSoNaTecla = true,
+		AtivaCondition = { RequireNoPossession = true },
+		AtivaAction = "Sumir",
+		AtivaEffect = { Duracao = 3.5 },
+		AtivaCooldown = 16,
 	},
 
 	-- ========== Legendary (2) ==========
 	{
 		Name = "Xeque-Mate",
+		Posicao = "FW", -- ⚠️ v110: posição da Arma (2 por raridade em cada posição)
 		Image = "rbxassetid://129579024510412", -- ⚠️ v77: arte do artista (ver pedido do usuário)
 		Rarity = "Legendary",
 		Cor = Color3.fromRGB(225, 29, 72),
@@ -1092,14 +1555,20 @@ Data.Instincts = {
 		-- goleiro, e cooldown 8 -> 7 (é uma janela mais rara que a do Chute
 		-- Direto, não faz sentido esperar mais).
 		AtivaEffect = {
-			HeaderForceMult = 2.4,
+			-- ⚠️ v108 — "tá boa mas tá um pouco forte demais, nerfa um pouco":
+			-- força 2.4 -> 2.0, ignorar goleiro 30% -> 15%, cooldown 7 -> 9 e o
+			-- teleguiado corrige mais devagar (BallController).
+			HeaderForceMult = 2.0,
 			AimDeviationMult = 0,
 			HeaderRangeAdd = 10,
 			HeaderMinHeight = -4,
-			IgnoreGKChance = 0.3,
+			IgnoreGKChance = 0.15,
 			BallMagnetRadius = 36,
+			-- ⚠️ v106: teleguiado pro ÂNGULO do gol, mesmo mirando errado (ver
+			-- _G.PulseExecuteHeader no BallController)
+			MiraNoAngulo = true,
 		},
-		AtivaCooldown = 7,
+		AtivaCooldown = 9,
 	},
 
 	-- ⚠️ v9 REDESIGN: "Instinto de Virada" saiu — "+40% enquanto o time
@@ -1117,13 +1586,24 @@ Data.Instincts = {
 	-- amigos, faltava exatamente isso.
 	{
 		Name = "Tabela",
+		Posicao = "MF", -- ⚠️ v110: posição da Arma (2 por raridade em cada posição)
 		Rarity = "Legendary",
 		Cor = Color3.fromRGB(45, 212, 191),
-		Description = "Tabela dá +30% em TODOS os atributos por 5 segundos quando você recebe a bola depois do seu time trocar 5 passes seguidos sem perder a posse.",
+		-- ⚠️ v111: tecla = UM-DOIS. Toca no companheiro mais perto na sua frente
+		-- e a bola VOLTA de primeira na sua frente. Sozinho, a tabela é com a
+		-- sua sombra (igual os chutes em grupo sozinho).
+		Description = "Tabela: com a bola, a tecla da Arma faz o UM-DOIS — você toca no companheiro mais perto à frente e a bola volta de primeira, 12 studs na sua frente. Sem companheiro perto, a tabela é com a sua sombra. E recebendo depois de 5 passes seguidos do time: +30% em TODOS os atributos por 5s.",
 		Passiva = "Recebendo a bola depois de 5 passes seguidos do seu time (sem perder a posse no meio): +30% em TODOS os atributos pelos primeiros 5 segundos depois de receber.",
+		Ativa = "Tecla da Arma, com a bola: um-dois com o companheiro mais perto à frente (ou com a sua sombra) — a bola volta 12 studs na sua frente.",
 		Trigger = "Instant",
 		Condition = { MinTeamPassChain = 5, MaxSecondsAfterReceive = 5 },
 		Effect = { AllBoost = 0.3 },
+		Tecla = "R",
+		AtivaSoNaTecla = true,
+		AtivaCondition = { RequirePossession = true },
+		AtivaAction = "Tabela",
+		AtivaEffect = { Raio = 50, Adiantar = 12 },
+		AtivaCooldown = 10,
 	},
 
 	-- ========== Mythic (2) ==========
@@ -1141,6 +1621,7 @@ Data.Instincts = {
 	-- Mode toda vez que a sorte vira — o oposto do problema do Fluxo.
 	{
 		Name = "Apostador",
+		Posicao = "MF", -- ⚠️ v110: posição da Arma (2 por raridade em cada posição)
 		Image = "rbxassetid://89373794649343", -- ⚠️ v77: arte do artista (ver pedido do usuário)
 		Rarity = "Mythic",
 		Cor = Color3.fromRGB(250, 204, 21),
@@ -1176,15 +1657,339 @@ Data.Instincts = {
 	-- resolveria pro Instinto errado no save de quem já tem.
 	{
 		Name = "A Zona",
+		Posicao = "FW", -- ⚠️ v110: posição da Arma (2 por raridade em cada posição)
 		Rarity = "Mythic",
 		Cor = Color3.fromRGB(240, 253, 255),
-		Description = "A Zona dá +40% em TODOS os atributos depois de 8 segundos seguidos com a bola no campo de ataque, sem perder a posse — perdeu a bola, o bônus acaba e você começa do zero.",
-		Passiva = "Com a bola há 8 segundos seguidos sem perder a posse, no campo de ataque: +40% em TODOS os atributos, até você perder a bola.",
+		-- ⚠️ v111: além do número, na Zona o TEMPO desacelera em volta de você —
+		-- os adversários a até 18 studs ficam 20% mais lentos.
+		Description = "A Zona: depois de 8 segundos seguidos com a bola no campo de ataque você entra na Zona — +35% em TODOS os atributos e o tempo desacelera em volta: adversários a até 18 studs ficam 20% mais lentos. Perdeu a bola, acaba.",
+		Passiva = "Com a bola há 8s seguidos no campo de ataque: +35% em TODOS os atributos e adversários a até 18 studs 20% mais lentos, até você perder a bola.",
 		Trigger = "Instant",
 		Condition = { MinSecondsInPossession = 8, AttackingHalf = true },
-		Effect = { AllBoost = 0.4 },
+		Effect = { AllBoost = 0.35, LentidaoRaio = 18, LentidaoMult = 0.8 },
+	},
+
+	-- ============================================================
+	-- ⚠️ v110 — ARMAS NOVAS (19 ficaram; 6 cortadas na revisão por repetirem outras,
+	-- ver Data.LegacyNames). PEDIDO: "precisa ter pelo menos duas de cada role:
+	-- duas comuns, duas raras, duas épicas, duas lendárias e duas míticas de GK,
+	-- de FW, de DF e de MF — 40 armas no total... pesquisa na Wiki como
+	-- funcionam... me pediram chute curvo no jogo, uma arma do Rin (ou do Sae)".
+	-- Posicao = a posição que a Arma serve (as de GK exigem RoleRequired = "GK").
+	-- Cada uma vem de um jogador de Blue Lock (wiki: bluelock.fandom.com), com
+	-- a leitura de jogo dele virando Condition e o talento virando Effect.
+	-- Efeitos NOVOS (ver BallController/InstinctController/PulseController):
+	--   Curva                 — o chute/passe sai aberto e FAZ A CURVA de volta
+	--                           pro ponto mirado (segure A ou D pra escolher o
+	--                           lado; sem segurar, curva de fora pra dentro)
+	--   CompanheiroForcaMult  — quem recebe o passe chuta mais forte (6s)
+	--   DiveDistanceMult      — o mergulho do goleiro vai mais longe
+	--   TeamSpeedMult/TeamRaio— companheiros perto ficam mais rápidos
+	-- Condições NOVAS: DefendingHalf (no próprio campo), CarrierMaxDistance
+	-- (perto do ADVERSÁRIO com a bola), RequirePossession (com a bola), e
+	-- RequireOwnArea agora também vale nas contínuas (dentro da própria área).
+	-- ============================================================
+
+	-- ---------- FW ----------
+	-- Rin Itoshi: chutes de precisão com CURVA (o "destruidor" colocado).
+	{
+		Name = "Tiro Destruidor",
+		Posicao = "FW",
+		Rarity = "Epic",
+		Cor = Color3.fromRGB(20, 170, 160),
+		-- ⚠️ v111 — PEDIDO: "não tá claro como usa... tem que andar pro lado e às
+		-- vezes buga". Agora é AUTOMÁTICO: todo chute a gol de longe curva, e a
+		-- bola sai pelo lado livre e contorna quem está no caminho (ou vem de
+		-- fora pra dentro do canto). A/D só se estiver andando bem de lado.
+		Description = "Tiro Destruidor (Rin Itoshi): todo chute a gol a mais de 25 studs sai CURVO, sozinho — a bola abre pelo lado livre, contorna o defensor ou o goleiro que estiver no caminho e volta pro ponto que você mirou. Não precisa apertar nada.",
+		Passiva = "Chute a gol a mais de 25 studs do gol: a bola curva sozinha em volta de quem está no caminho até o ponto mirado, +10% de força e mira mais limpa. (Andando bem de lado com A/D, você força o lado da curva.)",
+		Trigger = "KickAtGoal",
+		Condition = { MinDistanceToGoal = 25 },
+		Effect = { Curva = 1, ForceMult = 1.1, AimDeviationMult = 0.25 },
+	},
+
+	-- ---------- MF ----------
+	-- Hiori Yo: passes milimétricos.
+	{
+		Name = "Passe Preciso",
+		Posicao = "MF",
+		Rarity = "Common",
+		Cor = Color3.fromRGB(150, 220, 255),
+		Description = "Passe Preciso (Hiori Yo): seus passes saem com a mira muito mais limpa e um pouco mais fortes — a bola chega redonda no pé do companheiro.",
+		Passiva = "Todo passe: mira muito mais limpa e +10% de força.",
+		Trigger = "KickAtTeammate",
+		Condition = {},
+		Effect = { AimDeviationMult = 0.2, ForceMult = 1.1 },
+	},
+	-- Kurona Ranze: o motor do meio — nunca para de se mexer.
+	{
+		Name = "Pulmão de Aço",
+		Posicao = "MF",
+		Rarity = "Rare",
+		Cor = Color3.fromRGB(120, 230, 150),
+		Description = "Pulmão de Aço (Kurona Ranze): a tecla da Arma é o SEGUNDO FÔLEGO — enche o fôlego na hora (a cada 30s). E sem a bola, o fôlego volta 60% mais rápido e você corre um pouco mais.",
+		Passiva = "Sem a posse da bola: fôlego recuperando 60% mais rápido e +5% de velocidade.",
+		Trigger = "Instant",
+		Condition = { RequireNoPossession = true },
+		Effect = { StaminaRegenMult = 1.6, SpeedMult = 1.05 },
+		-- ⚠️ v111: tecla = SEGUNDO FÔLEGO (enche o fôlego na hora)
+		Ativa = "Tecla da Arma: Segundo Fôlego — o fôlego enche na hora (a cada 30s).",
+		Tecla = "R",
+		AtivaSoNaTecla = true,
+		AtivaCondition = {},
+		AtivaAction = "SegundoFolego",
+		AtivaEffect = {},
+		AtivaCooldown = 30,
+	},
+	-- Itoshi Sae: o passe perfeito, com CURVA, que deixa o atacante na cara do gol.
+	{
+		Name = "Passe do Prodígio",
+		Posicao = "MF",
+		Rarity = "Legendary",
+		Cor = Color3.fromRGB(230, 90, 120),
+		-- ⚠️ v111 — PEDIDO: "a arma do Sae não tá claro como usa". Era passiva e
+		-- só valia se a mira caísse a menos de 10 studs de um companheiro (sozinho
+		-- nunca acontecia). Agora é na TECLA: a bola vai curvando até onde você
+		-- mira (ou até o pé do companheiro perto da mira), contornando quem está
+		-- no meio, sozinha.
+		Description = "Passe do Prodígio (Itoshi Sae): com a bola, aperte a tecla da Arma e sai um PASSE CURVO até onde você mira — se tiver companheiro perto da mira, no pé dele — contornando sozinho quem estiver no meio. Quem recebe chuta 20% mais forte por 6s.",
+		Ativa = "Tecla da Arma, com a bola: passe curvo até a mira (ou até o companheiro perto dela), contornando quem está no caminho; quem recebe chuta 20% mais forte por 6s.",
+		Trigger = "Botao",
+		Tecla = "R",
+		Condition = { RequirePossession = true },
+		Effect = {},
+		AtivaAction = "PasseCurvo",
+		AtivaEffect = { Curva = 1.2, CompanheiroForcaMult = 1.2, RaioCompanheiro = 18 },
+		AtivaCooldown = 6,
+	},
+	-- Itoshi Sae (o "maestro"): com a bola no pé, o time inteiro joga no ritmo dele.
+	{
+		Name = "Maestro do Campo",
+		Posicao = "MF",
+		Rarity = "Mythic",
+		Cor = Color3.fromRGB(255, 225, 120),
+		Description = "Maestro do Campo: enquanto a bola está no seu pé, todos os companheiros a até 40 studs ficam 15% mais rápidos — o time inteiro se move no seu ritmo.",
+		Passiva = "Com a posse da bola: companheiros a até 40 studs +15% de velocidade (e você +5%).",
+		Trigger = "Instant",
+		Condition = { RequirePossession = true },
+		Effect = { TeamSpeedMult = 1.15, TeamRaio = 40, SpeedMult = 1.05 },
+	},
+
+	-- ---------- DF ----------
+	-- Raichi Jingo: marcação colada, não larga o atacante.
+	{
+		Name = "Marcação Cerrada",
+		Posicao = "DF",
+		Rarity = "Common",
+		Cor = Color3.fromRGB(200, 120, 70),
+		Description = "Marcação Cerrada (Raichi Jingo): a tecla da Arma te COLA no adversário com a bola (a até 25 studs) por 3s — você vai sozinho pra frente dele, entre ele e o seu gol. E perto dele você corre 12% mais.",
+		Passiva = "Adversário com a bola a até 12 studs: +12% de velocidade.",
+		Trigger = "Instant",
+		Condition = { CarrierMaxDistance = 12 },
+		Effect = { SpeedMult = 1.12 },
+		-- ⚠️ v111: tecla = COLAR (Jingo) — gruda no adversário da bola
+		Ativa = "Tecla da Arma: COLA no adversário com a bola (a até 25 studs) por 3s, sempre entre ele e o seu gol.",
+		Tecla = "R",
+		AtivaSoNaTecla = true,
+		AtivaCondition = { CarrierMaxDistance = 25 },
+		AtivaAction = "Colar",
+		AtivaEffect = { Raio = 25, Duracao = 3, SpeedMult = 1.15, Distancia = 3.5, VelocidadeColar = 34 },
+		AtivaCooldown = 12,
+	},
+	-- Aiku Oliver: lê a linha de passe antes dela acontecer.
+	{
+		Name = "Leitura de Passe",
+		Posicao = "DF",
+		Rarity = "Rare",
+		Cor = Color3.fromRGB(90, 200, 230),
+		Description = "Leitura de Passe (Aiku Oliver): com um passe ou chute no ar, a tecla da Arma te faz disparar pro ponto por onde a bola vai passar (até 38 studs) e dominar. E no seu campo, sem a bola, seu alcance pra dominar cresce +5.",
+		Passiva = "No próprio campo, sem a bola: +5 de alcance de recepção (interceptar fica muito mais fácil).",
+		Trigger = "Instant",
+		Condition = { DefendingHalf = true, RequireNoPossession = true },
+		Effect = { PickupRadiusAdd = 5 },
+		-- ⚠️ v111: tecla = INTERCEPTAR (Aiku) — dispara pro ponto do passe
+		Ativa = "Tecla da Arma, com a bola solta em movimento: você dispara pro ponto por onde ela vai passar (até 38 studs) e domina.",
+		Tecla = "R",
+		AtivaSoNaTecla = true,
+		AtivaCondition = { RequireNoPossession = true },
+		AtivaAction = "Interceptar",
+		AtivaEffect = { Raio = 38, VelocidadeDash = 70, RaioDominio = 7 },
+		AtivaCooldown = 10,
+	},
+	-- Kiyora Jin / defesa em dupla: quando dois vêm, você fecha os dois.
+	{
+		Name = "Muro Duplo",
+		Posicao = "DF",
+		Rarity = "Epic",
+		Cor = Color3.fromRGB(110, 140, 255),
+		Description = "Muro Duplo: cercado por 2 ou mais adversários, seu carrinho ganha +35% de chance de desarme — a tabela deles termina em você.",
+		Passiva = "Carrinho com 2+ adversários perto: +35% de chance de desarme.",
+		Trigger = "Tackle",
+		Condition = { MinOpponentsNearby = 2 },
+		Effect = { ChanceAdd = 0.35 },
+	},
+	-- Aiku Oliver (defesa "fantasma"): aparece na frente do atacante do nada.
+	{
+		Name = "Antecipação Fantasma",
+		Posicao = "DF",
+		Rarity = "Epic",
+		Cor = Color3.fromRGB(160, 110, 230),
+		Description = "Antecipação Fantasma (Aiku Oliver): a tecla da Arma te faz sumir e reaparecer NA FRENTE do adversário com a bola (a até 28 studs), fechando o caminho. E no seu campo, com ele a até 18 studs, você fica 20% mais rápido.",
+		Passiva = "No próprio campo, adversário com a bola a até 18 studs: +20% de velocidade e fôlego +20%.",
+		Trigger = "Instant",
+		Condition = { CarrierMaxDistance = 18, DefendingHalf = true },
+		Effect = { SpeedMult = 1.2, StaminaRegenMult = 1.2 },
+		-- ⚠️ v111: tecla = PASSO FANTASMA — some e reaparece na frente dele
+		Ativa = "Tecla da Arma: some e reaparece NA FRENTE do adversário com a bola (a até 28 studs), fechando o caminho dele.",
+		Tecla = "R",
+		AtivaSoNaTecla = true,
+		AtivaCondition = { CarrierMaxDistance = 28 },
+		AtivaAction = "PassoFantasma",
+		AtivaEffect = { Raio = 28, Distancia = 4.5, Tempo = 0.14 },
+		AtivaCooldown = 12,
+	},
+	-- O último defensor (a corrida de recuperação quando não sobra ninguém).
+	{
+		Name = "Última Barreira",
+		Posicao = "DF",
+		Rarity = "Legendary",
+		Cor = Color3.fromRGB(255, 120, 60),
+		Description = "Última Barreira: quando você é o ÚLTIMO do time entre a bola e o seu gol, no próprio campo, corre 35% mais e o fôlego quase não acaba — a recuperação que salva o jogo.",
+		Passiva = "Último do time antes do seu gol, no próprio campo: +35% de velocidade e fôlego +30%.",
+		Trigger = "Instant",
+		Condition = { RequireLastManBack = true, DefendingHalf = true },
+		Effect = { SpeedMult = 1.35, StaminaRegenMult = 1.3 },
+	},
+	-- Karasu Tabito: desarme cirúrgico, no tempo certo.
+	{
+		Name = "Desarme Relâmpago",
+		Posicao = "DF",
+		Rarity = "Legendary",
+		Cor = Color3.fromRGB(255, 230, 90),
+		Description = "Desarme Relâmpago (Karasu Tabito): com o adversário da bola a até 16 studs, R rouba a bola dele NA HORA, de mais longe que um carrinho normal.",
+		Ativa = "Adversário com a bola a até 16 studs: R rouba a bola na hora (alcance maior que o carrinho).",
+		Trigger = "Botao",
+		Tecla = "R",
+		Condition = { CarrierMaxDistance = 16 },
+		Effect = {},
+		AtivaAction = "Tackle",
+		AtivaEffect = { TackleRangeAdd = 6 },
+		AtivaCooldown = 14,
+	},
+	-- Don Lorenzo: a defesa "zumbi" que nunca desiste.
+	{
+		Name = "Defesa Zumbi",
+		Posicao = "DF",
+		Rarity = "Mythic",
+		Cor = Color3.fromRGB(120, 200, 90),
+		-- ⚠️ v111: além do número, o ZUMBI levanta na hora — drible que derruba,
+		-- carrinho, pisão: todo stun em você dura 70% menos.
+		Description = "Defesa Zumbi (Don Lorenzo): no seu campo, com o adversário da bola a até 25 studs, você vira zumbi — todo stun em você (drible que derruba, carrinho, pisão) dura 70% menos e você ganha +20% em TODOS os atributos. Não importa quantas vezes ele passe, você volta.",
+		Passiva = "No próprio campo, adversário com a bola a até 25 studs: stuns em você duram 70% menos e +20% em TODOS os atributos.",
+		Trigger = "Instant",
+		Condition = { DefendingHalf = true, CarrierMaxDistance = 25 },
+		Effect = { AllBoost = 0.2, StunMult = 0.3 },
+	},
+	-- Aiku Oliver (o capitão da defesa): lê o corpo do atacante antes do drible.
+	{
+		Name = "Leitor de Almas",
+		Posicao = "DF",
+		Rarity = "Mythic",
+		Cor = Color3.fromRGB(230, 60, 90),
+		Description = "Leitor de Almas: no próprio campo, seu carrinho quase nunca erra — 92% de chance de desarme, você já sabia pra onde ele ia.",
+		Passiva = "Carrinho no próprio campo: chance de desarme vira 92%.",
+		Trigger = "Tackle",
+		Condition = { DefendingHalf = true },
+		Effect = { ChanceSet = 0.92 },
+	},
+
+	-- ---------- GK (só goleiro) ----------
+	{
+		Name = "Saída Rápida",
+		Posicao = "GK",
+		Rarity = "Common",
+		Cor = Color3.fromRGB(255, 190, 90),
+		RoleRequired = "GK",
+		Description = "Saída Rápida (só goleiro): na sua área, a tecla da Arma é a SAÍDA DO GOL — você dispara até 24 studs na direção da bola e agarra se ela estiver solta. E na área você se move 15% mais rápido.",
+		Passiva = "Dentro da própria área: +15% de velocidade.",
+		Trigger = "Instant",
+		Condition = { RequireOwnArea = true },
+		Effect = { SpeedMult = 1.15 },
+		-- ⚠️ v111: tecla = SAÍDA DO GOL — dispara na direção da bola e agarra
+		Ativa = "Tecla da Arma, na sua área: dispara até 24 studs na direção da bola e, se ela estiver solta ao alcance, agarra.",
+		Tecla = "R",
+		AtivaSoNaTecla = true,
+		AtivaCondition = { RequireOwnArea = true },
+		AtivaAction = "SaidaDoGol",
+		AtivaEffect = { Distancia = 24, Raio = 45, Tempo = 0.35, RaioAgarrar = 7 },
+		AtivaCooldown = 8,
+	},
+	{
+		Name = "Voz de Comando",
+		Posicao = "GK",
+		Rarity = "Rare",
+		Cor = Color3.fromRGB(120, 220, 255),
+		RoleRequired = "GK",
+		Description = "Voz de Comando (só goleiro): dentro da sua área, com o atacante chegando (a até 45 studs), você organiza a defesa — os companheiros a até 45 studs correm 10% mais.",
+		Passiva = "Dentro da própria área, adversário com a bola a até 45 studs: companheiros a até 45 studs +10% de velocidade.",
+		Trigger = "Instant",
+		Condition = { RequireOwnArea = true, CarrierMaxDistance = 45 },
+		Effect = { TeamSpeedMult = 1.1, TeamRaio = 45 },
+	},
+	-- Gagamaru Gin: o corpo elástico que alcança o impossível.
+	{
+		Name = "Corpo Elástico",
+		Posicao = "GK",
+		Rarity = "Epic",
+		Cor = Color3.fromRGB(190, 120, 255),
+		RoleRequired = "GK",
+		Description = "Corpo Elástico (Gagamaru Gin, só goleiro): seus mergulhos alcançam +5 e vão 15% mais longe — o corpo estica onde ninguém esticaria.",
+		Passiva = "Todo mergulho: +5 de alcance e +15% de distância.",
+		Trigger = "Dive",
+		Condition = {},
+		Effect = { DiveRadiusAdd = 5, DiveDistanceMult = 1.15 },
+	},
+	{
+		Name = "Paredão",
+		Posicao = "GK",
+		Rarity = "Legendary",
+		Cor = Color3.fromRGB(255, 200, 80),
+		RoleRequired = "GK",
+		Description = "Paredão (só goleiro): chute de perto (bola a até 45 studs do seu gol) — seu mergulho ganha +7 de alcance. Na cara do gol, você fecha tudo.",
+		Passiva = "Mergulho com a bola a até 45 studs do seu gol: +7 de alcance.",
+		Trigger = "Dive",
+		Condition = { MaxDistanceToGoal = 45 },
+		Effect = { DiveRadiusAdd = 7 },
+	},
+	{
+		Name = "Lançamento Perfeito",
+		Posicao = "GK",
+		Rarity = "Legendary",
+		Cor = Color3.fromRGB(90, 230, 170),
+		RoleRequired = "GK",
+		Description = "Lançamento Perfeito (só goleiro): suas reposições saem 30% mais fortes, com mira perfeita, e quem recebe chuta 20% mais forte pelos próximos 6 segundos — o contra-ataque começa em você.",
+		Passiva = "Toda reposição/passe: +30% de força, mira perfeita, e o companheiro que receber chuta 20% mais forte por 6s.",
+		Trigger = "KickAtTeammate",
+		Condition = {},
+		Effect = { ForceMult = 1.3, AimDeviationMult = 0, CompanheiroForcaMult = 1.2 },
+	},
+	{
+		Name = "Sexto Sentido",
+		Posicao = "GK",
+		Rarity = "Mythic",
+		Cor = Color3.fromRGB(200, 160, 255),
+		RoleRequired = "GK",
+		-- ⚠️ v111: além do número, o goleiro VÊ a mira de quem está com a bola
+		-- (a linha da Metavisão, sem precisar do Flow) — "reage antes do chute sair".
+		Description = "Sexto Sentido (só goleiro): você VÊ uma linha até onde o adversário com a bola está mirando, o tempo todo — sabe o canto antes do chute sair. E dentro da sua área fica 20% mais rápido e +15% em TODOS os atributos.",
+		Passiva = "Sempre: linha mostrando pra onde o adversário com a bola mira. Dentro da própria área: +20% de velocidade e +15% em TODOS os atributos.",
+		Trigger = "Instant",
+		Condition = { RequireOwnArea = true },
+		Effect = { SpeedMult = 1.2, AllBoost = 0.15 },
+		Passive = "SextoSentido",
 	},
 }
+
 
 -- ============================================================
 -- NOMES ANTIGOS — Pulsos e Instintos que existiram e não existem mais.
@@ -1194,6 +1999,13 @@ Data.Instincts = {
 -- sem aquela habilidade, sem erro. NUNCA remova linhas daqui.
 -- ============================================================
 Data.LegacyNames = {
+	-- ⚠️ v110: Armas cortadas na revisão (repetiam outras) — quem já tinha sorteado fica com a parecida
+	["Voleio Selvagem"] = "Xeque-Mate",
+	["Impacto do Imperador"] = "Chute Direto",
+	["Bloqueio de Corpo"] = "Xerife",
+	["Mergulho Longo"] = "Corpo Elástico",
+	["Muralha Divina"] = "Paredão",
+	["Leitura do Chute"] = "Metavisão",
 	-- Instintos da v4 que foram absorvidos pelos 10 da v5
 	["Instinto de Área"] = "Ego do Rei",
 	["Instinto Matador"] = "Chute Direto",

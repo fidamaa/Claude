@@ -59,9 +59,28 @@ local function applyRule(track, rule)
 	if track.Looped ~= rule.Looped then track.Looped = rule.Looped end
 end
 
-local holding = {} -- [AnimationTrack] = true (HoldAtEnd tocando agora)
+-- ⚠️ v85 — PEDIDO: "a animação de chute fica paralisada". Testado ao vivo:
+-- ao soltar o botão o servidor dava Stop no preparo (e a track dele
+-- encerrava), mas a cópia DESTA tela, parada no último quadro, continuava
+-- "tocando" com velocidade 0 — pose presa pra sempre. A fonte da verdade
+-- agora é o atributo "KickCharging" do jogador (BallController o liga/
+-- desliga junto com o preparo; atributo replica de forma confiável): virou
+-- false, esta tela encerra o preparo daquele jogador na hora.
+-- FOLGA_ORDEM: a animação e o atributo chegam por canais diferentes — num
+-- toque rápido o "false" pode chegar antes da própria track. Só encerra pela
+-- checagem contínua depois dessa folga; a mudança do atributo encerra na hora.
+local FOLGA_ORDEM = 0.3
 
-local function onTrackPlayed(track)
+local holding = {} -- [AnimationTrack] = { Player = Player, Since = os.clock() } (HoldAtEnd tocando agora)
+
+local function encerrarPreparo(track)
+	holding[track] = nil
+	if track.IsPlaying then
+		track:Stop(0.1)
+	end
+end
+
+local function onTrackPlayed(track, player)
 	local rule = ruleFor(track)
 	if not rule then return end
 
@@ -77,14 +96,19 @@ local function onTrackPlayed(track)
 	end
 
 	if rule.HoldAtEnd then
-		holding[track] = true
+		holding[track] = { Player = player, Since = os.clock() }
 	end
 end
 
 RunService.Heartbeat:Connect(function()
-	for track in pairs(holding) do
+	for track, info in pairs(holding) do
 		if not track.IsPlaying then
 			holding[track] = nil
+			continue
+		end
+		if info.Player and info.Player:GetAttribute("KickCharging") ~= true
+			and os.clock() - info.Since >= FOLGA_ORDEM then
+			encerrarPreparo(track)
 			continue
 		end
 		local length = track.Length
@@ -94,20 +118,22 @@ RunService.Heartbeat:Connect(function()
 	end
 end)
 
-local function watchAnimator(animator)
-	animator.AnimationPlayed:Connect(onTrackPlayed)
+local function watchAnimator(animator, player)
+	animator.AnimationPlayed:Connect(function(track)
+		onTrackPlayed(track, player)
+	end)
 	for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
-		onTrackPlayed(track)
+		onTrackPlayed(track, player)
 	end
 end
 
-local function watchCharacter(character)
+local function watchCharacter(player, character)
 	local humanoid = character:WaitForChild("Humanoid", 10)
 	if not humanoid then return end
 
 	local animator = humanoid:FindFirstChildOfClass("Animator")
 	if animator then
-		watchAnimator(animator)
+		watchAnimator(animator, player)
 		return
 	end
 	-- Animator pode ser criado depois (o servidor cria se faltar)
@@ -115,16 +141,27 @@ local function watchCharacter(character)
 	connection = humanoid.ChildAdded:Connect(function(child)
 		if child:IsA("Animator") then
 			connection:Disconnect()
-			watchAnimator(child)
+			watchAnimator(child, player)
 		end
 	end)
 end
 
 local function watchPlayer(player)
 	if player.Character then
-		task.spawn(watchCharacter, player.Character)
+		task.spawn(watchCharacter, player, player.Character)
 	end
-	player.CharacterAdded:Connect(watchCharacter)
+	player.CharacterAdded:Connect(function(character)
+		watchCharacter(player, character)
+	end)
+	-- soltou o botão: encerra o preparo desse jogador na hora
+	player:GetAttributeChangedSignal("KickCharging"):Connect(function()
+		if player:GetAttribute("KickCharging") == true then return end
+		for track, info in pairs(holding) do
+			if info.Player == player then
+				encerrarPreparo(track)
+			end
+		end
+	end)
 end
 
 for _, player in ipairs(Players:GetPlayers()) do

@@ -461,7 +461,11 @@ end
 local function predictBallPosition(t)
 	local origin = ball.Position
 	local velocity = ball.AssemblyLinearVelocity
-	local gravity = workspace.Gravity
+	-- ⚠️ v110: a gravidade que a BOLA sente (o BallController tira 32% dela) e
+	-- zero no voo reto de Hissatsu — com a gravidade cheia o bot previa a bola
+	-- caindo cedo demais e mergulhava baixo nos chutes altos
+	local gravity = (_G.PulseEmVooReto and _G.PulseEmVooReto()) and 0
+		or workspace.Gravity * (Config.BALL_GRAVITY_MULTIPLIER or 1)
 	return origin + velocity * t - Vector3.new(0, 0.5 * gravity * t * t, 0)
 end
 
@@ -930,7 +934,11 @@ end
 local function spawnBotIfNeeded(teamName)
 	if bots[teamName] and bots[teamName].Model.Parent then return end
 	if Config.CLOSED_TEAM_MODE then return end
-	if teamPlayerCount(teamName) <= 0 then return end -- time vazio, sem partida rolando ainda
+	-- time vazio, sem partida rolando ainda — ⚠️ v104: EXCETO na sala
+	-- personalizada ("mesmo que puxe sozinho, o GK vai estar sempre
+	-- spawnado"), onde o bot guarda os dois gols (ver MatchController)
+	if teamPlayerCount(teamName) <= 0 and not _G.SalaPersonalizada then return end
+	if _G.ModoTutorial then return end -- ⚠️ v104: tutorial sem goleiro (o gol é o passo a aprender)
 
 	local template = ServerStorage:FindFirstChild(Config.GKBOT_TEMPLATE_NAME)
 	if not template then
@@ -1358,12 +1366,56 @@ local function maybeJumpForBall(teamName, bot, predictedPoint)
 	local needsGroundDive = worthDiving
 	if not needsAerialDive and not needsGroundDive then return false end
 
-	-- Persegue o ponto (previsto ou atual) de verdade, sempre dentro da
-	-- própria área — ver computeMoveTarget/updateBotMovement.
-	local chaseTarget = clampPointToOwnArea(teamName, Vector3.new(targetPoint.X, root.Position.Y, targetPoint.Z))
-	bot.ChaseTarget = chaseTarget
-	bot.ChaseUntil = tick() + Config.GKBOT_DIVE_DURATION
-	bot.LastMoveAt = 0 -- força recalcular o alvo JÁ no próximo heartbeat, sem esperar o intervalo normal
+	-- ⚠️ v109 — PEDIDO: "ele não está dando dives, está só indo até a bola. Se ele
+	-- calcular que precisa dar o dive, tem que dar o dive." Antes o "mergulho"
+	-- rasteiro era o bot CORRENDO em pé até o ponto (ChaseTarget) — a animação de
+	-- mergulho tocava, mas o corpo continuava de pé. Agora é um MERGULHO DE CORPO
+	-- de verdade, igual o do goleiro humano: o corpo voa deitado de lado (ou pra
+	-- frente) até um pouco ALÉM do ponto onde a bola vai passar, dentro da área,
+	-- chegando antes dela; bola alta = o mesmo mergulho em arco. No fim ele fica
+	-- caído um instante e levanta. Ver o topo de updateBotMovement.
+	local alvo = clampPointToOwnArea(teamName, Vector3.new(targetPoint.X, root.Position.Y, targetPoint.Z))
+	local desloc = Vector3.new(alvo.X - root.Position.X, 0, alvo.Z - root.Position.Z)
+	local dir = desloc.Magnitude > 0.05 and desloc.Unit or (lateralAxis * (lateralOffset >= 0 and 1 or -1))
+	local distMergulho = math.min(desloc.Magnitude + 1.5, Config.GKBOT_DIVE_REACH)
+	local tempoBola = bot.TempoAteBola or 0.5
+	-- ⚠️ v110 — PEDIDO: "o GK tá impossível, não dá tempo da bola chegar" + "bola
+	-- aérea, ele teleporta pra bola". A duração era min(distância/velocidade,
+	-- tempo até a bola) — ele SEMPRE chegava antes, mesmo que precisasse voar em
+	-- 0.18s. Agora é a duração real do voo: se a bola chegar antes, ele não pega.
+	local _ = tempoBola
+	local dur = math.clamp(distMergulho / (Config.GKBOT_DIVE_SPEED or 52), 0.25, 0.6)
+	local direita = root.CFrame.RightVector
+	local frente = Vector3.new(root.CFrame.LookVector.X, 0, root.CFrame.LookVector.Z)
+	frente = frente.Magnitude > 0.05 and frente.Unit or Vector3.new(0, 0, -1)
+	-- v110 — "o dive tem que ser mais alto, chegar perto do travessão" e "não pode
+	-- atravessar a parede": sobe até a altura da bola (teto GKBOT_DIVE_ALTURA_MAX) e
+	-- a distância é cortada antes de qualquer coisa sólida no caminho.
+	do
+		local params = RaycastParams.new()
+		params.FilterType = Enum.RaycastFilterType.Exclude
+		params.RespectCanCollide = true
+		local ignorar = { ball, bot.Model }
+		for _, p in ipairs(Players:GetPlayers()) do if p.Character then table.insert(ignorar, p.Character) end end
+		params.FilterDescendantsInstances = ignorar
+		local hit = workspace:Raycast(root.Position, dir * (distMergulho + 2), params)
+		if hit then distMergulho = math.max(0, (hit.Position - root.Position).Magnitude - 2.5) end
+	end
+	bot.DiveMove = {
+		Inicio = root.Position,
+		Fim = root.Position + dir * distMergulho,
+		T0 = tick(),
+		Dur = dur,
+		Deitado = 0.45,
+		Altura = needsAerialDive and math.clamp(heightAboveFeet - 0.5, 0, Config.GKBOT_DIVE_ALTURA_MAX or 13) or 0,
+		Rot = CFrame.lookAt(Vector3.zero, frente).Rotation,
+		Lado = direita:Dot(dir) >= 0 and 1 or -1,
+		Lateral = math.abs(direita:Dot(dir)),
+		Frente = math.max(frente:Dot(dir), 0),
+	}
+	bot.ChaseTarget = nil
+	if bot.Humanoid then bot.Humanoid.PlatformStand = true end
+	if true then return true end -- (o impulso antigo abaixo ficou de reserva)
 
 	if needsAerialDive then
 		-- ⚠️ NOVO: o Humanoid parado no chão fica "colado" nele (o
@@ -1412,6 +1464,34 @@ local function updateBotMovement(teamName, bot)
 	local root = bot.Root
 	local humanoid = bot.Humanoid
 	if not root or not root.Parent then return end
+
+	-- ⚠️ v109: MERGULHO DE CORPO em andamento (ver maybeJumpForBall) — o corpo
+	-- é levado por CFrame (igual o mergulho do goleiro humano), deitando de
+	-- lado nos primeiros 40% do voo; bola alta sobe em arco. Depois fica caído
+	-- `Deitado` segundos e levanta em pé no ponto onde parou.
+	local dm = bot.DiveMove
+	if dm then
+		local agora = tick()
+		local u = math.clamp((agora - dm.T0) / dm.Dur, 0, 1)
+		local e = 1 - (1 - u) ^ 2
+		local pos = dm.Inicio:Lerp(dm.Fim, e)
+		local k = math.clamp(u / 0.4, 0, 1)
+		-- v110: sobe até a altura da bola e CHEGA lá no fim do voo (antes subia e
+		-- descia no meio); depois do voo cai de volta durante o tempo caído
+		local depoisVoo = math.clamp((agora - dm.T0 - dm.Dur) / math.max(dm.Deitado, 0.05), 0, 1)
+		local arco = dm.Altura * (1 - (1 - u) ^ 2) * (1 - depoisVoo * depoisVoo)
+		local baixo = -1.7 * k * (dm.Altura > 0 and depoisVoo or 1)
+		root.CFrame = CFrame.new(pos + Vector3.new(0, arco + baixo, 0)) * dm.Rot
+			* CFrame.Angles(math.rad(-55) * dm.Frente * k, 0, math.rad(dm.Altura > 0 and -48 or -78) * dm.Lado * dm.Lateral * k) -- (aéreo = diagonal, mais de pé)
+		root.AssemblyLinearVelocity = Vector3.zero
+		root.AssemblyAngularVelocity = Vector3.zero
+		if agora - dm.T0 >= dm.Dur + dm.Deitado then
+			bot.DiveMove = nil
+			root.CFrame = CFrame.new(Vector3.new(dm.Fim.X, dm.Inicio.Y, dm.Fim.Z)) * dm.Rot
+			if humanoid then humanoid.PlatformStand = false end
+		end
+		return
+	end
 
 	-- Recalcula o ALVO só de vez em quando (barato, mas não precisa ser
 	-- por frame) — guardado no próprio bot pra ser reaplicado TODO
@@ -1574,17 +1654,25 @@ local function resolveGuardContact(teamName, bot)
 	if bot.GuardRolled ~= nil then return end -- já resolvida
 	if not bot.GuardContactAt then return end
 
-	local skill = fieldSkillFraction()
-	local chance = Config.GKBOT_PULSE_HIT_CHANCE_MIN
-		+ (Config.GKBOT_PULSE_HIT_CHANCE_MAX - Config.GKBOT_PULSE_HIT_CHANCE_MIN) * skill
-	bot.GuardRolled = math.random() < chance
+	if bot.Duelo then
+		-- ⚠️ v103: duelo de defesa — defendeu = os acertos zeraram a força
+		bot.GuardRolled = bot.Duelo.Atual() <= 0
+	else
+		local skill = fieldSkillFraction()
+		local chance = Config.GKBOT_PULSE_HIT_CHANCE_MIN
+			+ (Config.GKBOT_PULSE_HIT_CHANCE_MAX - Config.GKBOT_PULSE_HIT_CHANCE_MIN) * skill
+		bot.GuardRolled = math.random() < chance
+	end
 	bot.GuardResolvedAt = tick()
 
 	-- Fecha o número da força: PEGOU = 0 (absorveu tudo), PASSOU = para no
 	-- valor drenado. Isto SEMPRE roda agora — era exatamente o que ficava
 	-- pendurado antes.
 	local forcaRestante = 0
-	if bot.GuardDrainFinish then
+	if bot.Duelo then
+		forcaRestante = bot.Duelo.Encerrar(bot.GuardRolled) or 0
+		bot.Duelo = nil
+	elseif bot.GuardDrainFinish then
 		-- ⚠️ v41: devolve a força que SOBROU — a vida com que a bola segue
 		-- voando se tiver atravessado a guarda.
 		forcaRestante = bot.GuardDrainFinish(bot.GuardRolled) or 0
@@ -1608,6 +1696,34 @@ local function resolveGuardContact(teamName, bot)
 	end
 
 	if not bot.GuardRolled then
+		-- ⚠️ v105 — PEDIDO: "com o GK bot, você chuta nele e a bola passa, só
+		-- que buga pra fora — o bot redireciona a bola... se ele não conseguir
+		-- pegar, a bola passa pelo GK e entra no gol. Dá um stunzinho no GK pra
+		-- ele não tentar de novo." A bola retomava o voo e, no quadro seguinte,
+		-- o bot (ainda "vivo") mergulhava / afastava a bola (clearBall) — era
+		-- o tapa de lado que mandava a Hissatsu pra fora. Perdeu = atordoado.
+		bot.AtordoadoAte = tick() + (Config.GKBOT_ATORDOADO_APOS_FALHA or 1.6)
+		bot.DiveActive = false
+		bot.ChaseTarget = nil
+		-- ⚠️ v110 — PEDIDO: "alguns chutes que o GK tenta defender saem pra fora, nem
+		-- volta a descer a energia". O corpo do bot (deitado no caminho depois do
+		-- mergulho) tem colisão com a bola: ela retomava o voo, batia nele, o
+		-- detector de desvio brusco encerrava o voo e ela saía torta, sem perder
+		-- força. Perdeu o duelo = o corpo dele atravessável por um instante.
+		if bot.Model then
+			local desligadas = {}
+			for _, p in ipairs(bot.Model:GetDescendants()) do
+				if p:IsA("BasePart") and p.CanCollide then
+					p.CanCollide = false
+					table.insert(desligadas, p)
+				end
+			end
+			task.delay(1.4, function()
+				for _, p in ipairs(desligadas) do
+					if p.Parent then p.CanCollide = true end
+				end
+			end)
+		end
 		-- ⚠️ v41 — PEDIDO: "11 de força ainda é movimento... a bola vai
 		-- continuar andando na MESMA velocidade, nesse caso ela entraria no
 		-- gol de todo jeito." O empurrãozinho fixo que existia aqui fazia a
@@ -1745,7 +1861,15 @@ local function attemptCatch(teamName, bot)
 			-- resumePulseFlightAfterGuard em BallController).
 			if _G.CapturePulseFlightForGuard then _G.CapturePulseFlightForGuard() end
 			bot.GuardFroze = (_G.FreezeBallForQTE and _G.FreezeBallForQTE()) or false
-			if _G.BeginGuardForceDrain then
+			-- ⚠️ v103 — DUELO DE DEFESA. PEDIDO: "o GK ao defender SUGA a vida
+			-- da bola antes de fazer o QTE... o que vai dar dano é quantas vezes
+			-- o GK acertar a hissatsu dele". A força congela aqui e só cai por
+			-- ACERTO. O bot não tem QTE de verdade: ele "aperta" a cada
+			-- GKBOT_DUELO_INTERVALO com uma chance de acertar (maior com o
+			-- time mais forte), até o número de acertos da Hissatsu dele.
+			if _G.IniciarDueloDeDefesa then
+				bot.Duelo = _G.IniciarDueloDeDefesa(forcaNaColisao)
+			elseif _G.BeginGuardForceDrain then
 				bot.GuardDrainFinish = _G.BeginGuardForceDrain(forcaNaColisao, getGKBotPhysical())
 			end
 			-- Essa guarda segura a bola ou rebate? (ver Rebate em
@@ -1753,9 +1877,47 @@ local function attemptCatch(teamName, bot)
 			local efeito = bot.Pulse and (bot.Pulse.Perfect or bot.Pulse.Bom)
 			bot.GuardRebound = (efeito and efeito.Rebate) and true or false
 
-			task.delay(Config.GKBOT_GUARD_DRAIN_SECONDS, function()
-				resolveGuardContact(teamName, bot)
-			end)
+			if bot.Duelo then
+				local duelo = bot.Duelo
+				local def = bot.Pulse
+				local skill = fieldSkillFraction()
+				local tentativas = (def and def.QTE and def.QTE.RequiredHits) or 5
+				local chanceAcerto = math.clamp((Config.GKBOT_DUELO_CHANCE_ACERTO or 0.6) * (0.7 + 0.6 * skill), 0.1, 0.95)
+				local dano = ((Config.DEFESA_DANO_POR_ACERTO or {})[def and def.Rarity or "Common"] or 25) * (0.8 + 0.4 * skill)
+				-- ⚠️ v107: mesma conta do goleiro humano — impacto + por acerto, com elemento
+				local impacto = 0
+				if def and _G.DanoDaDefesa then
+					impacto, dano = _G.DanoDaDefesa(nil, def, 0.8 + 0.4 * skill)
+				end
+				-- ⚠️ v103: cutscene da defesa do bot pela duração do duelo
+				local durBot = tentativas * (Config.GKBOT_DUELO_INTERVALO or 0.45) + 0.4
+				local fimBot = tick()
+				if _G.TocarCutsceneDeDefesa and bot.Model and _G.TocarCutsceneDeDefesa(bot.Model, def, durBot) then
+					fimBot = tick() + durBot
+				end
+				task.spawn(function()
+					if impacto > 0 then
+						task.wait(0.5)
+						if bot.Duelo ~= duelo or bot.GuardRolled ~= nil then return end
+						duelo.Dano(impacto)
+					end
+					for _ = 1, tentativas do
+						if duelo.Atual() <= 0 then break end
+						task.wait(Config.GKBOT_DUELO_INTERVALO or 0.45)
+						if bot.Duelo ~= duelo or bot.GuardRolled ~= nil then return end
+						if math.random() < chanceAcerto then
+							duelo.Dano(dano)
+							if duelo.Atual() <= 0 then break end
+						end
+					end
+					task.wait(math.max(0.2, fimBot - tick()))
+					resolveGuardContact(teamName, bot)
+				end)
+			else
+				task.delay(Config.GKBOT_GUARD_DRAIN_SECONDS, function()
+					resolveGuardContact(teamName, bot)
+				end)
+			end
 			return false
 		end
 		-- Hissatsu de pé mas a bola ainda não chegou: NÃO pega por outro
@@ -1790,6 +1952,13 @@ local function attemptCatch(teamName, bot)
 	--
 	-- PEDIDO: "ele não pode conseguir defender um chute desse sem Hissatsu.
 	-- Ele pode TENTAR, mas não pode conseguir."
+	-- v110: HITBOX = O CORPO. Só pega se a bola estiver numa esfera em volta dele
+	-- (mais um pouco pras mãos) — nada de pegar bola lá no travessão sem pular.
+	local dist3D = (ball.Position - root.Position).Magnitude
+	local alcanceCorpo = (Config.GKBOT_CORPO_RAIO or 4) + (Config.GKBOT_MAOS_EXTRA or 1.3)
+	if dist3D > alcanceCorpo then
+		return false
+	end
 	local incomingHissatsu = bot.IncomingShotUntil and tick() < bot.IncomingShotUntil
 	if incomingHissatsu then
 		local pulseActive = bot.PulseDefenseActiveUntil and tick() < bot.PulseDefenseActiveUntil
@@ -1804,12 +1973,8 @@ local function attemptCatch(teamName, bot)
 		end
 		-- Dentro do que ele aguenta: segue pelo caminho normal abaixo.
 	else
-		-- Sem Hissatsu vindo: bola solta dentro da caixa é defesa garantida.
-		local localBall = root.CFrame:PointToObjectSpace(ball.Position)
-		local box = Config.GKBOT_GUARANTEED_CATCH_BOX
-		if math.abs(localBall.X) <= box.X
-			and math.abs(localBall.Y) <= box.Y
-			and math.abs(localBall.Z) <= box.Z then
+		-- v110: sem Hissatsu vindo, bola ENCOSTANDO no corpo é defesa garantida
+		if dist3D <= (Config.GKBOT_CORPO_RAIO or 4) then
 			return true
 		end
 	end
@@ -1896,10 +2061,25 @@ end
 -- e tempo de voo desejado, devolve a velocidade inicial exata (levando a
 -- gravidade em conta) pra bola chegar lá nesse tempo — não é uma força
 -- fixa "chutada".
+-- ⚠️ v110 — PEDIDO: "o GK bot pegou a bola e quando foi arremessar ela sumiu".
+-- O log mostrou a bola com posição/velocidade NaN logo depois do arremesso (e o
+-- resgate do BallController jogando ela pro centro). Qualquer vetor inválido
+-- aqui agora é trocado por um valor seguro, com um aviso dizendo QUAL veio
+-- quebrado (pra achar a origem se voltar a acontecer).
+local function vetorValido(v)
+	return typeof(v) == "Vector3" and v.X == v.X and v.Y == v.Y and v.Z == v.Z
+		and math.abs(v.X) < 1e6 and math.abs(v.Y) < 1e6 and math.abs(v.Z) < 1e6
+end
+
 local function computeThrowVelocity(fromPos, toPos, arcTime)
 	local delta = toPos - fromPos
 	local flatDelta = Vector3.new(delta.X, 0, delta.Z)
-	local gravity = workspace.Gravity
+	-- ⚠️ v110: a bola NÃO cai com a gravidade cheia — o BallController tira uma
+	-- parte dela (Config.BALL_GRAVITY_MULTIPLIER, 0.68). Com a gravidade cheia
+	-- aqui o arremesso saía ~50% forte demais pra cima (medido: 212 studs/s
+	-- vertical) e a bola ia muito além do alvo — era o "goleiro joga no campo
+	-- adversário". Agora usa a gravidade que a bola sente de verdade.
+	local gravity = workspace.Gravity * (Config.BALL_GRAVITY_MULTIPLIER or 1)
 
 	local vFlat = flatDelta / arcTime
 	local vy = (delta.Y + 0.5 * gravity * arcTime * arcTime) / arcTime
@@ -1914,7 +2094,16 @@ local function throwBall(teamName, bot)
 	if _G.ReleaseBallFromQTE then
 		_G.ReleaseBallFromQTE()
 	end
+	-- ⚠️ v110: física da bola volta pro SERVIDOR antes de lançar (senão, recém
+	-- desancorada, ela ia pro jogador mais perto e o cliente dele a sobrescrevia)
+	if not ball.Anchored then pcall(function() ball:SetNetworkOwner(nil) end) end
+	if not vetorValido(ball.Position) then
+		ball.Position = root.Position + fieldForward(teamName) * 2 + Vector3.new(0, 1, 0)
+	end
 	local fromPos = ball.Position
+	-- ⚠️ v105: animação de arremesso + sai da pose de segurar
+	if bot.Model then bot.Model:SetAttribute("BolaNaMao", nil) end
+	if _G.AnimarAcao and bot.Model then _G.AnimarAcao(bot.Model, "Arremesso", 0.6) end
 
 	local targetRoot = pickThrowTarget(teamName)
 
@@ -1931,7 +2120,10 @@ local function throwBall(teamName, bot)
 	-- "26 studs pra frente" solto) — e como a velocidade de pouso cai com a
 	-- distância (ver abaixo), a bola chega lá mansa em vez de sobrar pro
 	-- adversário.
-	local clearancePos = fieldMidpoint(teamName) or (root.Position + fieldForward(teamName) * 26)
+	-- v110 — PEDIDO: "sem nenhum player ele joga praticamente no campo adversário —
+	-- joga no meio de campo, na metade da distância de hoje"
+	local meio = fieldMidpoint(teamName)
+	local clearancePos = meio and root.Position:Lerp(meio, 0.5) or (root.Position + fieldForward(teamName) * 26)
 	local roughTargetPos = targetRoot and targetRoot.Position or clearancePos
 	local flatDistance = (Vector3.new(roughTargetPos.X, 0, roughTargetPos.Z) - Vector3.new(fromPos.X, 0, fromPos.Z)).Magnitude
 
@@ -1968,6 +2160,12 @@ local function throwBall(teamName, bot)
 	end
 
 	local velocity = computeThrowVelocity(fromPos, toPos, arcTime)
+	if not vetorValido(velocity) then
+		warn(string.format("🧤 [GKBot] arremesso com vetor inválido — de=%s para=%s arco=%s alvo=%s. Usando lançamento seguro.",
+			tostring(fromPos), tostring(toPos), tostring(arcTime), targetRoot and targetRoot:GetFullName() or "centro"))
+		if not vetorValido(ball.Position) then ball.Position = root.Position + fieldForward(teamName) * 2 + Vector3.new(0, 1, 0) end
+		velocity = fieldForward(teamName) * 40 + Vector3.new(0, 25, 0)
+	end
 	ball.AssemblyLinearVelocity = velocity
 	if _G.MarkBotBallTouch then _G.MarkBotBallTouch(teamName) end -- ⚠️ v84: ver clearBall
 	ball.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
@@ -2102,7 +2300,8 @@ end
 local function holdPositionFor(teamName, bot)
 	local root = bot.Root
 	local forward = fieldForward(teamName)
-	local holdPosition = root.Position + forward * 2 + Vector3.new(0, 2, 0)
+	-- ⚠️ v105: nas MÃOS, na altura do peito (era 2 à frente e 2 acima)
+	local holdPosition = root.Position + forward * 1.45 + Vector3.new(0, 0.35, 0)
 
 	local ownGoal = ownGoalOf(teamName)
 	if ownGoal then
@@ -2116,6 +2315,17 @@ local function holdPositionFor(teamName, bot)
 end
 
 local function beginCatch(teamName, bot)
+	-- v110: animação de agarrar (braços na bola e puxa pro peito)
+	if _G.AnimarAcao and bot.Model then _G.AnimarAcao(bot.Model, "Agarrar", 0.4) end
+	-- ⚠️ v109: pegou no meio do mergulho de corpo — levanta em pé onde está
+	local dm = bot.DiveMove
+	if dm and bot.Root and bot.Root.Parent then
+		bot.DiveMove = nil
+		local p = bot.Root.Position
+		bot.Root.CFrame = CFrame.new(Vector3.new(p.X, dm.Inicio.Y, p.Z)) * dm.Rot
+		bot.Root.AssemblyLinearVelocity = Vector3.zero
+		if bot.Humanoid then bot.Humanoid.PlatformStand = false end
+	end
 	if _G.ReleaseBallOwner then
 		_G.ReleaseBallOwner()
 	end
@@ -2159,6 +2369,7 @@ local function beginCatch(teamName, bot)
 
 	bot.State = "Holding"
 	bot.HoldUntil = tick() + Config.GKBOT_HOLD_DURATION
+	if bot.Model then bot.Model:SetAttribute("BolaNaMao", true) end -- ⚠️ v105: pose de segurar (AnimadorProcedural)
 	if _G.MarkBotBallTouch then _G.MarkBotBallTouch(teamName) end -- ⚠️ v84: ver clearBall
 	bot.Humanoid.WalkSpeed = 0 -- parado enquanto segura a bola
 
@@ -2202,7 +2413,16 @@ local function updateHoldingBall(teamName, bot)
 	-- sempre no lado seguro, de frente pro campo.
 	ball.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
 	ball.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
-	ball.Position = holdPositionFor(teamName, bot)
+	-- ⚠️ v105: de frente pro campo enquanto segura (a bola fica nas mãos)
+	local frente = fieldForward(teamName)
+	root.CFrame = CFrame.lookAt(root.Position, root.Position + Vector3.new(frente.X, 0, frente.Z))
+	local naMao = holdPositionFor(teamName, bot)
+	if vetorValido(naMao) then
+		ball.Position = naMao
+	else
+		warn("🧤 [GKBot] posição de segurar inválida (root=" .. tostring(root.Position) .. ") — corpo do bot resetado")
+		root.CFrame = CFrame.new((ownGoalOf(teamName) and ownGoalOf(teamName).Position or Vector3.zero) + fieldForward(teamName) * 6)
+	end
 
 	if tick() >= bot.HoldUntil then
 		throwBall(teamName, bot)
@@ -2266,6 +2486,11 @@ local function resolveCatchOrClear(teamName, bot, expectedGeneration)
 		-- certa — o empurrão pra dentro do gol (passou) ou o knockback do
 		-- soco (rebateu). clearBall aqui sobrescreveria as duas coisas,
 		-- socando a bola pro campo mesmo quando ela devia estar entrando.
+		return
+	elseif (_G.PulseEmVooReto and _G.PulseEmVooReto()) or (bot.IncomingShotUntil and tick() < bot.IncomingShotUntil) then
+		-- v110 — PEDIDO: "ele errou e ainda assim rebateu a Hissatsu com o soco,
+		-- jogou a bola pra cima e ela seguiu com a mesma força pra fora". Hissatsu
+		-- que ele não segurou SEGUE o caminho dela — o bot não afasta.
 		return
 	else
 		clearBall(teamName, bot)
@@ -2344,6 +2569,25 @@ local function reactToBall(teamName, bot, predictedPoint)
 		bot.DiveActive = true
 		bot.DiveResolved = false
 		bot.DiveStartedAt = tick()
+		-- ⚠️ v96: animação do mergulho (AnimadorProcedural). A direção sai de
+		-- onde a bola vai passar em relação ao corpo do bot: de lado,
+		-- pra cima, ou na diagonal alta.
+		if _G.AnimarAcao and bot.Model and bot.Root and typeof(predictedPoint) == "Vector3" then
+			local rel = bot.Root.CFrame:PointToObjectSpace(predictedPoint)
+			local lado = rel.X
+			-- ⚠️ v110: mesma decisão do movimento — mergulho aéreo = animação diagonal
+			local alto = (bot.DiveMove and bot.DiveMove.Altura > 0) or rel.Y > 2.5
+			local direcao
+			if math.abs(lado) < 2.5 then
+				-- ⚠️ v105: bola baixa bem na frente = mergulho pra frente
+				direcao = rel.Y < 1 and "Forward" or "Up"
+			elseif alto then
+				direcao = lado > 0 and "UpRight" or "UpLeft"
+			else
+				direcao = lado > 0 and "Right" or "Left"
+			end
+			_G.AnimarAcao(bot.Model, direcao == "Forward" and "GKForwardDash" or ("GKDive." .. direcao))
+		end
 		-- ⚠️ v6.2: "carimbo" de qual reposição de bola está valendo agora
 		-- (ver _G.GetBallStateGeneration em BallController.lua) — se um gol
 		-- acontecer e a bola for reposicionada ENQUANTO esse mergulho ainda
@@ -2388,7 +2632,10 @@ local function updateActiveDive(teamName, bot)
 	local flatDistance = Vector3.new(toBall.X, 0, toBall.Z).Magnitude
 	local elapsed = tick() - (bot.DiveStartedAt or tick())
 
-	if flatDistance > Config.GKBOT_CATCH_MAX_RANGE and elapsed < Config.GKBOT_DIVE_DURATION then
+	-- ⚠️ v110: só resolve cedo se a bola estiver ao alcance TAMBÉM na altura (antes
+	-- bastava a distância no chão — bola alta "teleportava" pras mãos dele)
+	local alturaOk = toBall.Magnitude <= (Config.GKBOT_CORPO_RAIO or 4) + (Config.GKBOT_MAOS_EXTRA or 1.3) -- v110: no corpo
+	if not alturaOk and elapsed < Config.GKBOT_DIVE_DURATION then
 		return true -- ainda longe e ainda dentro do tempo do mergulho — continua "no ar"
 	end
 
@@ -2429,6 +2676,12 @@ local function attemptSteal(bot, targetPlayer)
 	local targetCharacter = targetPlayer.Character
 	local targetRoot = targetCharacter and targetCharacter:FindFirstChild("HumanoidRootPart")
 	if not root or not targetRoot then return false end
+
+	-- ⚠️ v110 (bateria da noite): o bote do bot ignorava o iframe da Hissatsu —
+	-- na preparação do chute (wind-up, ~1.2s) ele saía correndo do gol e
+	-- roubava a bola, e o chute "fizzlava". Os desarmes de jogador já
+	-- respeitam o iframe (BallController); o bot agora também.
+	if _G.HasPulseIframe and _G.HasPulseIframe(targetPlayer) then return false end
 
 	local flat = Vector3.new(targetRoot.Position.X - root.Position.X, 0, targetRoot.Position.Z - root.Position.Z)
 	local distance = flat.Magnitude
@@ -2531,6 +2784,17 @@ local function updateBot(teamName, bot)
 	-- ⚠️ v6.0: enquanto um mergulho está resolvendo (ver updateActiveDive),
 	-- nenhum outro gatilho deve interferir/reiniciar a decisão no meio do
 	-- caminho.
+	-- ⚠️ v105: atordoado depois de perder o duelo de Hissatsu — não mergulha,
+	-- não afasta a bola e não tenta pegar de novo: a bola passa e entra
+	if bot.AtordoadoAte and tick() < bot.AtordoadoAte then
+		root.AssemblyLinearVelocity = Vector3.new(0, root.AssemblyLinearVelocity.Y, 0)
+		if bot.Humanoid then bot.Humanoid.WalkSpeed = 0 end
+		return
+	elseif bot.AtordoadoAte then
+		bot.AtordoadoAte = nil
+		if bot.Humanoid then bot.Humanoid.WalkSpeed = Config.GKBOT_WALK_SPEED end
+	end
+
 	if updateActiveDive(teamName, bot) then return end
 
 	-- ⚠️ v6.4: PEDIDO — "assim que entrar em contato com a bola, pega".
@@ -2651,9 +2915,26 @@ local function updateBot(teamName, bot)
 				-- futuro (findClosestPredictedPoint) em vez de só 1 ponto
 				-- linear sem gravidade — pega chutes com arco de verdade, não
 				-- só rasteiros.
-				local closestPoint, closestDistance = findClosestPredictedPoint(root)
+				local closestPoint, closestDistance, closestT = findClosestPredictedPoint(root)
+				-- ⚠️ v109: chute INDO PRO GOL dele = reage de bem mais longe (o
+				-- mergulho alcança GKBOT_DIVE_REACH); bola que não vai no gol
+				-- continua com o raio pequeno de sempre (não mergulha à toa)
+				local golProprio = ownGoalOf(teamName)
+				local rumoAoGol = golProprio ~= nil and (golProprio.Position - ball.Position):Dot(flatVel) > 0
+				local raioReacao = rumoAoGol and (Config.GKBOT_SHOT_REACT_RADIUS_NO_GOL or 28) or Config.GKBOT_SHOT_REACT_RADIUS
+				bot.TempoAteBola = closestT
 
-				if closestPoint and closestDistance <= Config.GKBOT_SHOT_REACT_RADIUS then
+				if closestPoint and closestDistance <= raioReacao then
+					-- ⚠️ v110 — PEDIDO: "o GK ainda está muito difícil, vai muito
+					-- rápido na bola; chuto no canto e é muito difícil fazer gol".
+					-- Ele reagia NO MESMO QUADRO em que a bola virava ameaça. Agora
+					-- tem TEMPO DE REAÇÃO (GKBOT_TEMPO_REACAO) contado desde que o
+					-- chute virou ameaça — chute forte e colocado chega antes dele.
+					bot.AmeacaDesde = bot.AmeacaDesde or tick()
+					if tick() - bot.AmeacaDesde < (Config.GKBOT_TEMPO_REACAO or 0) then
+						return
+					end
+					bot.AmeacaDesde = nil
 					-- Passa o PONTO PREVISTO adiante (não a posição atual da
 					-- bola) — é isso que deixa o mergulho sair na diagonal
 					-- certa pra interceptar onde ela VAI chegar, ver
@@ -2664,6 +2945,7 @@ local function updateBot(teamName, bot)
 			end
 		end
 	end
+	bot.AmeacaDesde = nil -- (sem ameaça neste quadro: a próxima conta do zero)
 end
 
 -- ===== LOOPS =====

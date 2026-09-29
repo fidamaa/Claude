@@ -39,21 +39,30 @@ local DIVE_KEY = Enum.KeyCode.Q
 -- Traduz o WASD atual (Humanoid.MoveDirection, espaço de mundo) nos mesmos
 -- nomes de mergulho que o servidor já conhece (Left/Right/Up/UpLeft/
 -- UpRight) — o servidor não mudou nada.
+-- ⚠️ v105 — PEDIDO: "tira o Q padrão (pra cima)... se apertar Q normal ou Q
+-- indo pra frente, dá o dash pra frente (o F não vai ter mais utilidade). Pra
+-- cima não: o jogador vai pular alto quando estiver no gol, até o travessão,
+-- e aí pula e dá o dive pro lado." Então, pro goleiro dentro da área:
+--   Q + A / Q + D     = mergulho pro lado (no chão OU no ar, depois do pulo)
+--   Q sozinho / Q + W = avanço pra frente (era o F)
+--   Q + S             = nada
+--   Espaço            = pulo alto (Config.GK_PULO_ALTURA)
+-- Diagonais e o mergulho pra cima ficaram só pro GK bot.
 local SIDE_THRESHOLD = 0.35
-local function diveDirectionFromInput()
+local function acaoDoQ()
 	local character = player.Character
 	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
 	local root = character and character:FindFirstChild("HumanoidRootPart")
-	if not (humanoid and root) then return "Up" end
+	if not (humanoid and root) then return "Forward" end
 	local move = humanoid.MoveDirection
-	if move.Magnitude < 0.1 then return "Up" end
+	if move.Magnitude < 0.1 then return "Forward" end
 	local lateral = move:Dot(root.CFrame.RightVector)
 	local forward = move:Dot(root.CFrame.LookVector)
-	if math.abs(lateral) < SIDE_THRESHOLD then return "Up" end
-	if forward > SIDE_THRESHOLD then
-		return lateral > 0 and "UpRight" or "UpLeft"
+	if math.abs(lateral) >= SIDE_THRESHOLD and math.abs(lateral) >= math.abs(forward) * 0.8 then
+		return lateral > 0 and "Right" or "Left"
 	end
-	return lateral > 0 and "Right" or "Left"
+	if forward < -SIDE_THRESHOLD then return nil end -- Q + S: nada
+	return "Forward"
 end
 
 UserInputService.InputBegan:Connect(function(input, gameProcessedEvent)
@@ -66,18 +75,40 @@ UserInputService.InputBegan:Connect(function(input, gameProcessedEvent)
 	if player:GetAttribute("PulseComboActive") then return end
 
 	if input.KeyCode == DIVE_KEY then
-		AttemptGKDive:FireServer(diveDirectionFromInput())
-		return
-	end
-
-	if input.KeyCode == Enum.KeyCode.F then
-		AttemptGKForward:FireServer()
+		local acao = acaoDoQ()
+		if acao == "Forward" then
+			AttemptGKForward:FireServer()
+		elseif acao then
+			AttemptGKDive:FireServer(acao)
+		end
 	end
 end)
 
+-- ===== pulo alto do goleiro na área =====
+local puloOriginal = nil -- { UsaPower, Altura, Power } do personagem fora do gol
+game:GetService("RunService").Heartbeat:Connect(function()
+	local character = player.Character
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	if not humanoid then return end
+	local noGol = GKAreaUtil.IsEffectiveGK(player)
+	if noGol then
+		if not puloOriginal then
+			puloOriginal = { UsaPower = humanoid.UseJumpPower, Altura = humanoid.JumpHeight, Power = humanoid.JumpPower }
+		end
+		humanoid.UseJumpPower = false
+		humanoid.JumpHeight = Config.GK_PULO_ALTURA or 14
+	elseif puloOriginal then
+		humanoid.UseJumpPower = puloOriginal.UsaPower
+		humanoid.JumpHeight = puloOriginal.Altura
+		humanoid.JumpPower = puloOriginal.Power
+		puloOriginal = nil
+	end
+end)
+player.CharacterAdded:Connect(function() puloOriginal = nil end)
+
 -- ⚠️ MOBILE: exposto pros botões de mergulho/dash de MobileControls.
 -- local.luau chamarem direto — mesma checagem de GK/combo de cima.
-local VALID_DIVES = { Left = true, Right = true, Up = true, UpRight = true, UpLeft = true }
+local VALID_DIVES = { Left = true, Right = true } -- ⚠️ v105: só pro lado (cima/diagonal = só o bot)
 _G.MobileGKDive = function(direction)
 	if not GKAreaUtil.IsEffectiveGK(player) then return end
 	if player:GetAttribute("PulseComboActive") then return end

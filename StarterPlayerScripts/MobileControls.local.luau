@@ -291,7 +291,7 @@ cButton.MouseButton1Click:Connect(onC)
 -- Agora ele tem o próprio, e o botão de drible volta a ser só drible.
 local tackleButton = makeButton({
 	Name = "Tackle",
-	Text = "DASH", -- ⚠️ NOVO: o carrinho virou o Dash (tecla F no PC)
+	Text = "CARRINHO", -- ⚠️ v86: carrinho = tecla Q (sem bola) no PC; o dash ganhou botão próprio abaixo
 	TextSize = 10,
 	Size = UDim2.fromOffset(62, 62),
 	AnchorPoint = Vector2.new(0.5, 1),
@@ -301,6 +301,23 @@ local tackleButton = makeButton({
 })
 tackleButton.MouseButton1Click:Connect(function()
 	_G.MobileTackle()
+end)
+
+-- ===== DASH (⚠️ v86, tecla F no PC) =====
+-- Arranque curto na direção do analógico, com ou sem bola. Fica logo acima
+-- do carrinho, na mesma coluna.
+local dashButton = makeButton({
+	Name = "Dash",
+	Text = "DASH",
+	TextSize = 10,
+	Size = UDim2.fromOffset(54, 54),
+	AnchorPoint = Vector2.new(0.5, 1),
+	Position = UDim2.new(1, -272, 1, -320),
+	Color = Color3.fromRGB(60, 120, 190),
+	Visible = false,
+})
+dashButton.MouseButton1Click:Connect(function()
+	if _G.MobileDash then _G.MobileDash() end
 end)
 
 -- ===== SÓ GOLEIRO: mergulhos diagonais (E/Q) e dash (F) =====
@@ -385,6 +402,7 @@ RunService.Heartbeat:Connect(function()
 	-- Carrinho: só faz sentido pra jogador de linha SEM a bola (é a regra que
 	-- o servidor já aplica em _G.MobileTackle).
 	tackleButton.Visible = (not isGK) and (not temPosse)
+	dashButton.Visible = not isGK -- ⚠️ v86: dash vale com ou sem bola
 end)
 
 print("✅ MobileControls (Game) carregado — controles touch ativos.")

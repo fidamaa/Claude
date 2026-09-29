@@ -61,7 +61,7 @@ local panel = Instance.new("Frame")
 panel.Name = "Panel"
 panel.AnchorPoint = Vector2.new(1, 0)
 panel.Position = UDim2.new(1, -10, 0, 62)
-panel.Size = UDim2.fromOffset(300, 480)
+panel.Size = UDim2.fromOffset(300, 860)
 panel.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
 panel.BackgroundTransparency = 0.05
 panel.Visible = false
@@ -69,6 +69,23 @@ panel.Parent = screenGui
 local panelCorner = Instance.new("UICorner")
 panelCorner.CornerRadius = UDim.new(0, 10)
 panelCorner.Parent = panel
+-- ⚠️ v110: o painel cresceu (Flow, cosméticos, gol do bot) — encolhe pra
+-- caber na altura da tela (notebook/janela menor), nunca passa de 1
+do
+	local escala = Instance.new("UIScale")
+	escala.Parent = panel
+	local function ajustar()
+		local cam = workspace.CurrentCamera
+		local altura = cam and cam.ViewportSize.Y or 0
+		if altura > 100 then
+			escala.Scale = math.clamp((altura - 72) / 860, 0.5, 1)
+		end
+	end
+	ajustar()
+	if workspace.CurrentCamera then
+		workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(ajustar)
+	end
+end
 local panelPadding = Instance.new("UIPadding")
 panelPadding.PaddingTop = UDim.new(0, 8)
 panelPadding.PaddingBottom = UDim.new(0, 8)
@@ -140,7 +157,7 @@ noDelayButton.BackgroundColor3 = Color3.fromRGB(70, 70, 78)
 noDelayButton.TextColor3 = Color3.fromRGB(255, 255, 255)
 noDelayButton.Font = Enum.Font.GothamBold
 noDelayButton.TextSize = 12
-noDelayButton.Text = "Sem Cooldown/Delay: OFF"
+noDelayButton.Text = "Sem cooldown (Hissatsu + Arma): OFF"
 noDelayButton.Parent = panel
 local noDelayCorner = Instance.new("UICorner")
 noDelayCorner.CornerRadius = UDim.new(0, 6)
@@ -148,7 +165,7 @@ noDelayCorner.Parent = noDelayButton
 
 local function refreshNoDelayButton()
 	noDelayButton.BackgroundColor3 = noDelayEnabled and Color3.fromRGB(80, 200, 120) or Color3.fromRGB(70, 70, 78)
-	noDelayButton.Text = noDelayEnabled and "Sem Cooldown/Delay: ON" or "Sem Cooldown/Delay: OFF"
+	noDelayButton.Text = noDelayEnabled and "Sem cooldown (Hissatsu + Arma): ON" or "Sem cooldown (Hissatsu + Arma): OFF"
 end
 
 noDelayButton.MouseButton1Click:Connect(function()
@@ -157,11 +174,113 @@ noDelayButton.MouseButton1Click:Connect(function()
 	DebugConfigureTesting:FireServer("NoDelay", noDelayEnabled)
 end)
 
+-- ===== ⚠️ v110: ZERAR COOLDOWNS AGORA + ENERGIA INFINITA =====
+-- PEDIDO: "coloca as opções de zerar o cooldown, que não estão funcionando
+-- mais... e a opção de energia infinita pra eu conseguir sempre ficar
+-- utilizando". (ver kinds "ZerarCooldowns" e "EnergiaInfinita" no servidor)
+local function botaoDebug(ordem, texto, cor)
+	local b = Instance.new("TextButton")
+	b.LayoutOrder = ordem
+	b.Size = UDim2.new(1, 0, 0, 26)
+	b.BackgroundColor3 = cor
+	b.TextColor3 = Color3.fromRGB(255, 255, 255)
+	b.Font = Enum.Font.GothamBold
+	b.TextSize = 12
+	b.Text = texto
+	b.Parent = panel
+	local c = Instance.new("UICorner")
+	c.CornerRadius = UDim.new(0, 6)
+	c.Parent = b
+	return b
+end
+
+local zerarButton = botaoDebug(5, "Zerar cooldowns agora", Color3.fromRGB(70, 110, 170))
+zerarButton.MouseButton1Click:Connect(function()
+	DebugConfigureTesting:FireServer("ZerarCooldowns", true)
+end)
+
+local energiaInfinita = false
+local energiaButton = botaoDebug(6, "Energia infinita: OFF", Color3.fromRGB(70, 70, 78))
+energiaButton.MouseButton1Click:Connect(function()
+	energiaInfinita = not energiaInfinita
+	energiaButton.BackgroundColor3 = energiaInfinita and Color3.fromRGB(80, 200, 120) or Color3.fromRGB(70, 70, 78)
+	energiaButton.Text = energiaInfinita and "Energia infinita: ON" or "Energia infinita: OFF"
+	DebugConfigureTesting:FireServer("EnergiaInfinita", energiaInfinita)
+end)
+
+-- ⚠️ v110: chutes de dupla/trio sozinho (sombras no lugar dos companheiros)
+local trioSozinho = false
+local trioButton = botaoDebug(6, "Chutes em grupo sozinho: OFF", Color3.fromRGB(70, 70, 78))
+trioButton.MouseButton1Click:Connect(function()
+	trioSozinho = not trioSozinho
+	trioButton.BackgroundColor3 = trioSozinho and Color3.fromRGB(80, 200, 120) or Color3.fromRGB(70, 70, 78)
+	trioButton.Text = trioSozinho and "Chutes em grupo sozinho: ON" or "Chutes em grupo sozinho: OFF"
+	DebugConfigureTesting:FireServer("TrioSozinho", trioSozinho)
+end)
+
+-- ⚠️ v110: atalhos de teste — pegar a bola na hora / ir pro gol com a bola
+local bolaButton = botaoDebug(7, "Pegar a bola", Color3.fromRGB(70, 110, 170))
+bolaButton.MouseButton1Click:Connect(function() DebugConfigureTesting:FireServer("DarBola", true) end)
+local golButton = botaoDebug(7, "Ir pro gol (com a bola)", Color3.fromRGB(70, 110, 170))
+golButton.MouseButton1Click:Connect(function() DebugConfigureTesting:FireServer("IrProGol", 55) end)
+-- ⚠️ v110: sozinho no teste, o goleiro bot fica no SEU gol — esse vai pra ele
+local golBotButton = botaoDebug(7, "Ir pro gol do goleiro bot (testar defesa)", Color3.fromRGB(70, 110, 170))
+golBotButton.MouseButton1Click:Connect(function() DebugConfigureTesting:FireServer("IrProGolDoBot", 45) end)
+
+-- ⚠️ v110: FLOW e COSMÉTICOS (Loja) — trocar o Flow, encher o medidor,
+-- sortear um cosmético de cada categoria e testar comemoração/efeito de gol
+do
+	local Cosmeticos = require(game:GetService("ReplicatedStorage"):WaitForChild("Cosmeticos"))
+	local iFlow = 1
+	local flowButton = botaoDebug(7, "Flow: " .. Cosmeticos.Flow[1].Nome, Color3.fromRGB(90, 80, 150))
+	flowButton.MouseButton1Click:Connect(function()
+		iFlow = iFlow % #Cosmeticos.Flow + 1
+		local f = Cosmeticos.Flow[iFlow]
+		flowButton.Text = "Flow: " .. f.Nome
+		DebugConfigureTesting:FireServer("Cosmetico", { "Flow", f.Id })
+	end)
+	local encherButton = botaoDebug(7, "Encher o Flow (aperte a tecla do Flow)", Color3.fromRGB(90, 80, 150))
+	encherButton.MouseButton1Click:Connect(function() DebugConfigureTesting:FireServer("EncherFlow", true) end)
+	local sortearButton = botaoDebug(7, "Sortear cosméticos (1 de cada)", Color3.fromRGB(150, 110, 60))
+	sortearButton.MouseButton1Click:Connect(function()
+		for _, cat in ipairs(Cosmeticos.CATEGORIAS) do
+			if cat ~= "Flow" then
+				local lista = Cosmeticos[cat]
+				DebugConfigureTesting:FireServer("Cosmetico", { cat, lista[math.random(1, #lista)].Id })
+			end
+		end
+	end)
+	local golTesteButton = botaoDebug(7, "Testar comemoração + efeito de gol", Color3.fromRGB(150, 110, 60))
+	golTesteButton.MouseButton1Click:Connect(function() DebugConfigureTesting:FireServer("TestarGol", true) end)
+end
+
+-- ⚠️ v110 — PEDIDO: "inclua tudo no jogo e coloque no debbuger pra eu
+-- testar". Escolhe uma das 10 técnicas de goleiro e toca a cutscene de
+-- defesa em você (kind "TestarDefesa" no servidor).
+do
+	local HissatsuCutscenes = require(game:GetService("ReplicatedStorage"):WaitForChild("HissatsuCutscenes"))
+	local nomes = {}
+	for nome in pairs(HissatsuCutscenes.DefesaPorNome or {}) do table.insert(nomes, nome) end
+	table.sort(nomes)
+	if #nomes > 0 then
+		local iDefesa = 1
+		local escolherButton = botaoDebug(7, "Defesa: " .. nomes[1] .. "  (trocar)", Color3.fromRGB(60, 130, 120))
+		escolherButton.MouseButton1Click:Connect(function()
+			iDefesa = iDefesa % #nomes + 1
+			escolherButton.Text = "Defesa: " .. nomes[iDefesa] .. "  (trocar)"
+		end)
+		local testarButton = botaoDebug(7, "Testar defesa (cutscene do goleiro)", Color3.fromRGB(60, 130, 120))
+		testarButton.MouseButton1Click:Connect(function()
+			DebugConfigureTesting:FireServer("TestarDefesa", nomes[iDefesa])
+		end)
+	end
+end
+
 -- ===== REESPAWNAR BOLA (⚠️ NOVO) =====
 -- Pra quando a bola buga/some: manda o servidor reposicionar ela no
 -- centro do campo (ver kind "RespawnBall" em DebugAbilitySelector.legacy.lua).
 local respawnBallButton = Instance.new("TextButton")
-respawnBallButton.LayoutOrder = 4
+respawnBallButton.LayoutOrder = 8
 respawnBallButton.Size = UDim2.new(1, 0, 0, 26)
 respawnBallButton.BackgroundColor3 = Color3.fromRGB(220, 90, 90)
 respawnBallButton.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -212,8 +331,8 @@ end
 
 -- ⚠️ v8: a seção de PULSOS voltou — Data.Pulses tem 20 agora (v5.1 tinha
 -- tirado daqui porque a lista ficava vazia de propósito).
-addSectionLabel(panel, 6, "HISSATSU (tecla 1 · Equipar manda pro slot único)")
-local pulseList = makeScrollingList(7, 220)
+addSectionLabel(panel, 10, "HISSATSU (tecla 1 · Equipar manda pro slot único)")
+local pulseList = makeScrollingList(11, 150)
 
 for i, def in ipairs(PulseData.Pulses) do
 	local row = Instance.new("Frame")
@@ -280,8 +399,8 @@ for i, def in ipairs(PulseData.Pulses) do
 	end)
 end
 
-addSectionLabel(panel, 8, "ARMAS (R = aperta · AUTO = sozinho · — = passivo)")
-local instinctList = makeScrollingList(9, 300)
+addSectionLabel(panel, 12, "ARMAS (R = aperta · AUTO = sozinho · — = passivo)")
+local instinctList = makeScrollingList(13, 140)
 
 for i, def in ipairs(PulseData.Instincts) do
 	local row = Instance.new("Frame")
@@ -336,7 +455,7 @@ for i, def in ipairs(PulseData.Instincts) do
 	nameLabel.TextColor3 = RARITY_COLOR[def.Rarity] or Color3.fromRGB(255, 255, 255)
 	nameLabel.TextXAlignment = Enum.TextXAlignment.Left
 	nameLabel.TextTruncate = Enum.TextTruncate.AtEnd
-	nameLabel.Text = def.Name
+	nameLabel.Text = def.Posicao and (def.Posicao .. "  " .. def.Name) or def.Name -- ⚠️ v110: posição da Arma
 	nameLabel.Parent = row
 
 	local equipButton = Instance.new("TextButton")

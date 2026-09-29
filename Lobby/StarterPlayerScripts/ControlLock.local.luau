@@ -64,6 +64,14 @@ end
 
 RunService.RenderStepped:Connect(function(dt)
 	if not shiftLockEnabled then return end
+	-- ⚠️ v108: reafirma a trava todo quadro (ver FootballClient no Game — ela era
+	-- aplicada só no aperto e qualquer coisa que soltasse o mouse desfazia calada)
+	if camera.CameraType ~= Enum.CameraType.Scriptable then
+		if UserInputService.MouseBehavior ~= Enum.MouseBehavior.LockCenter then
+			UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
+		end
+		if UserInputService.MouseIconEnabled then UserInputService.MouseIconEnabled = false end
+	end
 
 	local character = player.Character
 	local root = character and character:FindFirstChild("HumanoidRootPart")

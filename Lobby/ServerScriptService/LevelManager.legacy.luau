@@ -17,7 +17,14 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 -- PEDIDO: 100 é o máximo de qualquer atributo, então agora são 3
 -- pontos/nível (era 4) — com ATTRIBUTE_CAP=100 mais abaixo: pool máximo
 -- = 3*49 = 147 pontos.
-local ATTRIBUTE_POINTS_PER_LEVEL = 3
+-- ⚠️ v104 — PEDIDO: "com 40 em tudo (a melhor build, 5 estrelas), no nível
+-- máximo, dá pra maximizar 4 status? Eu não consegui maximizar nenhum." Com 3/nível
+-- o pool era 3*49 = 147 — só dava pra maximizar 2 (60 cada). Agora 5/nível =
+-- 245: melhor caso (40 em tudo) maximiza 4 (240) e sobram 5; pior caso (10 em
+-- tudo) maximiza 2 (180) e sobram 65. Quem já tinha nível recebe a diferença
+-- dos níveis que já subiu (migração PontosPorNivel em PlayerDataManager).
+-- ⚠️ Se mudar, atualize PONTOS_POR_NIVEL_ATUAL lá também.
+local ATTRIBUTE_POINTS_PER_LEVEL = 5
 
 -- Nível máximo do jogo — usado também pela conta de pool de pontos no
 -- PlayerDataManager.lua (comentário acima de CharacterCreator.new: pool
@@ -183,7 +190,7 @@ addAttributePointFunc.OnServerInvoke = function(player, attributeName, slotIndex
 	-- verdade — ver FootballConfig.lua no place Game). Aura/BallControl/
 	-- CrossingSkill foram removidos: Speed e Kick entraram no lugar dos
 	-- dois últimos.
-	local validAttributes = {"Physical", "DribbleSkill", "Speed", "Kick", "Energy", "Technique", "Stamina"} -- ⚠️ NOVO: Energy (Pulsos) · Technique (7º atributo)
+	local validAttributes = {"Physical", "DribbleSkill", "Speed", "Kick", "Energy", "Stamina"} -- ⚠️ NOVO: Energy (Pulsos) · v98: Technique REMOVIDA (virou do Drible — não recebe mais ponto)
 	if not table.find(validAttributes, attributeName) then
 		warn(string.format("❌ Atributo inválido: %s", attributeName))
 		return false, "Atributo inválido"

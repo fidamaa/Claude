@@ -99,6 +99,12 @@ if yellowGoal then table.insert(watchedHitboxParts, yellowGoal) end
 for _, part in ipairs(watchedHitboxParts) do
 	part.CanQuery = false
 	part.CanCollide = false
+	-- ⚠️ v110: a CampoHIT estava com Anchored = false no place — no Play ela
+	-- CAÍA com a gravidade e era destruída em segundos (sem colisão, nada
+	-- segura), e tudo que usa a posição dela (lateral/escanteio, altura da
+	-- cobrança, resgate da bola, formação, botão Reespawnar Bola) passava a
+	-- ler uma caixa caindo / sumida. Hitbox nunca pode se mexer: ancora sempre.
+	part.Anchored = true
 end
 
 if Config.OOB_HITBOX_WATCHDOG_ENABLED then
@@ -106,9 +112,10 @@ if Config.OOB_HITBOX_WATCHDOG_ENABLED then
 		while true do
 			task.wait(2)
 			for _, part in ipairs(watchedHitboxParts) do
-				if part.CanQuery or part.CanCollide then
+				if part.CanQuery or part.CanCollide or not part.Anchored then
 					part.CanQuery = false
 					part.CanCollide = false
+					part.Anchored = true
 				end
 			end
 		end

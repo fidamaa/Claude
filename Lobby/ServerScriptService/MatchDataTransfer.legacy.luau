@@ -40,11 +40,27 @@ local matchDataStore = DataStoreService:GetDataStore(MATCH_DATA_STORE_NAME)
 -- (Hissatsu) equipados combina melhor com qual posição (ver
 -- Data.GetPulsePositionHintByName em PulseInstinctData.luau).
 -- ========================================
+-- ⚠️ v104 — PEDIDO: "eu já entrei algumas vezes na partida como GK mesmo
+-- sem Hissatsu de GK... coloca que eu não entro como GK se eu não marcar que
+-- eu quero ser GK. A não ser que as minhas DUAS Hissatsus sejam de GK."
+-- O bug: bastava UMA Hissatsu de goleiro equipada (hint "GK") pra posição
+-- sugerida virar GK. Agora GK só com a marcação (activeSlot.Role == "GK")
+-- ou com as DUAS Hissatsus ativas de goleiro; um hint "GK" sozinho é
+-- ignorado (a outra Hissatsu decide, ou cai no sorteio normal).
+local function querSerGK(activeSlot, playerData)
+	if activeSlot and activeSlot.Role == "GK" then return true end
+	local hint1 = PulseInstinctData.GetPulsePositionHintByName(playerData.EquippedPulse1)
+	local hint2 = PulseInstinctData.GetPulsePositionHintByName(playerData.EquippedPulse2)
+	return hint1 == "GK" and hint2 == "GK"
+end
+
 local function derivePreferredRole(activeSlot, playerData)
-	if activeSlot.Role == "GK" then return "GK" end
+	if querSerGK(activeSlot, playerData) then return "GK" end
 
 	local hint1 = PulseInstinctData.GetPulsePositionHintByName(playerData.EquippedPulse1)
 	local hint2 = PulseInstinctData.GetPulsePositionHintByName(playerData.EquippedPulse2)
+	if hint1 == "GK" then hint1 = nil end
+	if hint2 == "GK" then hint2 = nil end
 
 	if hint1 and hint1 == hint2 then return hint1 end
 	if hint1 and not hint2 then return hint1 end
@@ -56,6 +72,24 @@ local function derivePreferredRole(activeSlot, playerData)
 	end
 
 	return nil -- nenhum Pulso equipado com posição definida — cai no overflow normal (ver MatchController.legacy.luau, place Game)
+end
+
+-- ⚠️ v104: GK automático = as DUAS Hissatsus ativas são de goleiro
+_G.GKAutomaticoPorHissatsu = function(player)
+	local playerData = _G.GetPlayerData and _G.GetPlayerData(player)
+	if not playerData then return false end
+	local hint1 = PulseInstinctData.GetPulsePositionHintByName(playerData.EquippedPulse1)
+	local hint2 = PulseInstinctData.GetPulsePositionHintByName(playerData.EquippedPulse2)
+	return hint1 == "GK" and hint2 == "GK"
+end
+
+-- ⚠️ v104: usado pela fila (MatchmakingQueue) pra equilibrar goleiros
+_G.JogadorQuerGK = function(player)
+	local playerData = _G.GetPlayerData and _G.GetPlayerData(player)
+	if not playerData or type(playerData.CharacterSlots) ~= "table" then return false end
+	local activeSlot = playerData.CharacterSlots[playerData.ActiveSlot]
+	if type(activeSlot) ~= "table" then return false end
+	return querSerGK(activeSlot, playerData)
 end
 
 -- ========================================

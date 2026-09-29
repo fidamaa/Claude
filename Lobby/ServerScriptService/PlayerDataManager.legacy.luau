@@ -130,7 +130,19 @@ local POOL_MAX_BASE_STAT = 15
 -- dar Técnica = meio da faixa (25) pra todo personagem salvo sem ela — sem
 -- invalidar save nenhum. ⚠️ Energy também mudou de papel: agora é só o
 -- TANQUE de energia das Hissatsus (custo), não força.
-local SKILL_ATTRIBUTE_NAMES = { "Physical", "DribbleSkill", "Speed", "Kick", "Energy", "Technique" }
+-- ⚠️ v98 — TÉCNICA REMOVIDA (pedido: "verifica se realmente é algo bom de se
+-- manter, senão remove a técnica"): o que ela fazia (domínio, recepção,
+-- bola difícil) virou do Drible, e as Hissatsus escalam só pelo atributo da
+-- categoria. Sai da lista de skill (não é mais exigida nem criada) e entra
+-- em REMOVED_ATTRIBUTE_BASELINES logo abaixo: pontos investidos nela voltam
+-- como pontos livres.
+local SKILL_ATTRIBUTE_NAMES = { "Physical", "DribbleSkill", "Speed", "Kick", "Energy" }
+-- ⚠️ v104: pontos de atributo por nível (TEM que bater com
+-- ATTRIBUTE_POINTS_PER_LEVEL do LevelManager). Cada slot guarda com quantos
+-- pontos/nível ele foi upado (PontosPorNivel); se for menos que isso, a
+-- migração em validateCharacterSlot devolve a diferença dos níveis já subidos.
+local PONTOS_POR_NIVEL_ATUAL = 5
+local PONTOS_POR_NIVEL_ANTIGO = 3 -- valor em uso antes do v104 (slots sem a marca)
 local POOL_ATTRIBUTE_NAMES = { "Stamina" }
 -- Atributos removidos do jogo (nomes antigos) cujos pontos investidos
 -- viram AttributePoints livres na migração — ver migrateAttributeNames.
@@ -141,6 +153,10 @@ local REMOVED_ATTRIBUTE_BASELINES = {
 	Aura = POOL_MIN_BASE_STAT,
 	BallControl = SKILL_MIN_BASE_STAT,
 	CrossingSkill = SKILL_MIN_BASE_STAT,
+	-- ⚠️ v98: base = o MÁXIMO de nascimento (40), não o mínimo: devolve o que
+	-- foi investido acima do que dava pra nascer, sem dar pontos de graça pelo
+	-- valor sorteado (a Técnica nascia 10-40 em todo personagem).
+	Technique = SKILL_MAX_BASE_STAT,
 }
 
 -- ========================================
@@ -187,8 +203,8 @@ end
 -- Sorte 0-100 só pra exibição (estrelas) — média dos 6 atributos
 -- sorteados (⚠️ agora incluindo Energy e Technique), remapeada de
 -- [SKILL_MIN_BASE_STAT, SKILL_MAX_BASE_STAT] pra [0, 100].
-local function luckFromAttributes(physical, dribble, speed, kick, energy, technique)
-	local avg = (physical + dribble + speed + kick + energy + technique) / 6
+local function luckFromAttributes(physical, dribble, speed, kick, energy)
+	local avg = (physical + dribble + speed + kick + energy) / 5 -- ⚠️ v98: sem Técnica
 	local span = SKILL_MAX_BASE_STAT - SKILL_MIN_BASE_STAT
 	if span <= 0 then return 50 end
 	return math.clamp(math.floor(((avg - SKILL_MIN_BASE_STAT) / span) * 100), 0, 100)
@@ -301,9 +317,8 @@ function CharacterCreator.new(slotName, role)
 	local speed = rollSkillStat()
 	local kick = rollSkillStat()
 	local energy = rollSkillStat() -- ⚠️ NOVO: alimenta o sistema de Pulsos
-	local technique = rollSkillStat() -- ⚠️ NOVO: Técnica (7º atributo)
 	local stamina = math.random(POOL_MIN_BASE_STAT, POOL_MAX_BASE_STAT)
-	local luck = luckFromAttributes(physical, dribble, speed, kick, energy, technique)
+	local luck = luckFromAttributes(physical, dribble, speed, kick, energy) -- ⚠️ v98: Técnica removida
 
 	return {
 		SlotName = slotName,
@@ -328,7 +343,6 @@ function CharacterCreator.new(slotName, role)
 			Speed = speed,
 			Kick = kick,
 			Energy = energy, -- ⚠️ NOVO: tanque de energia das Hissatsus (custo, não força)
-			Technique = technique, -- ⚠️ NOVO: Técnica (domínio, recepção, passe, Hissatsus técnicas)
 			Stamina = stamina,
 			-- ⚠️ NOVO (fix "fôlego sem teto"): guarda o valor de NASCIMENTO do
 			-- Stamina separado do valor atual — LevelManager usa isso pra
@@ -349,7 +363,8 @@ function CharacterCreator.new(slotName, role)
 		-- ⭐ SISTEMA DE NÍVEIS
 		Level = 1,
 		CurrentXP = 0,
-		AttributePoints = 0
+		AttributePoints = 0,
+		PontosPorNivel = PONTOS_POR_NIVEL_ATUAL, -- ⚠️ v104: ver migração em validateCharacterSlot
 	}
 end
 
@@ -439,7 +454,7 @@ local function validateCharacterSlot(slotData)
 	local removedRefund = migrateAttributeNames(slotData.Attributes)
 	if removedRefund > 0 then
 		slotData.AttributePoints = (slotData.AttributePoints or 0) + removedRefund
-		print(string.format("♻️ Migração: devolvidos %d pontos de atributo (Aura/BallControl/CrossingSkill) pro slot '%s'", removedRefund, tostring(slotData.SlotName)))
+		print(string.format("♻️ Migração: devolvidos %d pontos de atributo (Aura/BallControl/CrossingSkill/Technique) pro slot '%s'", removedRefund, tostring(slotData.SlotName)))
 	end
 
 	-- Migração: personagem criado antes do sistema de Sorte não tem
@@ -472,6 +487,22 @@ local function validateCharacterSlot(slotData)
 		slotData.CurrentXP = 0
 		slotData.AttributePoints = 0
 	end
+
+	-- ⚠️ v104: pontos por nível subiram (3 -> 5, ver PONTOS_POR_NIVEL_ATUAL).
+	-- Quem já tinha subido de nível recebe, UMA vez, a diferença de cada
+	-- nível já conquistado — assim um nível 50 antigo fica igual a um nível
+	-- 50 novo (e consegue maximizar os status como pedido).
+	local pontosDoSlot = tonumber(slotData.PontosPorNivel) or PONTOS_POR_NIVEL_ANTIGO
+	if pontosDoSlot < PONTOS_POR_NIVEL_ATUAL then
+		local niveisSubidos = math.max(0, (tonumber(slotData.Level) or 1) - 1)
+		local bonus = (PONTOS_POR_NIVEL_ATUAL - pontosDoSlot) * niveisSubidos
+		slotData.AttributePoints = (slotData.AttributePoints or 0) + bonus
+		if bonus > 0 then
+			print(string.format("♻️ Migração v104: +%d pontos de atributo pro slot '%s' (nível %d, %d -> %d pontos/nível)",
+				bonus, tostring(slotData.SlotName), slotData.Level, pontosDoSlot, PONTOS_POR_NIVEL_ATUAL))
+		end
+	end
+	slotData.PontosPorNivel = PONTOS_POR_NIVEL_ATUAL
 
 	return true
 end
@@ -608,7 +639,8 @@ local function validatePlayerData(data)
 	-- também — como Instinto é PASSIVO (condição bate sozinha, sem
 	-- tecla pra escolher qual), os equipados TODOS ficam checados ao
 	-- mesmo tempo (ver InstinctController.legacy.luau no place Game).
-	for _, campo in ipairs({ "EquippedPulse1", "EquippedPulse2", "EquippedPulse3", "EquippedInstinct1", "EquippedInstinct2", "EquippedInstinct3" }) do
+	-- ⚠️ v102: + slot 4 (reserva paga; o 3 virou a reserva de graça)
+	for _, campo in ipairs({ "EquippedPulse1", "EquippedPulse2", "EquippedPulse3", "EquippedPulse4", "EquippedInstinct1", "EquippedInstinct2", "EquippedInstinct3", "EquippedInstinct4" }) do
 		if data[campo] ~= nil and type(data[campo]) ~= "string" then
 			data[campo] = nil
 		end
@@ -681,9 +713,11 @@ local function createDefaultData()
 		EquippedPulse1 = nil,
 		EquippedPulse2 = nil,
 		EquippedPulse3 = nil,
+		EquippedPulse4 = nil, -- ⚠️ v102: reserva paga
 		EquippedInstinct1 = nil,
 		EquippedInstinct2 = nil,
 		EquippedInstinct3 = nil,
+		EquippedInstinct4 = nil, -- ⚠️ v102: reserva paga
 		ExtraPulseSlot = false,
 		ExtraInstinctSlot = false,
 		RollCreditsRobux = 0,

@@ -299,16 +299,25 @@ end
 -- graça sempre, +1 se comprou o Developer Product daquele tipo (ver
 -- Config.ROBUX_EXTRA_PULSE_SLOT_PRODUCT_ID/..._INSTINCT_..., creditado
 -- em ProcessReceipt mais abaixo).
+-- ⚠️ v102 — PEDIDO: "dois slots ativos, como está aí, e dois slots
+-- reservas... a pessoa só vai ter disponível um slot reserva pra poder
+-- guardar, e um slot pago". Por tipo (Hissatsu e Arma):
+--   1, 2 = ATIVOS (vão pra partida — ver PlayerSystems no place Game, que
+--          só lê 1 e 2);
+--   3    = RESERVA de graça (todo mundo tem);
+--   4    = RESERVA PAGA (ExtraPulseSlot/ExtraInstinctSlot, Robux).
+-- Quem já tinha comprado o slot extra antes (era o 3) continua com o que
+-- guardou no 3 (agora grátis) e ganha o 4 destravado.
 local function slotsDestravados(playerData, kind)
 	local extra = (kind == "Pulse") and playerData.ExtraPulseSlot or playerData.ExtraInstinctSlot
-	return extra and 3 or 2
+	return extra and 4 or 3
 end
 
 local function camposDoSlot(kind)
 	if kind == "Pulse" then
-		return { "EquippedPulse1", "EquippedPulse2", "EquippedPulse3" }
+		return { "EquippedPulse1", "EquippedPulse2", "EquippedPulse3", "EquippedPulse4" }
 	end
-	return { "EquippedInstinct1", "EquippedInstinct2", "EquippedInstinct3" }
+	return { "EquippedInstinct1", "EquippedInstinct2", "EquippedInstinct3", "EquippedInstinct4" }
 end
 
 -- ⚠️ v78 — CORREÇÃO: antes equipava por FIFO (o resultado novo sempre
@@ -435,8 +444,9 @@ swapSlotFunc.OnServerInvoke = function(player, kind, slotA, slotB)
 	end)
 
 	return true, {
-		Pulse1 = playerData.EquippedPulse1, Pulse2 = playerData.EquippedPulse2, Pulse3 = playerData.EquippedPulse3,
-		Instinct1 = playerData.EquippedInstinct1, Instinct2 = playerData.EquippedInstinct2, Instinct3 = playerData.EquippedInstinct3,
+		Pulse1 = playerData.EquippedPulse1, Pulse2 = playerData.EquippedPulse2, Pulse3 = playerData.EquippedPulse3, Pulse4 = playerData.EquippedPulse4,
+		Instinct1 = playerData.EquippedInstinct1, Instinct2 = playerData.EquippedInstinct2, Instinct3 = playerData.EquippedInstinct3, Instinct4 = playerData.EquippedInstinct4,
+		PulseSlots = slotsDestravados(playerData, "Pulse"), InstinctSlots = slotsDestravados(playerData, "Instinct"),
 	}
 end
 
@@ -450,16 +460,18 @@ end
 getEquippedAbilitiesFunc.OnServerInvoke = function(player)
 	local playerData = _G.GetPlayerData and _G.GetPlayerData(player)
 	if not playerData then
-		return { Pulse1 = nil, Pulse2 = nil, Pulse3 = nil, Instinct1 = nil, Instinct2 = nil, Instinct3 = nil, PulseSlots = 2, InstinctSlots = 2 }
+		return { PulseSlots = 3, InstinctSlots = 3 }
 	end
 
 	return {
 		Pulse1 = playerData.EquippedPulse1,
 		Pulse2 = playerData.EquippedPulse2,
 		Pulse3 = playerData.EquippedPulse3,
+		Pulse4 = playerData.EquippedPulse4,
 		Instinct1 = playerData.EquippedInstinct1,
 		Instinct2 = playerData.EquippedInstinct2,
 		Instinct3 = playerData.EquippedInstinct3,
+		Instinct4 = playerData.EquippedInstinct4,
 		PulseSlots = slotsDestravados(playerData, "Pulse"),
 		InstinctSlots = slotsDestravados(playerData, "Instinct"),
 	}
@@ -533,7 +545,7 @@ task.spawn(function()
 		if not playerData then return false end
 		playerData.ExtraPulseSlot = true
 		if _G.RequestSave then _G.RequestSave(player) end
-		print(string.format("💎 %s destravou o 3º slot de HISSATSU com Robux (Developer Product %d)", player.Name, receiptInfo.ProductId))
+		print(string.format("💎 %s destravou a RESERVA PAGA (slot 4) de HISSATSU com Robux (Developer Product %d)", player.Name, receiptInfo.ProductId))
 		return true
 	end)
 
@@ -542,7 +554,7 @@ task.spawn(function()
 		if not playerData then return false end
 		playerData.ExtraInstinctSlot = true
 		if _G.RequestSave then _G.RequestSave(player) end
-		print(string.format("💎 %s destravou o 3º slot de ARMA com Robux (Developer Product %d)", player.Name, receiptInfo.ProductId))
+		print(string.format("💎 %s destravou a RESERVA PAGA (slot 4) de ARMA com Robux (Developer Product %d)", player.Name, receiptInfo.ProductId))
 		return true
 	end)
 end)

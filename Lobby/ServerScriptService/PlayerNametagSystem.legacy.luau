@@ -10,7 +10,9 @@
 ]]
 
 local Players = game:GetService("Players")
+local TextService = game:GetService("TextService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Cosmeticos = require(ReplicatedStorage:WaitForChild("Cosmeticos")) -- ⚠️ v110
 
 -- ========================================
 -- CONFIGURAÇÕES
@@ -88,53 +90,40 @@ local function createNametag(character, playerName, characterName)
 	removeDefaultNametag(character)
 
 	local filteredName, wasCensored = filterName(characterName)
+	-- ⚠️ v110: e o filtro OFICIAL do Roblox (nomes antigos, de antes do filtro
+	-- no SlotNameManager, também passam por ele antes de aparecer pros outros)
+	local dono = Players:GetPlayerFromCharacter(character)
+	if dono and not wasCensored then
+		local ok, oficial = pcall(function()
+			return TextService:FilterStringAsync(filteredName, dono.UserId, Enum.TextFilterContext.PublicChat):GetNonChatStringForBroadcastAsync()
+		end)
+		if ok and typeof(oficial) == "string" then
+			filteredName = oficial
+		elseif not ok then
+			filteredName = dono.DisplayName -- sem filtro, não mostra texto livre
+		end
+	end
 
 	if wasCensored then
 		warn(string.format("⚠️ Nome impróprio detectado para %s: '%s' → '%s'", 
 			playerName, characterName, filteredName))
 	end
 
-	local billboard = Instance.new("BillboardGui")
+	-- ⚠️ v110 — COSMÉTICOS NA PLACA. PEDIDO: "moldura... título... cor..."
+	-- A placa agora é montada pelo módulo Cosmeticos (a MESMA do place Game):
+	-- nome do slot + título + tag + cor do nome + moldura equipados (atributos
+	-- "Cosm_*" do jogador, ver ShopServer). O nome continua filtrado aqui.
+	local dono = Players:GetPlayerFromCharacter(character)
+	local billboard
+	if dono then
+		dono:SetAttribute("NomePersonagem", filteredName)
+		billboard = Cosmeticos.MontarPlaca(Cosmeticos.DadosDaPlaca(dono, filteredName, nil))
+	else
+		billboard = Cosmeticos.MontarPlaca({ Nome = filteredName })
+	end
 	billboard.Name = "CharacterNametag"
 	billboard.Adornee = head
-	billboard.Size = NAMETAG_SIZE
-	billboard.StudsOffset = Vector3.new(0, NAMETAG_HEIGHT_OFFSET, 0)
-	billboard.AlwaysOnTop = true
 	billboard.MaxDistance = 100
-	billboard.ResetOnSpawn = false
-
-	local frame = Instance.new("Frame")
-	frame.Size = UDim2.new(1, 0, 1, 0)
-	frame.BackgroundColor3 = BACKGROUND_COLOR
-	frame.BackgroundTransparency = BACKGROUND_TRANSPARENCY
-	frame.BorderSizePixel = 0
-	frame.Parent = billboard
-
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, 8)
-	corner.Parent = frame
-
-	local nameLabel = Instance.new("TextLabel")
-	nameLabel.Name = "NameLabel"
-	nameLabel.Size = UDim2.new(1, -10, 1, -10)
-	nameLabel.Position = UDim2.new(0, 5, 0, 5)
-	nameLabel.BackgroundTransparency = 1
-	nameLabel.Text = filteredName
-	nameLabel.TextColor3 = TEXT_COLOR
-	nameLabel.TextSize = TEXT_SIZE
-	nameLabel.Font = Enum.Font.GothamBold
-	nameLabel.TextScaled = false
-	nameLabel.TextStrokeColor3 = TEXT_STROKE_COLOR
-	nameLabel.TextStrokeTransparency = TEXT_STROKE_TRANSPARENCY
-	nameLabel.TextXAlignment = Enum.TextXAlignment.Center
-	nameLabel.TextYAlignment = Enum.TextYAlignment.Center
-	nameLabel.Parent = frame
-
-	local sizeConstraint = Instance.new("UITextSizeConstraint")
-	sizeConstraint.MaxTextSize = TEXT_SIZE
-	sizeConstraint.MinTextSize = 10
-	sizeConstraint.Parent = nameLabel
-
 	billboard.Parent = character
 
 	print(string.format("✅ Nametag criado para %s: '%s'", playerName, filteredName))
