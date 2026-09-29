@@ -6563,25 +6563,47 @@ end)()
 				lado = 1
 			end
 		end
-		local ang = math.rad(16 * math.clamp(curva, 0.2, 1.5))
+		-- ⚠️ v111 (teste): 16° dava só ~3 studs de desvio num passe de 40 — quase
+		-- não se via a curva. 20° x Curva (Rin 20°, Sae 24°).
+		local ang = math.rad(20 * math.clamp(curva, 0.2, 1.5))
 		local rapidez = horizontal.Magnitude
 		local tempoAteAlvo = distancia / (rapidez * math.cos(ang))
+		local tg = math.tan(ang)
 		local aberto = frente * (rapidez * math.cos(ang)) + direita * (lado * rapidez * math.sin(ang))
 		ball.AssemblyLinearVelocity = aberto + Vector3.new(0, ball.AssemblyLinearVelocity.Y, 0)
-		-- aceleração que zera o desvio lateral exatamente em tempoAteAlvo
-		local puxao = 2 * rapidez * math.sin(ang) / math.max(tempoAteAlvo, 0.1)
+		-- ⚠️ v111 (teste): a curva era uma força por TEMPO calculada com a
+		-- velocidade de saída — a bola perde velocidade no caminho, então ela
+		-- cruzava a linha antes (uns 32 de 40 studs) e chegava 5 studs de lado.
+		-- Agora a curva segue a DISTÂNCIA andada: desvio lateral desejado
+		-- y(x) = x·tg·(1 − x/D) (abre, chega no máximo no meio e volta a zero
+		-- exatamente no alvo), com a velocidade lateral ajustada todo quadro.
 		curveGeneration += 1
 		local minhaCurva = curveGeneration
 		local decorrido = 0
+		local inicio = ball.Position
 		local conexaoCurva
 		conexaoCurva = RunService.Heartbeat:Connect(function(dt)
 			decorrido += dt
-			if minhaCurva ~= curveGeneration or owner ~= nil or decorrido > tempoAteAlvo * 1.25
-				or ball.AssemblyLinearVelocity.Magnitude < 8 then
+			if minhaCurva ~= curveGeneration or owner ~= nil or decorrido > tempoAteAlvo * 2.5
+				or ball.AssemblyLinearVelocity.Magnitude < 6 then
 				conexaoCurva:Disconnect()
 				return
 			end
-			ball.AssemblyLinearVelocity += -direita * lado * puxao * dt
+			local v = ball.AssemblyLinearVelocity
+			local rel = Vector3.new(ball.Position.X - inicio.X, 0, ball.Position.Z - inicio.Z)
+			local x = rel:Dot(frente)
+			local vx = math.max(Vector3.new(v.X, 0, v.Z):Dot(frente), 1)
+			if x >= distancia - 0.5 then
+				-- chegou no alvo: a curva acaba e a bola segue reta na mira
+				ball.AssemblyLinearVelocity = frente * Vector3.new(v.X, 0, v.Z).Magnitude + Vector3.new(0, v.Y, 0)
+				conexaoCurva:Disconnect()
+				return
+			end
+			local y = rel:Dot(direita) * lado
+			local yDesejado = x * tg * (1 - x / distancia)
+			local inclinacao = tg * (1 - 2 * x / distancia)
+			local vLateral = vx * inclinacao + (yDesejado - y) * 6
+			ball.AssemblyLinearVelocity = frente * vx + direita * (lado * vLateral) + Vector3.new(0, v.Y, 0)
 		end)
 		return lado
 	end
@@ -6731,14 +6753,34 @@ end)()
 	end
 
 	-- =====================================================================
-	-- PULMÃO DE AÇO → SEGUNDO FÔLEGO: enche o fôlego na hora
+	-- CHAPÉU: a bola sobe por cima de quem está na frente e cai adiante; você
+	-- arranca pra buscar do outro lado (entrou no lugar do Pulmão de Aço)
 	-- =====================================================================
-	_G.ArmaAtiva_SegundoFolego = function(player, effect)
-		local s, m = player:FindFirstChild("Stamina"), player:FindFirstChild("MaxStamina")
-		if not s or not m then return false end
-		if s.Value >= m.Value - 1 then return false, "fôlego já está cheio" end
-		s.Value = m.Value
-		vfx(player, "Pulmão de Aço@folego", nil, 1)
+	_G.ArmaAtiva_Chapeu = function(player, effect)
+		if owner ~= player then return false, "precisa estar com a bola" end
+		if isStunned(player) then return false, "atordoado" end
+		local _, root = getCharacterParts(player)
+		if not root then return false end
+		local frente = direcaoDaMira(player, root)
+		local dist = alcanceLivre(root.Position, frente, effect.Distancia or 16)
+		if dist < 6 then return false, "sem espaço na frente" end
+		local chao = root.Position.Y - 2.5
+		local alvo = Vector3.new(root.Position.X, chao + 1, root.Position.Z) + frente * dist
+		-- parábola alta: sobe `Altura` studs acima de onde a bola está
+		local g = workspace.Gravity * Config.BALL_GRAVITY_MULTIPLIER
+		lancarBola(player, root, alvo, 40)
+		local p0 = ball.Position
+		local subir = math.max(1, (effect.Altura or 9))
+		local vy = math.sqrt(2 * g * subir)
+		local tSobe = vy / g
+		local tDesce = math.sqrt(math.max(0.01, 2 * (subir + p0.Y - alvo.Y) / g))
+		local tempo = tSobe + tDesce
+		local plano = Vector3.new(alvo.X - p0.X, 0, alvo.Z - p0.Z)
+		ball.AssemblyLinearVelocity = plano / tempo + Vector3.new(0, vy, 0)
+		selfPickupLockUntil[player] = tick() + math.min(0.5, tempo * 0.5) -- não pega de volta no ar logo na saída
+		playAnimation(player, Config.ANIMATIONS.Kick, nil, 0.4, true)
+		if _G.ArmaImpulsoVelocidade then _G.ArmaImpulsoVelocidade(player, effect.SpeedMult or 1.3, effect.Duracao or 1) end
+		vfx(player, "Chapéu@chapeu", { De = p0, Para = alvo, Tempo = tempo }, tempo)
 		return true
 	end
 

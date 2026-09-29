@@ -547,6 +547,22 @@ Anim.Acoes.Tackle = {
 	end,
 }
 
+-- ----- LEVANTAR RÁPIDO DO CARRINHO — ⚠️ v111 -----
+-- PEDIDO: "faça o carrinho levantar um pouco mais rápido quando você pega a
+-- bola". Quando o carrinho ganha a bola, o animador troca o resto do Tackle
+-- (deitado até 0.60s + levantar) por este levantar curto (0.3s).
+Anim.Acoes.TackleLevanta = {
+	Duracao = 0.3, EntradaSeg = 0.02, SaidaSeg = 0.08,
+	Quadros = function()
+		return {
+			{ 0.00, POSE_CARRINHO },
+			{ 0.12, CARRINHO_SENTA },
+			{ 0.22, CARRINHO_AGACHA },
+			{ 0.30, neutro() },
+		}
+	end,
+}
+
 -- ----- SOFREU CARRINHO — ⚠️ v106 -----
 -- PEDIDO: "quando o cara sofrer carrinho, coloca uma animação dele caindo no
 -- chão". As pernas são varridas, os braços sobem (desequilíbrio), cai de

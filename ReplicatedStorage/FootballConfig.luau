@@ -1316,8 +1316,8 @@ Config.GKBOT_DIVE_DURATION = 0.65 -- ⚠️ v110: 0.55 -> 0.65 (o voo agora dura
 -- até o ponto da bola, igual o mergulho do goleiro humano (antes ele só CORRIA)
 -- ⚠️ v110: TEMPO DE REAÇÃO — o bot só mergulha depois que o chute já é ameaça há
 -- esse tempo (antes reagia no mesmo quadro). Chute forte no canto chega antes.
-Config.GKBOT_TEMPO_REACAO = 0.22
-Config.GKBOT_DIVE_SPEED = 38 -- ⚠️ v110: era 44 -- ⚠️ v110: era 52 ("o bot está muito rápido") -- ⚠️ v110: era 75 ("impossível de fazer gol, deixa ele um pouco mais fraco")
+Config.GKBOT_TEMPO_REACAO = 0.17 -- ⚠️ v111: era 0.22 — "tenta fazer ele acelerar um pouquinho mais... se mirar num canto e chutar, ele não pega de jeito nenhum. Tem que pegar pelo menos algumas vezes"
+Config.GKBOT_DIVE_SPEED = 44 -- ⚠️ v111: 38 -> 44 (mesmo pedido acima: chute no canto nunca era pego) -- ⚠️ v110: era 44 -- ⚠️ v110: era 52 ("o bot está muito rápido") -- ⚠️ v110: era 75 ("impossível de fazer gol, deixa ele um pouco mais fraco")
 -- ⚠️ v109: reage a chute que vai passar até esse tanto dele SE estiver indo pro gol
 -- dele (o raio pequeno de cima continua valendo pra bola que não vai no gol)
 Config.GKBOT_SHOT_REACT_RADIUS_NO_GOL = 15 -- ⚠️ v110: era 20 ("muito difícil de errar") -- ⚠️ v110: era 28
@@ -2051,7 +2051,7 @@ Config.TACKLE_VICTIM_STUN = 1.25
 -- PEDIDO: antes não tinha cooldown nenhum (só o custo de stamina
 -- segurava, igual o sprint) — dava pra spamar a tecla. Agora tem um
 -- cooldown FIXO de 4s por tentativa, acertando ou errando.
-Config.TACKLE_COOLDOWN = 4
+Config.TACKLE_COOLDOWN = 4.2 -- ⚠️ v111: "coloca um pouco mais de cooldown pro carrinho, tipo 0.2 segundos a mais"
 -- ⚠️ v17 — PEDIDO: "quem tá com a bola fica 10% mais lento". Multiplicador
 -- aplicado em cima da velocidade final de quem está conduzindo (ver
 -- getPossessionMultiplier em PlayerSystems.legacy.luau). 1 desliga.

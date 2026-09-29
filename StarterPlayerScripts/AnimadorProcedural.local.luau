@@ -235,6 +235,27 @@ Remotes.AcaoAnimada.OnClientEvent:Connect(function(model, chave, duracao, parame
 	end
 end)
 
+-- ⚠️ v111 — PEDIDO: "faça o carrinho levantar um pouco mais rápido quando você
+-- pega a bola". Quem estava no carrinho e ganhou a posse: depois de 0.2s de
+-- deslize (pra o carrinho aparecer), levanta em 0.3s — antes ficava deitado
+-- até 0.60s e só então levantava (0.85s no total, corpo travado junto).
+Remotes.PossessionChanged.OnClientEvent:Connect(function(quem, ganhou)
+	if not ganhou or typeof(quem) ~= "Instance" or not quem:IsA("Player") then return end
+	local model = quem.Character
+	local estado = model and estados[model]
+	local acao = estado and estado.Acao
+	if not acao or acao.Chave ~= "Tackle" then return end
+	local espera = math.max(0, 0.2 - (os.clock() - acao.Inicio))
+	task.delay(espera, function()
+		local e = estados[model]
+		if not e or e.Acao ~= acao then return end
+		iniciarAcao(model, "TackleLevanta", 0.3)
+		if model == Players.LocalPlayer.Character then
+			_G.CorpoTravadoAte = os.clock() + 0.3
+		end
+	end)
+end)
+
 -- ===== quadro =====
 local paramsChao = RaycastParams.new()
 paramsChao.FilterType = Enum.RaycastFilterType.Exclude

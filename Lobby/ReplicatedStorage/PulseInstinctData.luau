@@ -800,31 +800,9 @@ Data.Pulses = {
 	-- QTE (exceção declarada, ver cabeçalho).
 	-- ========================================================
 
-	-- Killer Slide (キラースライド): o carrinho puro, o mais barato em TP
-	-- do jogo. VERBO: alcance de desarme. Sem firula, cooldown curto — é
-	-- o feijão com arroz do zagueiro, e tem que existir pra as outras
-	-- três defesas serem "a escolha especial".
-	{
-		Name = "Rasteira",
-		Rarity = "Common",
-		Element = "Natureza",
-		Description = "Rasteira dá um carrinho com bem mais alcance que o normal e cooldown curto — não tem efeito especial, é a defesa de todo dia.",
-		Action = "Tackle",
-		Scaling = { Physical = 0.6, Speed = 0.4 }, -- ⚠️ NOVO: fórmula de potência (carrinho de alcance)
-		Cooldown = 25, -- ⚠️ v107: mítica no máximo 90s ("dar pra usar umas duas, três vezes na partida"; era 30)
-		-- ⚠️ v43: TackleRangeAdd é o que faz a Rasteira ser "carrinho seco COM
-		-- BEM MAIS ALCANCE que o normal", que é a única coisa que ela promete.
-		-- Isso estava só na descrição — nenhuma chave existia, então o alcance
-		-- dela era o mesmo de um carrinho comum (Config.TACKLE_RANGE = 12.1).
-		-- +7 leva pra ~19.1, que é o "bem mais" sem virar desarme à distância
-		-- (pra isso existe a Costura de Sombra, com RootRadius 46).
-		-- ⚠️ v110: todo carrinho de Hissatsu é um dash reto na MIRA, em qualquer
-		-- lugar (ver _G.PulseExecuteTackle); ImpactoAtraso = instante do golpe na
-		-- animação, quando o efeito acontece.
-		ImpactoAtraso = 0,
-		Deslocamento = "Carrinho",
-		Effect = { KnockbackRadius = 5, KnockbackForce = 22, TackleRangeAdd = 7 },
-	},
+	-- ⚠️ v111 — PEDIDO: "tira a Hissatsu de rasteira. A Rasteira é a mesma coisa
+	-- do que o carrinho normal." Saiu; quem tinha ganha o Pisão de Sumô (ver
+	-- Data.LegacyNames).
 
 	-- Kage Nui / Shadow Stitch (影縫い): "a sombra vira uma mão, agarra as
 	-- pernas do adversário e prega ele no chão". VERBO: prender À
@@ -1494,10 +1472,10 @@ Data.Instincts = {
 		Rarity = "Epic",
 		Cor = Color3.fromRGB(99, 102, 241),
 		Description = "Passo Furtivo: sem a bola, a tecla da Arma te faz SUMIR da vista dos adversários por 3,5s. E sempre que ninguém está te olhando (inclusive sumido), você ganha +25% de velocidade e +5 de alcance pra receber.",
-		Passiva = "Sem a posse da bola e com NENHUM adversário olhando na sua direção: +25% de velocidade, +5 de alcance de recepção e fôlego recuperando mais rápido.",
+		Passiva = "Sem a posse da bola e com NENHUM adversário olhando na sua direção: +25% de velocidade e +5 de alcance de recepção.",
 		Trigger = "Instant",
 		Condition = { RequireUnseen = true, RequireNoPossession = true },
-		Effect = { SpeedMult = 1.25, PickupRadiusAdd = 5, StaminaRegenMult = 1.2 },
+		Effect = { SpeedMult = 1.25, PickupRadiusAdd = 5 },
 		-- ⚠️ v111: tecla = SUMIR (Stealth, Blue Lock) — some da vista dos
 		-- adversários por 3,5s (quase transparente e sem nome pra eles) e, como
 		-- ninguém te vê, o bônus acima liga junto.
@@ -1721,25 +1699,25 @@ Data.Instincts = {
 		Condition = {},
 		Effect = { AimDeviationMult = 0.2, ForceMult = 1.1 },
 	},
-	-- Kurona Ranze: o motor do meio — nunca para de se mexer.
+	-- ⚠️ v111 — PEDIDO: "Pulmão de Aço é inútil, pode removê-lo, não existe mais
+	-- stamina". No lugar (MF raro), um drible criativo: o CHAPÉU — com a bola,
+	-- a tecla levanta a bola por cima de quem está na sua frente e você
+	-- arranca pra pegar do outro lado. Quem tinha o Pulmão ganha o Chapéu
+	-- (ver Data.LegacyNames).
 	{
-		Name = "Pulmão de Aço",
+		Name = "Chapéu",
 		Posicao = "MF",
 		Rarity = "Rare",
 		Cor = Color3.fromRGB(120, 230, 150),
-		Description = "Pulmão de Aço (Kurona Ranze): a tecla da Arma é o SEGUNDO FÔLEGO — enche o fôlego na hora (a cada 30s). E sem a bola, o fôlego volta 60% mais rápido e você corre um pouco mais.",
-		Passiva = "Sem a posse da bola: fôlego recuperando 60% mais rápido e +5% de velocidade.",
-		Trigger = "Instant",
-		Condition = { RequireNoPossession = true },
-		Effect = { StaminaRegenMult = 1.6, SpeedMult = 1.05 },
-		-- ⚠️ v111: tecla = SEGUNDO FÔLEGO (enche o fôlego na hora)
-		Ativa = "Tecla da Arma: Segundo Fôlego — o fôlego enche na hora (a cada 30s).",
+		Description = "Chapéu: com a bola, aperte a tecla da Arma e você dá um chapéu — a bola sobe por cima de quem está na sua frente e cai 16 studs adiante, e você arranca 30% mais rápido pra pegar ela do outro lado.",
+		Ativa = "Tecla da Arma, com a bola: chapéu — a bola passa por cima do marcador e cai 16 studs à frente; você arranca 30% mais rápido por 1s pra buscar.",
+		Trigger = "Botao",
 		Tecla = "R",
-		AtivaSoNaTecla = true,
-		AtivaCondition = {},
-		AtivaAction = "SegundoFolego",
-		AtivaEffect = {},
-		AtivaCooldown = 30,
+		Condition = { RequirePossession = true },
+		Effect = {},
+		AtivaAction = "Chapeu",
+		AtivaEffect = { Distancia = 16, Altura = 9, SpeedMult = 1.3, Duracao = 1 },
+		AtivaCooldown = 8,
 	},
 	-- Itoshi Sae: o passe perfeito, com CURVA, que deixa o atacante na cara do gol.
 	{
@@ -1835,10 +1813,10 @@ Data.Instincts = {
 		Rarity = "Epic",
 		Cor = Color3.fromRGB(160, 110, 230),
 		Description = "Antecipação Fantasma (Aiku Oliver): a tecla da Arma te faz sumir e reaparecer NA FRENTE do adversário com a bola (a até 28 studs), fechando o caminho. E no seu campo, com ele a até 18 studs, você fica 20% mais rápido.",
-		Passiva = "No próprio campo, adversário com a bola a até 18 studs: +20% de velocidade e fôlego +20%.",
+		Passiva = "No próprio campo, adversário com a bola a até 18 studs: +20% de velocidade.",
 		Trigger = "Instant",
 		Condition = { CarrierMaxDistance = 18, DefendingHalf = true },
-		Effect = { SpeedMult = 1.2, StaminaRegenMult = 1.2 },
+		Effect = { SpeedMult = 1.2 },
 		-- ⚠️ v111: tecla = PASSO FANTASMA — some e reaparece na frente dele
 		Ativa = "Tecla da Arma: some e reaparece NA FRENTE do adversário com a bola (a até 28 studs), fechando o caminho dele.",
 		Tecla = "R",
@@ -1854,11 +1832,11 @@ Data.Instincts = {
 		Posicao = "DF",
 		Rarity = "Legendary",
 		Cor = Color3.fromRGB(255, 120, 60),
-		Description = "Última Barreira: quando você é o ÚLTIMO do time entre a bola e o seu gol, no próprio campo, corre 35% mais e o fôlego quase não acaba — a recuperação que salva o jogo.",
-		Passiva = "Último do time antes do seu gol, no próprio campo: +35% de velocidade e fôlego +30%.",
+		Description = "Última Barreira: quando você é o ÚLTIMO do time entre a bola e o seu gol, no próprio campo, corre 35% mais — a recuperação que salva o jogo.",
+		Passiva = "Último do time antes do seu gol, no próprio campo: +35% de velocidade.",
 		Trigger = "Instant",
 		Condition = { RequireLastManBack = true, DefendingHalf = true },
-		Effect = { SpeedMult = 1.35, StaminaRegenMult = 1.3 },
+		Effect = { SpeedMult = 1.35 },
 	},
 	-- Karasu Tabito: desarme cirúrgico, no tempo certo.
 	{
@@ -2001,6 +1979,7 @@ Data.Instincts = {
 Data.LegacyNames = {
 	-- ⚠️ v110: Armas cortadas na revisão (repetiam outras) — quem já tinha sorteado fica com a parecida
 	["Voleio Selvagem"] = "Xeque-Mate",
+	["Pulmão de Aço"] = "Chapéu", -- ⚠️ v111: sem stamina, o Pulmão não fazia nada
 	["Impacto do Imperador"] = "Chute Direto",
 	["Bloqueio de Corpo"] = "Xerife",
 	["Mergulho Longo"] = "Corpo Elástico",
@@ -2099,7 +2078,8 @@ Data.LegacyNames = {
 	["Ilusão Dupla"] = "Névoa",
 	["Toque Divino"] = "Foice de Vento",
 	["Passo do Deus Relâmpago"] = "Hora do Céu",
-	["Desarme de Aço"] = "Rasteira",
+	["Desarme de Aço"] = "Pisão de Sumô", -- ⚠️ v111: a Rasteira saiu
+	["Rasteira"] = "Pisão de Sumô", -- ⚠️ v111: igual ao carrinho normal, saiu
 	["Corrente Impenetrável"] = "Costura de Sombra",
 	["Grande Muralha"] = "Muralha Infinita",
 	["Arrancada Selvagem"] = "Investida Titânica",

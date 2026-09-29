@@ -1098,7 +1098,7 @@ Remotes.ActivateInstinct.OnServerEvent:Connect(function(player, aimPoint, slotIn
 		-- não havia bola cabeceável na janela).
 		local motivo = "em cooldown"
 		local readyAt = ativaReadyAt[player]
-		if readyAt and tick() < readyAt then
+		if readyAt and tick() < readyAt and not debugNoCooldown[player] then
 			motivo = string.format("em cooldown (%.0fs)", readyAt - tick())
 		else
 			motivo = motivoAtiva or "a jogada não era possível agora"

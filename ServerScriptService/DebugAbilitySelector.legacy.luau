@@ -89,7 +89,7 @@ Remotes.DebugConfigureTesting.OnServerEvent:Connect(function(player, kind, value
 			end
 			local como = "passivo (não tem tecla)"
 			if def and def.Tecla then
-				como = string.format("aperte %s — %s", def.Tecla, def.Ativa or "ativa")
+				como = string.format("aperte E (arma no slot 1) — %s", def.Ativa or "ativa") -- ⚠️ v111: E = slot 1, R = slot 2
 			elseif def and def.AtivaAction then
 				como = "automático quando a condição bate"
 			end

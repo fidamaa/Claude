@@ -479,12 +479,17 @@ ATIVAS["Tabela@volta"] = function(character, extra)
 	if extra and typeof(extra.Ponto) == "Vector3" then anel(extra.Ponto, Vector3.yAxis, ciano, 1.5, 6, 0.6, 0.4) end
 	rastroNaBola(ciano, 1, 0.8)
 end
-ATIVAS["Pulmão de Aço@folego"] = function(character)
-	local root = character:FindFirstChild("HumanoidRootPart")
-	if not root then return end
+ATIVAS["Chapéu@chapeu"] = function(character, extra)
 	local verde = Color3.fromRGB(120, 230, 150)
-	anel(root.Position, Vector3.yAxis, verde, 2, 9, 0.5, 0.35)
-	faiscas(root.Position, verde, 24, 9)
+	local root = character:FindFirstChild("HumanoidRootPart")
+	if root then anel(root.Position - Vector3.new(0, 2.8, 0), Vector3.yAxis, verde, 2, 7, 0.35, 0.4) end
+	rastroNaBola(verde, 1, (extra and extra.Tempo) or 0.9)
+	-- marca onde a bola vai cair, pra você correr pra lá
+	if extra and typeof(extra.Para) == "Vector3" then
+		local marca = parte(Vector3.new(0.12, 5, 5), CFrame.new(extra.Para - Vector3.new(0, 0.9, 0)) * CFrame.Angles(0, 0, math.rad(90)), verde, 0.35, Enum.Material.ForceField)
+		marca.Shape = Enum.PartType.Cylinder
+		Debris:AddItem(marca, (extra.Tempo or 0.9) + 0.2)
+	end
 end
 ATIVAS["Marcação Cerrada@colar"] = function(character, extra)
 	local root = character:FindFirstChild("HumanoidRootPart")
