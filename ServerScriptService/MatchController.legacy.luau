@@ -1480,7 +1480,9 @@ local function runPeriod(mostrar, real)
 			break
 		end
 		task.wait(passo)
-		if not matchPaused then
+		-- ⚠️ v113: a cena do Flow (10-15s) não come o tempo da partida
+		local cenaFlow = _G.HissatsuCutsceneActive and _G.HissatsuCutsceneActive.Flow
+		if not matchPaused and not cenaFlow then
 			timeRemaining -= 1
 			Remotes.UpdateMatchState:FireAllClients(timeRemaining, score)
 		end

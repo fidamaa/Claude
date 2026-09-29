@@ -3462,4 +3462,263 @@ function E.Preparo(estilo, character, duracao)
 	end)
 end
 
+-- posição dos olhos no espaço da cabeça (R6 e R15)
+local function FlowCenaOlhos(head)
+	local s = head.Size
+	return { V3(-s.X * 0.1, s.Y * 0.08, -s.Z * 0.5 - 0.04), V3(s.X * 0.1, s.Y * 0.08, -s.Z * 0.5 - 0.04) }
+end
+
+-- ============================================================
+-- 🧩 FLOW DO ISAGI (⚠️ v113) — ver a coreografia Flow_Isagi
+-- ============================================================
+-- Palco escuro (salaEscura); P&B no começo (correção de cor só nesta cena);
+-- peças de quebra-cabeça girando; buracos de peça no rosto; olho verde com
+-- rastro; ele se desfaz em partículas; explosão verde que "devora" as sombras
+-- do Rin e do Shidou (partículas sugadas pra ele); aura de chama verde e olhos
+-- azuis no voleio final; riscos verdes passando.
+function E.FlowIsagi(ctx)
+	local pasta, spec = ctx.Pasta, ctx.Spec
+	local VERDE, VERDE_CLARO, AZUL = rgb(90, 255, 110), rgb(200, 255, 190), rgb(90, 190, 255)
+	local character = ctx.Character
+	local head = character:FindFirstChild("Head")
+	local torso = character:FindFirstChild("UpperTorso") or character:FindFirstChild("Torso")
+	local ph = spec.Phases
+
+	-- palco escuro rente ao gramado
+	local sala = salaEscura(pasta, "SalaFlowIsagi", rgb(14, 16, 20), ctx.Inicio * CFrame.new(0, 20, -8), 130, ctx.ChaoY + 0.1 - 20)
+	sala.Transparency = 0
+
+	-- preto e branco no começo (a correção de cor da cena fica na câmera e
+	-- some junto com a pasta)
+	local pb = Instance.new("ColorCorrectionEffect")
+	pb.Name = "FlowIsagiPB"
+	pb.Saturation = -1
+	pb.Contrast = 0.35
+	pb.Parent = workspace.CurrentCamera
+	pasta.Destroying:Connect(function() pb:Destroy() end)
+
+	-- peças de quebra-cabeça: placa + 2 "encaixes" (cilindros)
+	local pecas = {}
+	local rng = Random.new(12)
+	for i = 1, 26 do
+		local cor = rgb(235, 235, 235):Lerp(rgb(120, 120, 120), rng:NextNumber())
+		local placa = parte(pasta, "Peca" .. i, { Color = cor, Material = Enum.Material.SmoothPlastic })
+		placa.Size = V3(1.3, 1.3, 0.16)
+		local b1 = parte(pasta, "PecaB" .. i, { Shape = Enum.PartType.Cylinder, Color = cor, Material = Enum.Material.SmoothPlastic })
+		b1.Size = V3(0.16, 0.5, 0.5)
+		local b2 = parte(pasta, "PecaC" .. i, { Shape = Enum.PartType.Cylinder, Color = cor, Material = Enum.Material.SmoothPlastic })
+		b2.Size = V3(0.16, 0.5, 0.5)
+		pecas[i] = {
+			Placa = placa, B1 = b1, B2 = b2,
+			Raio = rng:NextNumber(2.6, 7), Altura = rng:NextNumber(-2.4, 4.5),
+			Ang = rng:NextNumber(0, math.pi * 2), Vel = rng:NextNumber(1.2, 2.4) * (i % 2 == 0 and 1 or -1),
+			Giro = V3(rng:NextNumber(-3, 3), rng:NextNumber(-3, 3), rng:NextNumber(-3, 3)),
+		}
+	end
+
+	-- buracos de peça na bochecha (aparecem um por um) e o olho verde
+	local buracos = {}
+	local POS_BURACO = { V3(0.34, -0.12), V3(0.2, -0.3), V3(0.46, -0.3), V3(0.3, 0.14) }
+	for i = 1, #POS_BURACO do
+		buracos[i] = parte(pasta, "Buraco" .. i, { Color = rgb(5, 5, 5), Material = Enum.Material.SmoothPlastic })
+	end
+	local olhoD = esfera(pasta, "OlhoVerde", VERDE)
+	local olhoE = esfera(pasta, "OlhoAzulE", AZUL)
+	local olhoLuz = luz(olhoD, VERDE, 0, 6)
+	local rastroOlho = parte(pasta, "RastroOlho", { Color = VERDE })
+	local rastroMiolo = parte(pasta, "RastroOlhoMiolo", { Color = VERDE_CLARO })
+
+	-- se desfaz em partículas (corrida)
+	local desfaz = torso and emissor(torso, {
+		Cor = cores({ { 0, rgb(255, 255, 255) }, { 1, rgb(170, 190, 180) } }), Tamanho = numeros({ { 0, 0.35 }, { 1, 0 } }),
+		Vida = { 0.4, 0.8 }, Vel = { 2, 6 }, Acel = ctx.Inicio:VectorToWorldSpace(V3(0, 1, 14)), Drag = 1, RotVel = 300,
+		Forma = Enum.ParticleEmitterShape.Box, Estilo = Enum.ParticleEmitterShapeStyle.Volume,
+	})
+
+	-- riscos (linhas de velocidade) passando: peças finas recicladas
+	local riscos = {}
+	for i = 1, 22 do
+		riscos[i] = { Parte = parte(pasta, "Risco" .. i, { Color = i % 3 == 0 and VERDE or rgb(230, 240, 235) }),
+			Semente = rng:NextNumber(0, 100), X = rng:NextNumber(-9, 9), Y = rng:NextNumber(-3, 9) }
+	end
+
+	-- a explosão verde e as partículas sugadas
+	local bolaVerde = esfera(pasta, "ExplosaoVerde", VERDE)
+	local sugadas = {}
+	for i = 1, 36 do sugadas[i] = esfera(pasta, "Sugada" .. i, i % 2 == 0 and VERDE or VERDE_CLARO) end
+	local explodiu = false
+
+	-- aura de chama verde (cabeça e braços) no final
+	local chamas = {}
+	local function chama(pai, tam)
+		if not pai then return end
+		table.insert(chamas, emissor(pai, {
+			Textura = TEX.Fogo, Cor = cores({ { 0, VERDE_CLARO }, { 0.4, VERDE }, { 1, rgb(20, 120, 40) } }), Brilho = 1,
+			Tamanho = numeros({ { 0, tam }, { 1, 0.2 } }), Transp = numeros({ { 0, 0.15 }, { 1, 1 } }),
+			Vida = { 0.35, 0.6 }, Vel = { 3, 7 }, Spread = 25, Direcao = Enum.NormalId.Top,
+			Acel = ctx.Inicio:VectorToWorldSpace(V3(0, 4, 10)),
+		}))
+	end
+	chama(head, 2.2)
+	chama(character:FindFirstChild("Right Arm") or character:FindFirstChild("RightUpperArm"), 1.3)
+	chama(character:FindFirstChild("Left Arm") or character:FindFirstChild("LeftUpperArm"), 1.3)
+
+	-- o Shidou (sombra 2) é ROSA; o Rin (1) fica verde-água
+	local SHIDOU = rgb(255, 110, 190)
+	local sombraShidou = ctx.Clones and ctx.Clones[2]
+	if sombraShidou and sombraShidou.Modelo and not sombraShidou.Real then
+		for _, d in ipairs(sombraShidou.Modelo:GetDescendants()) do
+			if d:IsA("BasePart") then d.Color = SHIDOU:Lerp(Color3.new(0, 0, 0), 0.6)
+			elseif d:IsA("Highlight") then d.FillColor = SHIDOU; d.OutlineColor = SHIDOU:Lerp(Color3.new(1, 1, 1), 0.55) end
+		end
+	end
+	-- contorno dele no palco escuro (no anime: traço branco no fundo preto)
+	local contorno = Instance.new("Highlight")
+	contorno.FillTransparency = 1
+	contorno.OutlineColor = Color3.new(1, 1, 1)
+	contorno.OutlineTransparency = 1
+	contorno.DepthMode = Enum.HighlightDepthMode.Occluded
+	contorno.Adornee = character
+	contorno.Parent = pasta
+	-- luz de preenchimento no rosto (close)
+	local luzRosto = parte(pasta, "LuzRosto")
+	local luzRostoL = luz(luzRosto, rgb(230, 240, 255), 0, 1.6)
+
+	local efeitos = {}
+	function efeitos.Quadro(t, _dt, s)
+		local root = ctx.Root
+		contorno.OutlineTransparency = (t >= 4.6) and 0 or 1
+		contorno.OutlineColor = t >= ph.Flow[1] and VERDE_CLARO or Color3.new(1, 1, 1)
+		if head then
+			luzRosto.CFrame = head.CFrame * CFrame.new(0, -0.3, -2.5)
+			luzRostoL.Range = (t >= 1.6 and t < 5.0) and 7 or 0
+		end
+		-- P&B até o olho acender; depois volta a cor (escuro)
+		local cor = smooth(phase(t, 3.2, 4.4))
+		pb.Saturation = -1 + cor
+		pb.Contrast = 0.35 - 0.15 * cor
+
+		-- peças girando em volta (só no começo; voltam num flash no fim da corrida)
+		local vis = 1 - smooth(phase(t, 1.3, 1.7))
+		for _, p in ipairs(pecas) do
+			local a = p.Ang + t * p.Vel
+			local centro = root.Position + V3(math.cos(a) * p.Raio, p.Altura + math.sin(t * 2 + p.Ang) * 0.3, math.sin(a) * p.Raio)
+			local cf = CFrame.new(centro) * CFrame.Angles(p.Giro.X * t, p.Giro.Y * t, p.Giro.Z * t)
+			p.Placa.CFrame = cf
+			p.B1.CFrame = cf * CFrame.new(0, 0.78, 0) * CFrame.Angles(0, math.rad(90), 0)
+			p.B2.CFrame = cf * CFrame.new(0.78, 0, 0) * CFrame.Angles(0, math.rad(90), 0)
+			local tr = vis > 0.02 and (1 - vis) or 1
+			p.Placa.Transparency, p.B1.Transparency, p.B2.Transparency = tr, tr, tr
+		end
+
+		-- buracos de peça no rosto
+		if head then
+			local frente = -head.Size.Z / 2 - 0.02
+			for i, b in ipairs(buracos) do
+				local quando = 2.1 + (i - 1) * 0.45
+				local k = smooth(phase(t, quando, quando + 0.25)) * (1 - smooth(phase(t, 4.6, 5.0)))
+				local tam = 0.2 * k
+				b.Size = V3(math.max(tam, 0.01), math.max(tam, 0.01), 0.04)
+				local o = POS_BURACO[i]
+				b.CFrame = head.CFrame * CFrame.new(o.X * head.Size.X * 0.5, o.Y * head.Size.Y, frente)
+				b.Transparency = k > 0.02 and 0 or 1
+			end
+			-- olho verde (direito) desde 3.0; os dois azuis no Flow final
+			local olhos = FlowCenaOlhos(head)
+			local verde = smooth(phase(t, 3.0, 3.3))
+			olhoD.Size = Vector3.one * 0.3
+			olhoD.CFrame = head.CFrame * CFrame.new(olhos[2])
+			olhoD.Color = t < 9.4 and VERDE or AZUL
+			olhoD.Transparency = verde > 0.02 and 0 or 1
+			olhoLuz.Range = 8 * verde
+			olhoLuz.Color = olhoD.Color
+			local azul = smooth(phase(t, 9.4, 9.7))
+			olhoE.Size = Vector3.one * 0.3
+			olhoE.CFrame = head.CFrame * CFrame.new(olhos[1])
+			olhoE.Transparency = azul > 0.02 and 0 or 1
+			-- rastro do olho (4.2-5.4): uma faixa saindo pra trás e pro lado
+			local r = smooth(phase(t, 4.2, 4.6)) * (1 - smooth(phase(t, 5.2, 5.6)))
+			if r > 0.02 then
+				local de = olhoD.Position
+				local dir = (head.CFrame.RightVector * 0.8 + head.CFrame.LookVector * -1).Unit
+				local comp = 7 * r
+				rastroOlho.Size = V3(0.32, 0.32, comp)
+				rastroOlho.CFrame = CFrame.lookAt(de + dir * comp / 2, de + dir * comp)
+				rastroOlho.Transparency = 0.25
+				rastroMiolo.Size = V3(0.12, 0.12, comp * 0.95)
+				rastroMiolo.CFrame = rastroOlho.CFrame
+				rastroMiolo.Transparency = 0
+			else
+				rastroOlho.Transparency, rastroMiolo.Transparency = 1, 1
+			end
+		end
+
+		-- se desfaz correndo
+		if desfaz then
+			desfaz.Enabled = t >= 4.6 and t < 6.4
+			desfaz.Rate = 160
+		end
+
+		-- riscos passando (corrida e Flow final)
+		local correndo = (t >= 5.0 and t < 6.4) or t >= 9.4
+		for _, rk in ipairs(riscos) do
+			if correndo then
+				local ciclo = ((t * 2.2 + rk.Semente) % 1)
+				local z = 12 - ciclo * 34
+				-- no Flow final a câmera olha de baixo pra cima: os riscos vão pro
+				-- fundo, ACIMA dele (perto da câmera viravam barras grossas)
+				local y = t >= 9.4 and (4 + math.abs(rk.Y) * 1.3) or (rk.Y - 3)
+				local x = t >= 9.4 and rk.X * 1.4 or rk.X
+				local p = s.RootLocal + V3(x, y, z)
+				rk.Parte.Size = V3(0.05, 0.05, 4)
+				rk.Parte.CFrame = CFrame.lookAt(ctx.Mundo(p), ctx.Mundo(p + V3(0, 0, -1)))
+				rk.Parte.Transparency = 0.25
+			else
+				rk.Parte.Transparency = 1
+			end
+		end
+
+		-- DEVORA: explosão verde + partículas dos dois sugadas pra ele
+		if not explodiu and t >= ph.Devora[1] then
+			explodiu = true
+			ctx.Flash(VERDE, 0.35, 0.35)
+			ctx.Tremer(0.8, 0.4)
+			onda(pasta, root.Position, ctx.Inicio.LookVector, VERDE, 30, 0.45, 0.4)
+			anelVazado(pasta, root.Position, Vector3.yAxis, VERDE_CLARO, 2, 26, 0.5, 0.3)
+		end
+		local ex = phase(t, ph.Devora[1], ph.Devora[1] + 0.7)
+		if ex > 0 and ex < 1 then
+			bolaVerde.Size = Vector3.one * (2 + 11 * easeOut(ex))
+			bolaVerde.CFrame = CFrame.new(root.Position)
+			bolaVerde.Transparency = 0.6 + 0.4 * ex
+		else
+			bolaVerde.Transparency = 1
+		end
+		for i, sp in ipairs(sugadas) do
+			local qual = ctx.Clones[(i % 2) + 1]
+			local k = phase(t, ph.Devora[1] + (i % 9) * 0.04, ph.Devora[1] + 0.55 + (i % 9) * 0.04)
+			if qual and qual.Root and k > 0 and k < 1 then
+				local de = qual.Root.Position + V3(math.sin(i) * 1.2, math.cos(i * 1.7) * 1.8, math.sin(i * 2.3) * 1.2)
+				sp.Size = Vector3.one * (0.5 * (1 - k) + 0.12)
+				sp.CFrame = CFrame.new(de:Lerp(root.Position, k * k))
+				sp.Transparency = 0
+			else
+				sp.Transparency = 1
+			end
+		end
+
+		-- aura de chama verde no Flow
+		for _, c in ipairs(chamas) do
+			c.Enabled = t >= ph.Flow[1]
+			c.Rate = 90
+		end
+	end
+	function efeitos.Impacto(_s)
+		ctx.Flash(rgb(230, 255, 230), 0.1, 0.5)
+		onda(pasta, ctx.Root.Position, ctx.Inicio.LookVector, VERDE, 24, 0.35, 0.35)
+	end
+	return efeitos
+end
+
+
 return E

@@ -748,7 +748,13 @@ FlowAtivado.OnClientEvent:Connect(function(player, id, duracao)
 	local item = Cosmeticos.Item(id)
 	if not item or typeof(player) ~= "Instance" then return end
 	ligarFlowNoCorpo(player, item, duracao or 9)
-	if player == localPlayer then
+	-- ⚠️ v113: Flow com cena 3D (HissatsuCutscenes["Flow_..."]) já teve a cena
+	-- antes de ativar — a faixa 2D antiga só pros que ainda não têm
+	local temCena3D = false
+	pcall(function()
+		temCena3D = require(game:GetService("ReplicatedStorage"):WaitForChild("HissatsuCutscenes"))[id] ~= nil
+	end)
+	if player == localPlayer and not temCena3D then
 		FlowCena.Tocar(player, item)
 	else
 		pcall(avisoDoFlow, player, item)

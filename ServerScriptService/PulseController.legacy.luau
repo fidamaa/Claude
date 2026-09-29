@@ -1815,6 +1815,72 @@ local function playHissatsuCutscene(player, def, onDone)
 	end)
 end
 
+-- ⚠️ v113 — CENA DO FLOW. PEDIDO: "flows com cutscene de anime de verdade,
+-- 10-15 segundos, por personagem". Mesmo esquema da cutscene de Hissatsu:
+-- congela todo mundo (e o relógio da partida — MatchController olha o campo
+-- Flow), todos os clientes tocam a coreografia HissatsuCutscenes["Flow_..."]
+-- sincronizada, e no fim tudo volta pro lugar. Devolve a duração (0 = sem
+-- cena, o Flow começa na hora). O Flow só começa DEPOIS (InstinctController).
+local CosmeticosFlow = nil
+pcall(function() CosmeticosFlow = require(ReplicatedStorage:WaitForChild("Cosmeticos", 5)) end)
+_G.TocarCenaFlow = function(player)
+	if _G.HissatsuCutsceneActive then return 0 end
+	local item = CosmeticosFlow and (CosmeticosFlow.Equipado(player, "Flow") or CosmeticosFlow.Item("Flow_Isagi"))
+	local spec = item and HissatsuCutscenes[item.Id]
+	local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+	if not spec or not root then return 0 end
+	local duration = spec.Duration
+	local ball = workspace:FindFirstChild(Config.BALL_NAME)
+	local flat = Vector3.new(root.CFrame.LookVector.X, 0, root.CFrame.LookVector.Z)
+	if flat.Magnitude < 0.01 then flat = Vector3.new(0, 0, -1) end
+	local startCFrame = CFrame.lookAt(root.Position, root.Position + flat.Unit)
+	_G.HissatsuCutsceneActive = { Player = player, Until = tick() + duration, Flow = true }
+
+	local ancorados = {}
+	for _, other in ipairs(Players:GetPlayers()) do
+		local otherRoot = other.Character and other.Character:FindFirstChild("HumanoidRootPart")
+		if otherRoot then
+			otherRoot.AssemblyLinearVelocity = Vector3.zero
+			otherRoot.Anchored = true
+			table.insert(ancorados, otherRoot)
+			freezeMovement(other, duration + 0.1)
+		end
+	end
+	if _G.GetGKBotPositions and _G.FreezeGKBot then
+		for _, bot in ipairs(_G.GetGKBotPositions()) do
+			_G.FreezeGKBot(bot.TeamName, duration + 0.1)
+		end
+	end
+	local congelouBola = false
+	if ball then
+		congelouBola = _G.FreezeBallForQTE and _G.FreezeBallForQTE() or false
+		if not congelouBola then ball.Anchored = true end
+	end
+	if _G.GrantPulseIframe then _G.GrantPulseIframe(player, duration + 0.3) end
+	local ballLocal = ball and startCFrame:PointToObjectSpace(ball.Position) or Vector3.new(0, -2.3, -1.8)
+	Remotes.HissatsuCutscene:FireAllClients(item.Id, player, startCFrame, ballLocal, workspace:GetServerTimeNow(),
+		"FLOW · " .. string.upper(item.Personagem or ""), duration)
+
+	task.delay(duration, function()
+		for _, r in ipairs(ancorados) do
+			if r.Parent then r.Anchored = false end
+		end
+		if root.Parent then
+			root.CFrame = startCFrame
+			root.AssemblyLinearVelocity = Vector3.zero
+		end
+		if ball and ball.Parent then
+			if congelouBola and _G.ReleaseBallFromQTE then
+				_G.ReleaseBallFromQTE()
+			else
+				ball.Anchored = false
+			end
+		end
+		_G.HissatsuCutsceneActive = nil
+	end)
+	return duration
+end
+
 -- ⚠️ v103 — CUTSCENE DE DEFESA. PEDIDO: "a Hissatsu de GK e de defensor
 -- precisa sair instantaneamente com a colisão na hitbox, e a cutscene da
 -- defesa vai acontecer se a bola colidir com essa hitbox." Chamada pelo

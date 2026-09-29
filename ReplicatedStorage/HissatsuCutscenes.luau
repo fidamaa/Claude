@@ -2319,4 +2319,163 @@ Cutscenes.DefesaPorNome = {
 	["Soco Explosivo"] = "Defesa_SocoExplosivo",
 }
 
+-- ============================================================
+-- 🧩 FLOW DO ISAGI — cena de ativação (⚠️ v113)
+-- ============================================================
+-- PEDIDO: "flows com cutscene de anime de verdade, 10-15 segundos: Isagi
+-- devorando o Rin e o Shidou". Pelo vídeo ("Isagi beats Shidou and Rin",
+-- quadros a cada 0,2s):
+--   32.0-33.4  ele no meio de um redemoinho de PEÇAS de quebra-cabeça (P&B);
+--   33.8-38.2  close do rosto rindo, em P&B; buracos de peça aparecem na
+--              bochecha e o olho fica VERDE;
+--   39.2-40.2  um rastro de luz verde sai do olho;
+--   40.4-42.6  ele se desfaz em partículas e dispara correndo;
+--   65.0-70.6  o Rin e o Shidou saltam dos lados, ele salta no meio;
+--   72.4-73.6  EXPLOSÃO verde no pé — ele "devora" os dois;
+--   73.8-76.2  no ar, chamas verdes saindo da cabeça, olhos azuis acesos,
+--              câmera de baixo, riscos verdes.
+-- O Rin e o Shidou são sombras (verde-água e rosa). Não mexe na bola.
+local FI = {}
+Cutscenes.Flow_Isagi = FI
+FI.Motor = "V2"
+FI.Efeitos = "FlowIsagi"
+FI.KickFoot = "Right"
+FI.Duration = 12
+FI.ImpactTime = 11.3 -- o clarão final
+FI.ColarNoPe = false
+FI.TitleText = "FLOW · ISAGI YOICHI"
+FI.Tema = {
+	Titulo = { rgb(255, 255, 255), rgb(150, 255, 120), rgb(40, 170, 90) },
+	Contorno = rgb(5, 25, 15), Flash = rgb(200, 255, 200),
+	Tint = rgb(235, 245, 240), Saturation = 0, Contrast = 0.2, Brightness = -0.02,
+}
+FI.Phases = {
+	Pecas = { 0, 1.6 }, Rosto = { 1.6, 4.2 }, Olho = { 4.2, 5.0 }, Corre = { 5.0, 6.4 },
+	Rivais = { 6.2, 8.4 }, Devora = { 8.4, 9.4 }, Flow = { 9.4, 12 },
+	Kick = { 10.8, FI.ImpactTime }, Impact = { FI.ImpactTime, FI.Duration },
+}
+local FI_ROOT = {
+	{ 0, V3(0, 0, 0) }, { 5.0, V3(0, 0, 0) }, { 6.4, V3(0, -0.3, -12) },
+	{ 6.8, V3(0, -0.8, -12.5) }, -- agacha pro salto
+	{ 7.6, V3(0, 4.5, -14) }, { 8.4, V3(0, 5, -14) }, { 9.4, V3(0, 5.2, -14) },
+	{ 11.3, V3(0, 6.2, -15) }, { 12, V3(0, 6.2, -15) },
+}
+-- rolagem/inclinação no voleio final (como no 73.8s)
+local FI_ROLL = { { 0, 0 }, { 9.4, 0 }, { 10.2, -28 }, { 12, -32 } }
+local FI_PITCH = { { 0, 0 }, { 5.0, 0 }, { 5.4, -12 }, { 6.4, -12 }, { 6.8, 0 }, { 9.4, 0 }, { 10.2, 12 }, { 12, 14 } }
+function FI.RootPosition(t) return sample(FI_ROOT, t) end
+function FI.RootCFrame(t)
+	return CFrame.new(FI.RootPosition(t)) * CFrame.Angles(rad(sample(FI_PITCH, t)), 0, rad(sample(FI_ROLL, t)))
+end
+function FI.BallPosition(_t, s) return s or V3(0, -2.3, -1.8) end
+function FI.BallVisible(t) return t < 0.05 end
+function FI.BallSpin() return 0 end
+
+local FI_POSE = {
+	{ 0.00, {} },
+	-- cabeça baixa no redemoinho, depois ergue
+	{ 0.40, { Root = { -4, 0, 0 }, Neck = { -28, 0, 0 }, RShoulder = { -6, 0, 10 }, LShoulder = { -6, 0, -10 } } },
+	{ 1.40, { Root = { -4, 0, 0 }, Neck = { -20, 0, 0 }, RShoulder = { -6, 0, 10 }, LShoulder = { -6, 0, -10 } } },
+	{ 1.80, { Root = { -8, 0, 0 }, Neck = { 6, 0, 0 }, RShoulder = { -10, 0, 12 }, LShoulder = { -10, 0, -12 } } },
+	{ 4.20, { Root = { -10, 0, 0 }, Neck = { 8, -8, 0 }, RShoulder = { -10, 0, 12 }, LShoulder = { -10, 0, -12 } } },
+	-- vira o rosto: o rastro do olho corre pro lado
+	{ 5.00, { Root = { -14, 0, 0 }, Neck = { 4, 35, 0 }, RShoulder = { -30, 0, 15 }, LShoulder = { 20, 0, -15 },
+		RHip = { 20, 0, 0 }, LHip = { -10, 0, 0 } } },
+	-- (5.0-6.4: corrida, calculada abaixo)
+	-- agacha e salta entre os dois
+	{ 6.80, { Root = { -22, 0, 0 }, Neck = { 30, 0, 0 }, RHip = { 65, 0, 8 }, LHip = { 65, 0, -8 },
+		RShoulder = { -40, 0, 25 }, LShoulder = { -40, 0, -25 } } },
+	{ 7.60, { Root = { 6, 0, 0 }, Neck = { 15, 0, 0 }, RHip = { -35, 0, 0 }, LHip = { 45, 0, 0 },
+		RShoulder = { 20, 0, 80 }, LShoulder = { 20, 0, -80 } } },
+	{ 8.40, { Root = { 6, 0, 0 }, Neck = { 12, 0, 0 }, RHip = { -40, 0, 0 }, LHip = { 40, 0, 0 },
+		RShoulder = { 25, 0, 85 }, LShoulder = { 25, 0, -85 } } },
+	-- devora: abre os braços, cabeça pra trás
+	{ 8.80, { Root = { 12, 0, 0 }, Neck = { 28, 0, 0 }, RHip = { -20, 0, 6 }, LHip = { 20, 0, -6 },
+		RShoulder = { 45, 0, 115 }, LShoulder = { 45, 0, -115 } } },
+	{ 9.40, { Root = { 10, 0, 0 }, Neck = { 22, 0, 0 }, RHip = { -30, 0, 6 }, LHip = { 25, 0, -6 },
+		RShoulder = { 40, 0, 110 }, LShoulder = { 40, 0, -110 } } },
+	-- no ar, arma o voleio (perna direita pra trás)
+	{ 10.80, { Neck = { -10, 0, 0 }, RHip = { -55, 0, 5 }, LHip = { 35, 0, -5 },
+		RShoulder = { -30, 0, 70 }, LShoulder = { 60, 0, -80 } } },
+	-- VOLEIO
+	{ FI.ImpactTime, { Neck = { -12, 0, 0 }, RHip = { 100, 0, -5 }, LHip = { -25, 0, 0 },
+		RShoulder = { -40, 0, 65 }, LShoulder = { 60, 0, -75 } } },
+	{ 12.00, { Neck = { -10, 0, 0 }, RHip = { 105, 0, -5 }, LHip = { -28, 0, 0 },
+		RShoulder = { -40, 0, 65 }, LShoulder = { 60, 0, -75 } } },
+}
+function FI.Pose(t)
+	if t >= 5.0 and t < 6.4 then
+		-- corrida inclinada (braço oposto à perna), 3 passadas por segundo
+		local w = math.sin((t - 5.0) * math.pi * 2 * 3)
+		local entra = smooth(phase(t, 5.0, 5.2))
+		return {
+			Root = { -18 * entra, 0, 0 }, Neck = { 14, 0, 0 },
+			RHip = { 50 * w * entra, 0, 0 }, LHip = { -50 * w * entra, 0, 0 },
+			RShoulder = { -45 * w * entra, 0, 12 }, LShoulder = { 45 * w * entra, 0, -12 },
+		}
+	end
+	return samplePose(FI_POSE, t)
+end
+
+-- Rin (1, à esquerda) e Shidou (2, à direita): sombras que saltam e são devoradas
+local FI_RIVAL_X = { [1] = -4.2, [2] = 4.2 }
+local function fiRivalPos(i, t)
+	local x = FI_RIVAL_X[i]
+	local sobe = easeOut(phase(t, 6.55, 7.35))
+	return V3(x, -0.2 + 4.8 * sobe + math.sin(t * 3 + i) * 0.1, -15.5)
+end
+FI.Clones = {
+	Quantidade = 2,
+	Cor = rgb(40, 200, 180),
+	CFrame = function(i, t)
+		local p = fiRivalPos(i, t)
+		return CFrame.lookAt(p, V3(0, p.Y, -14)) * CFrame.Angles(0, 0, rad(i == 1 and 10 or -10))
+	end,
+	Pose = function(i, t)
+		local chute = smooth(phase(t, 6.6, 7.4))
+		local pose = {
+			Root = { -10 + 20 * chute, 0, 0 }, Neck = { 10, 0, 0 },
+			RHip = { 110 * chute, 0, 0 }, LHip = { -25 * chute, 0, 0 },
+			RShoulder = { 20, 0, 70 * chute + 10 }, LShoulder = { 20, 0, -70 * chute - 10 },
+		}
+		return i == 2 and espelharPose(pose) or pose
+	end,
+	Alpha = function(_i, t)
+		if t < 6.2 then return 0 end
+		if t < 6.5 then return smooth(phase(t, 6.2, 6.5)) end
+		if t < 8.55 then return 1 end
+		return 1 - smooth(phase(t, 8.55, 9.1))
+	end,
+}
+
+function FI.Camera(t, rootPos)
+	local cabeca = rootPos + V3(0, 1.5, 0)
+	if t < 1.6 then
+		-- em volta dele, de baixo, as peças girando
+		local a = 0.4 + t * 0.9
+		return V3(math.sin(a) * 7.5, 0.6, -math.cos(a) * 7.5), V3(0, 0.6, 0), 55
+	elseif t < 4.2 then
+		-- close no rosto (buracos de peça, olho verde)
+		local u = smooth(phase(t, 1.6, 4.2))
+		-- (um pouco de baixo: de cima o cabelo tampava o rosto)
+		return cabeca + V3(0.4, -0.45, -4.4):Lerp(V3(0.3, -0.35, -3.4), u), cabeca + V3(0, 0.05, 0), 36
+	elseif t < 5.0 then
+		-- de lado, o rastro verde saindo do olho
+		return cabeca + V3(-2.8, 0.2, -1.6), cabeca + V3(0.8, 0, 0.6), 48
+	elseif t < 6.4 then
+		-- acompanhando a corrida, rente ao chão
+		return rootPos + V3(6.5, -0.6, 0.8), rootPos + V3(0, 0.2, -2.5), 60
+	elseif t < 8.4 then
+		-- de frente e baixo: os três no ar
+		local u = smooth(phase(t, 6.4, 8.4))
+		return V3(0, 0.3, -30):Lerp(V3(0, 2.2, -25.5), u), V3(0, 3, -14.5), 55
+	elseif t < 9.4 then
+		return V3(0, 2.6, -24), V3(0, 4.6, -14.5), 58
+	end
+	-- de baixo, ele no ar com as chamas verdes (73.8-76.2s)
+	local u = smooth(phase(t, 9.4, 12))
+	return rootPos + V3(3, -4.8, -4.5):Lerp(V3(1.8, -4.2, -3.6), u), rootPos + V3(0, 0.9, 0), 62
+end
+
+
 return Cutscenes

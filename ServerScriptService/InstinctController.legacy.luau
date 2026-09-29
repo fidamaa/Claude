@@ -567,19 +567,26 @@ Remotes.ActivateInstinctMode.OnServerEvent:Connect(function(player)
 	FlowsUsados[player] = true
 	player:SetAttribute("FlowUsado", true)
 	InstinctCharge[player] = 0
-	InstinctModeState[player] = { ExpiresAt = tick() + INSTINCT_MODE_DURATION }
-	Remotes.InstinctModeFeedback:FireClient(player, "ModeActivated", INSTINCT_MODE_DURATION)
 	Remotes.InstinctModeFeedback:FireClient(player, "MeterUpdate", 0)
-	-- ⚠️ v110 — FLOW ESCOLHIDO NA LOJA (Blue Lock): cada Flow soma atributos
-	-- e/ou velocidade enquanto dura + a cena de ativação (ver CosmeticosServer).
-	if _G.AtivarFlow then _G.AtivarFlow(player, INSTINCT_MODE_DURATION) end
-
-	task.delay(INSTINCT_MODE_DURATION, function()
-		local state = InstinctModeState[player]
-		if state and tick() >= state.ExpiresAt then
-			InstinctModeState[player] = nil
-			Remotes.InstinctModeFeedback:FireClient(player, "ModeEnded")
-		end
+	-- ⚠️ v113: primeiro a CENA do Flow (congela a partida, ver PulseController
+	-- _G.TocarCenaFlow); os 9s de Flow só começam quando ela acaba
+	local cena = _G.TocarCenaFlow and _G.TocarCenaFlow(player) or 0
+	-- trava contra apertar de novo durante a cena
+	InstinctModeState[player] = { ExpiresAt = tick() + cena + INSTINCT_MODE_DURATION }
+	task.delay(cena, function()
+		if not player.Parent then return end
+		InstinctModeState[player] = { ExpiresAt = tick() + INSTINCT_MODE_DURATION }
+		Remotes.InstinctModeFeedback:FireClient(player, "ModeActivated", INSTINCT_MODE_DURATION)
+		-- ⚠️ v110 — FLOW ESCOLHIDO NA LOJA (Blue Lock): cada Flow soma atributos
+		-- e/ou velocidade enquanto dura + a cena de ativação (ver CosmeticosServer).
+		if _G.AtivarFlow then _G.AtivarFlow(player, INSTINCT_MODE_DURATION) end
+		task.delay(INSTINCT_MODE_DURATION, function()
+			local state = InstinctModeState[player]
+			if state and tick() >= state.ExpiresAt then
+				InstinctModeState[player] = nil
+				Remotes.InstinctModeFeedback:FireClient(player, "ModeEnded")
+			end
+		end)
 	end)
 end)
 
