@@ -4061,4 +4061,183 @@ function E.FlowNagi(ctx)
 end
 
 
+-- ============================================================
+-- 🦖 FLOW DO RIN (⚠️ v113) — ver a coreografia Flow_Rin
+-- ============================================================
+-- Palco escuro que fica VERMELHO no pisão; o dinossauro de brinquedo verde
+-- (corpo, cabeça, espinhos, rabo, patas) que estoura em pedaços; a LÍNGUA pra
+-- fora; os olhos em ESPIRAL (anéis verde-água girando, miolo rosa); fumaça
+-- vermelha; aura verde-água na corrida e no final.
+function E.FlowRin(ctx)
+	local pasta, spec = ctx.Pasta, ctx.Spec
+	local VERDE_AGUA, ROSA, VERMELHO = rgb(40, 230, 210), rgb(255, 90, 150), rgb(210, 20, 35)
+	local character = ctx.Character
+	local head = character:FindFirstChild("Head")
+	local ph = spec.Phases
+	local chao = ctx.ChaoY
+
+	local sala = salaEscura(pasta, "SalaFlowRin", rgb(10, 8, 10), ctx.Inicio * CFrame.new(0, 20, -9), 140, chao + 0.1 - 20)
+	sala.Transparency = 0
+	local cc = Instance.new("ColorCorrectionEffect")
+	cc.Name = "FlowRinCor"
+	cc.Parent = workspace.CurrentCamera
+	pasta.Destroying:Connect(function() cc:Destroy() end)
+
+	-- ===== o dinossauro de brinquedo =====
+	local BASE = V3(0, chao, -2.2)
+	local ESC = 0.62 -- tamanho do brinquedo
+	local VERDE_TOY, BRANCO = rgb(80, 170, 90), rgb(235, 235, 220)
+	local dino = {}
+	local function peca(nome, forma, tam, cor, rel)
+		local p
+		if forma == "Cunha" then
+			p = Instance.new("WedgePart")
+			p.Name = nome
+			p.Anchored, p.CanCollide, p.CanQuery, p.CanTouch, p.CastShadow = true, false, false, false, false
+			p.Parent = pasta
+		else
+			p = parte(pasta, nome, forma and { Shape = forma } or nil)
+		end
+		p.Material = Enum.Material.SmoothPlastic
+		p.Color = cor
+		p.Size = tam * ESC
+		p.Transparency = 0
+		local rng = Random.new(#dino + 3)
+		rel = CFrame.new(rel.Position * ESC) * (rel - rel.Position)
+		table.insert(dino, { Parte = p, Rel = rel,
+			Vel = V3(rng:NextNumber(-9, 9), rng:NextNumber(8, 16), rng:NextNumber(-9, 4)),
+			Giro = V3(rng:NextNumber(-12, 12), rng:NextNumber(-12, 12), rng:NextNumber(-12, 12)) })
+		return p
+	end
+	-- (de frente pra ele: a cabeça do bicho aponta pra +Z)
+	peca("DinoCorpo", Enum.PartType.Ball, V3(1.6, 1.4, 2.4), VERDE_TOY, CFrame.new(0, 1.1, 0))
+	peca("DinoBarriga", Enum.PartType.Ball, V3(1.2, 1.1, 1.8), rgb(200, 210, 150), CFrame.new(0, 0.95, 0.25))
+	peca("DinoCabeca", Enum.PartType.Ball, V3(1.1, 1, 1.3), VERDE_TOY, CFrame.new(0, 2.1, 1.05))
+	peca("DinoFocinho", nil, V3(0.7, 0.45, 0.7), VERDE_TOY, CFrame.new(0, 1.95, 1.65))
+	peca("DinoOlhoD", Enum.PartType.Ball, V3(0.22, 0.22, 0.22), rgb(20, 20, 20), CFrame.new(0.3, 2.3, 1.55))
+	peca("DinoOlhoE", Enum.PartType.Ball, V3(0.22, 0.22, 0.22), rgb(20, 20, 20), CFrame.new(-0.3, 2.3, 1.55))
+	peca("DinoRabo", "Cunha", V3(0.6, 0.6, 1.8), VERDE_TOY, CFrame.new(0, 0.8, -1.9) * CFrame.Angles(0, math.pi, 0))
+	for i = 1, 5 do
+		peca("DinoEspinho" .. i, "Cunha", V3(0.15, 0.5 - math.abs(i - 3) * 0.06, 0.4), BRANCO, CFrame.new(0, 1.85, 0.8 - i * 0.38))
+	end
+	for i, p in ipairs({ { 0.5, 0.6 }, { -0.5, 0.6 }, { 0.5, -0.6 }, { -0.5, -0.6 } }) do
+		peca("DinoPata" .. i, nil, V3(0.45, 0.6, 0.5), VERDE_TOY, CFrame.new(p[1], 0.3, p[2]))
+	end
+
+	-- ===== língua e olhos em espiral =====
+	local lingua = parte(pasta, "LinguaRin", { Shape = Enum.PartType.Cylinder, Color = rgb(230, 95, 115), Material = Enum.Material.SmoothPlastic })
+	local olhos = {}
+	for i = 1, 2 do
+		olhos[i] = {
+			Fora = parte(pasta, "OlhoFora" .. i, { Shape = Enum.PartType.Cylinder, Color = VERDE_AGUA }),
+			Meio = parte(pasta, "OlhoMeio" .. i, { Shape = Enum.PartType.Cylinder, Color = rgb(10, 60, 70) }),
+			Dentro = parte(pasta, "OlhoDentro" .. i, { Shape = Enum.PartType.Cylinder, Color = VERDE_AGUA }),
+			Miolo = parte(pasta, "OlhoMiolo" .. i, { Shape = Enum.PartType.Ball, Color = ROSA }),
+		}
+	end
+
+	-- fumaça vermelha e aura verde-água
+	local fumacaFx = parte(pasta, "FumacaRin")
+	fumacaFx.Size = V3(30, 2, 30)
+	local fumaca = emissor(fumacaFx, {
+		Textura = TEX.Fumaca, Cor = cores({ { 0, rgb(120, 0, 10) }, { 1, rgb(30, 0, 5) } }), Brilho = 0.15,
+		Tamanho = numeros({ { 0, 4 }, { 1, 9 } }), Transp = numeros({ { 0, 0.4 }, { 1, 1 } }), Vida = { 1, 1.8 },
+		Vel = { 1, 3 }, Acel = V3(0, 2, 0), Forma = Enum.ParticleEmitterShape.Box, Estilo = Enum.ParticleEmitterShapeStyle.Volume,
+	})
+	local auras = {}
+	local function aura(pai, tam)
+		if not pai then return end
+		table.insert(auras, emissor(pai, {
+			Textura = TEX.Fogo, Cor = cores({ { 0, rgb(210, 255, 250) }, { 0.4, VERDE_AGUA }, { 1, rgb(0, 60, 60) } }), Brilho = 1,
+			Tamanho = numeros({ { 0, tam }, { 1, 0.2 } }), Transp = numeros({ { 0, 0.2 }, { 1, 1 } }), Vida = { 0.35, 0.6 },
+			Vel = { 2, 5 }, Spread = 30, Direcao = Enum.NormalId.Top, Acel = ctx.Inicio:VectorToWorldSpace(V3(0, 3, 8)),
+		}))
+	end
+	aura(character:FindFirstChild("Torso") or character:FindFirstChild("UpperTorso"), 2.4)
+	aura(head, 1.7)
+	local contorno = Instance.new("Highlight")
+	contorno.FillTransparency = 1
+	contorno.OutlineColor = VERDE_AGUA
+	contorno.DepthMode = Enum.HighlightDepthMode.Occluded
+	contorno.Adornee = character
+	contorno.Parent = pasta
+	local luzRosto = parte(pasta, "LuzRostoRin")
+	local luzRostoL = luz(luzRosto, rgb(255, 225, 225), 0, 1.5)
+
+	local pisou = false
+	local efeitos = {}
+	function efeitos.Quadro(t, _dt, s)
+		local vermelho = smooth(phase(t, ph.Pisao[1], ph.Pisao[1] + 0.25))
+		sala.Color = rgb(10, 8, 10):Lerp(rgb(95, 6, 14), vermelho)
+		cc.TintColor = Color3.new(1, 1, 1):Lerp(rgb(255, 205, 205), vermelho)
+		cc.Contrast = 0.1 + 0.2 * vermelho
+		contorno.OutlineTransparency = t >= 5.6 and 0 or 1
+
+		-- o dinossauro: inteiro até o pisão, depois os pedaços voam
+		-- de perfil pra câmera (a silhueta do bicho)
+		local base = ctx.Inicio * CFrame.new(BASE) * CFrame.Angles(0, math.rad(90), 0)
+		local dt = math.max(t - ph.Pisao[1], 0)
+		for _, d in ipairs(dino) do
+			local cf = base * d.Rel
+			if t >= ph.Pisao[1] then
+				local p = cf.Position + ctx.Inicio:VectorToWorldSpace(d.Vel) * dt + V3(0, -30 * dt * dt, 0)
+				p = V3(p.X, math.max(p.Y, ctx.Mundo(V3(0, chao, 0)).Y + 0.2), p.Z)
+				cf = CFrame.new(p) * (cf - cf.Position) * CFrame.Angles(d.Giro.X * dt, d.Giro.Y * dt, d.Giro.Z * dt)
+			end
+			d.Parte.CFrame = cf
+			d.Parte.Transparency = t >= ph.Pisao[1] + 0.9 and 1 or 0
+		end
+		if not pisou and t >= ph.Pisao[1] then
+			pisou = true
+			ctx.Flash(VERMELHO, 0.1, 0.35)
+			ctx.Tremer(1.1, 0.4)
+			local p = ctx.Mundo(BASE + V3(0, 0.2, 0))
+			onda(pasta, p, Vector3.yAxis, VERMELHO, 22, 0.35, 0.4)
+			anelVazado(pasta, p, Vector3.yAxis, rgb(255, 150, 150), 1, 16, 0.4, 0.3)
+		end
+
+		-- língua e olhos
+		if head then
+			local lingOn = (t >= 2.1 and t < 5.6) or t >= 9.2
+			-- disco fino pendurado pra fora da boca (de lado: o eixo do cilindro é X)
+			lingua.Size = V3(0.05, 0.24, 0.2)
+			lingua.CFrame = head.CFrame * CFrame.new(0.05, -head.Size.Y * 0.36, -head.Size.Z / 2 - 0.06)
+				* CFrame.Angles(math.rad(-20), 0, 0) * CFrame.Angles(0, math.rad(90), 0)
+			lingua.Transparency = lingOn and 0 or 1
+			local o = FlowCenaOlhos(head)
+			local espiral = (t >= 2.4 and t < 5.6) or t >= 9.2
+			for i, e in ipairs(olhos) do
+				local cf = head.CFrame * CFrame.new(o[i] + V3(0, 0, -0.02)) * CFrame.Angles(0, math.rad(90), 0)
+				local g = CFrame.Angles(t * 8 * (i == 1 and 1 or -1), 0, 0)
+				e.Fora.Size = V3(0.03, 0.3, 0.3)
+				e.Meio.Size = V3(0.035, 0.22, 0.22)
+				e.Dentro.Size = V3(0.04, 0.14, 0.14)
+				e.Miolo.Size = Vector3.one * 0.08
+				e.Fora.CFrame = cf * g
+				e.Meio.CFrame = cf * g * CFrame.new(-0.005, 0.02, 0)
+				e.Dentro.CFrame = cf * g * CFrame.new(-0.01, -0.02, 0.01)
+				e.Miolo.CFrame = cf * CFrame.new(-0.02, 0, 0)
+				local tr = espiral and 0 or 1
+				e.Fora.Transparency, e.Meio.Transparency, e.Dentro.Transparency, e.Miolo.Transparency = tr, tr, tr, tr
+			end
+			luzRosto.CFrame = head.CFrame * CFrame.new(0, -0.2, -2.6)
+			luzRostoL.Range = ((t >= 2 and t < 4.2) or t >= 9) and 7 or 0
+		end
+
+		fumacaFx.CFrame = ctx.Inicio * CFrame.new(0, chao + 1, s.RootLocal.Z - 4)
+		fumaca.Enabled = t >= ph.Pisao[1]
+		fumaca.Rate = 30
+		for _, a in ipairs(auras) do
+			a.Enabled = t >= 5.6
+			a.Rate = 80
+		end
+	end
+	function efeitos.Impacto(_s)
+		ctx.Flash(rgb(255, 200, 200), 0.2, 0.4)
+		onda(pasta, ctx.Root.Position, ctx.Inicio.LookVector, VERDE_AGUA, 20, 0.35, 0.3)
+	end
+	return efeitos
+end
+
+
 return E

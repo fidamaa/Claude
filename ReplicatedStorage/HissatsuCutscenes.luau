@@ -2686,4 +2686,122 @@ function FN.Camera(t, rootPos)
 end
 
 
+-- ============================================================
+-- 🦖 FLOW DO RIN — cena de ativação (⚠️ v113)
+-- ============================================================
+-- PEDIDO: "Rin com a língua pra fora quebrando o brinquedo (igual a moldura
+-- do Rin)". Pelo vídeo ("Rin enters the flow and destroys all opponents",
+-- visão geral a cada 5s): o BRINQUEDO de dinossauro verde no escuro (40s); o
+-- sorriso insano com o olho em ESPIRAL verde-água e rosa, fundo vermelho
+-- (50-65s); os adversários vistos como fracos, o mundo VERMELHO com fumaça
+-- (80-95s, 185-205s); ele correndo com a aura verde-água (225s); o olho aceso
+-- de perto (230s).
+--   0.0-2.0  ele de pé, olhando o brinquedo no chão;
+--   2.0-4.2  close: língua pra fora, olho em espiral;
+--   4.2-5.6  ergue o pé e PISA: o brinquedo estoura, o mundo fica vermelho;
+--   5.6-9.0  corre; duas sombras de adversário caem quando ele passa;
+--   9.0-12   close final rindo, língua, aura verde-água.
+local FR = {}
+Cutscenes.Flow_Rin = FR
+FR.Motor = "V2"
+FR.Efeitos = "FlowRin"
+FR.KickFoot = "Right"
+FR.Duration = 12
+FR.ImpactTime = 11.4 -- clarão final (o pisão tem o próprio tremor/clarão)
+FR.ColarNoPe = false
+FR.TitleText = "FLOW · ITOSHI RIN"
+FR.Tema = {
+	Titulo = { rgb(230, 255, 250), rgb(20, 200, 180), rgb(10, 80, 80) },
+	Contorno = rgb(40, 0, 5), Flash = rgb(255, 80, 80),
+	Tint = rgb(255, 245, 245), Saturation = 0.1, Contrast = 0.25, Brightness = -0.03,
+}
+FR.Phases = {
+	Olha = { 0, 2 }, Rosto = { 2, 4.2 }, Pisa = { 4.2, 5.6 }, Pisao = { 4.85, 4.85 },
+	Corre = { 5.6, 9 }, Final = { 9, 12 }, Kick = { 11, FR.ImpactTime }, Impact = { FR.ImpactTime, FR.Duration },
+}
+local FR_ROOT = {
+	{ 0, V3(0, 0, 0) }, { 4.2, V3(0, 0, 0) }, { 4.6, V3(0, 0.3, -0.6) }, { 4.85, V3(0, -0.4, -1.2) },
+	{ 5.6, V3(0, -0.2, -1.4) }, { 6.0, V3(0, -0.3, -2.4) }, { 9.0, V3(0, -0.3, -17) }, { 9.4, V3(0, 0, -17.6) }, { 12, V3(0, 0, -17.6) },
+}
+function FR.RootPosition(t) return sample(FR_ROOT, t) end
+function FR.RootCFrame(t) return CFrame.new(FR.RootPosition(t)) end
+function FR.BallPosition(_t, s) return s or V3(0, -2.3, -1.8) end
+function FR.BallVisible(t) return t < 0.05 end
+function FR.BallSpin() return 0 end
+
+-- cabeça tombada de lado, olhar de cima pra baixo (a pose da moldura)
+local FR_INSANO = { Root = { -8, 0, 0 }, Neck = { -6, 0, 22 }, RShoulder = { -8, 0, 12 }, LShoulder = { -8, 0, -12 } }
+local FR_POSE = {
+	{ 0.00, {} },
+	{ 1.00, { Root = { -6, 0, 0 }, Neck = { -30, 0, 10 }, RShoulder = { -6, 0, 10 }, LShoulder = { -6, 0, -10 } } }, -- olha o brinquedo
+	{ 2.00, FR_INSANO },
+	{ 4.20, FR_INSANO },
+	{ 4.60, { Root = { 6, 0, 0 }, Neck = { -25, 0, 10 }, RHip = { 85, 0, 0 }, RShoulder = { 30, 0, 50 }, LShoulder = { 30, 0, -50 } } }, -- ergue o pé
+	{ 4.85, { Root = { -18, 0, 0 }, Neck = { -30, 0, 10 }, RHip = { 25, 0, 0 }, LHip = { -10, 0, 0 },
+		RShoulder = { -20, 0, 60 }, LShoulder = { -20, 0, -60 } } }, -- PISA
+	{ 5.60, { Root = { -16, 0, 0 }, Neck = { -10, 0, 15 }, RHip = { 20, 0, 0 }, RShoulder = { -15, 0, 40 }, LShoulder = { -15, 0, -40 } } },
+	-- (5.6-9: corrida, calculada abaixo)
+	{ 9.40, FR_INSANO },
+	{ 12.00, { Root = { -10, 0, 0 }, Neck = { -8, 0, 26 }, RShoulder = { -10, 0, 14 }, LShoulder = { -10, 0, -14 } } },
+}
+function FR.Pose(t)
+	if t >= 5.8 and t < 9 then
+		local w = math.sin((t - 5.8) * math.pi * 2 * 3.2)
+		local entra = smooth(phase(t, 5.8, 6.1)) * (1 - smooth(phase(t, 8.8, 9)))
+		return {
+			Root = { -20 * entra, 0, 0 }, Neck = { 8, 0, 12 },
+			RHip = { 55 * w * entra, 0, 0 }, LHip = { -55 * w * entra, 0, 0 },
+			RShoulder = { -50 * w * entra, 0, 14 }, LShoulder = { 50 * w * entra, 0, -14 },
+		}
+	end
+	return samplePose(FR_POSE, t)
+end
+
+-- dois adversários (sombras vermelhas) que ele atravessa e caem pra trás
+local FR_ADV = { [1] = V3(-2.4, 0, -8), [2] = V3(2.4, 0, -13.5) }
+local FR_QUEDA = { [1] = 7.1, [2] = 8.2 }
+FR.Clones = {
+	Quantidade = 2,
+	Cor = rgb(90, 10, 16), -- escuras (no fundo vermelho), com contorno
+	CFrame = function(i, t)
+		local p = FR_ADV[i]
+		local cai = smooth(phase(t, FR_QUEDA[i], FR_QUEDA[i] + 0.45))
+		return CFrame.new(p + V3(0, -1.6 * cai, 0)) * CFrame.Angles(0, math.pi, 0) * CFrame.Angles(rad(-80 * cai), 0, rad((i == 1 and 15 or -15) * cai))
+	end,
+	Pose = function(i, t)
+		local cai = smooth(phase(t, FR_QUEDA[i], FR_QUEDA[i] + 0.45))
+		return { Root = { 0, 0, 0 }, Neck = { 20 * cai, 0, 0 }, RShoulder = { 60 * cai, 0, 40 * cai + 5 }, LShoulder = { 60 * cai, 0, -40 * cai - 5 },
+			RHip = { 30 * cai, 0, 0 }, LHip = { 10 * cai, 0, 0 } }
+	end,
+	Alpha = function(_i, t)
+		if t < 5.8 then return 0 end
+		if t < 6.1 then return smooth(phase(t, 5.8, 6.1)) end
+		if t < 8.9 then return 1 end
+		return 1 - smooth(phase(t, 8.9, 9.2))
+	end,
+}
+
+function FR.Camera(t, rootPos)
+	local cabeca = rootPos + V3(0, 1.5, 0)
+	if t < 2 then
+		-- baixa, de frente: o brinquedo no chão e ele em pé atrás, olhando
+		local u = smooth(phase(t, 0, 2))
+		return V3(2.2, -0.6, -8.2):Lerp(V3(1.8, -0.7, -7.2), u), V3(0, -1.1, -1.6), 55
+	elseif t < 4.2 then
+		-- close: língua pra fora, olho em espiral
+		local u = smooth(phase(t, 2, 4.2))
+		return cabeca + V3(0.35, -0.35, -4.2):Lerp(V3(0.25, -0.3, -3.2), u), cabeca + V3(0, -0.05, 0), 36
+	elseif t < 5.6 then
+		-- de lado e baixo: o pisão
+		return V3(4.8, -2, -3.4), V3(0, -1.6, -2.2), 55
+	elseif t < 9 then
+		-- de lado, acompanhando: os dois caindo quando ele passa (de frente, as
+		-- sombras ficavam coladas na câmera)
+		return rootPos + V3(9.5, 0.4, -3), rootPos + V3(0, 0.4, -3), 55
+	end
+	local u = smooth(phase(t, 9, 12))
+	return cabeca + V3(0.45, -0.35, -4.6):Lerp(V3(0.3, -0.3, -3.3), u), cabeca + V3(0, -0.05, 0), 38
+end
+
+
 return Cutscenes

@@ -702,6 +702,35 @@ local function tocarCutsceneV2(spec, chutador, inicio, bolaLocal, horarioServido
 	local ultimoT = 0
 	local conexao
 
+	-- ⚠️ v113: a bola tem os gomos em DECALS e um Highlight; esconder só a
+	-- peça deixava os pentágonos pretos flutuando (visto no Flow do Rin)
+	local enfeitesBola = {}
+	if ball then
+		for _, d in ipairs(ball:GetDescendants()) do
+			if d:IsA("Decal") or d:IsA("Highlight") or d:IsA("Trail") or d:IsA("BillboardGui") then
+				table.insert(enfeitesBola, d)
+			end
+		end
+	end
+	local enfeitesEscondidos = false
+	local function esconderEnfeitesDaBola(esconder)
+		if esconder == enfeitesEscondidos then return end
+		enfeitesEscondidos = esconder
+		for _, d in ipairs(enfeitesBola) do
+			if d.Parent then
+				if d:IsA("Decal") then
+					d.LocalTransparencyModifier = esconder and 1 or 0
+				elseif esconder then
+					d:SetAttribute("CenaEstavaLigado", d.Enabled)
+					d.Enabled = false
+				elseif d:GetAttribute("CenaEstavaLigado") ~= nil then
+					d.Enabled = d:GetAttribute("CenaEstavaLigado")
+					d:SetAttribute("CenaEstavaLigado", nil)
+				end
+			end
+		end
+	end
+
 	local function escreverPose(mapa, originais, pose)
 		for nome, junta in pairs(mapa) do
 			local ang = pose[nome]
@@ -729,6 +758,7 @@ local function tocarCutsceneV2(spec, chutador, inicio, bolaLocal, horarioServido
 		pasta:Destroy()
 		if ball and ball.Parent then
 			ball.LocalTransparencyModifier = 0
+			esconderEnfeitesDaBola(false)
 			if impactoFeito and efeitos and efeitos.Voo then
 				pcall(efeitos.Voo, ball, 3)
 			end
@@ -819,6 +849,7 @@ local function tocarCutsceneV2(spec, chutador, inicio, bolaLocal, horarioServido
 		if ball then
 			ball.CFrame = CFrame.new(bolaMundo) * CFrame.Angles(giroBola, giroBola * 0.6, 0)
 			ball.LocalTransparencyModifier = bolaVisivel and 0 or 1
+			esconderEnfeitesDaBola(not bolaVisivel)
 		end
 
 		-- título
