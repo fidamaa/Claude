@@ -229,6 +229,39 @@ local function esfera(pasta, nome, cor, material)
 	return parte(pasta, nome, { Shape = Enum.PartType.Ball, Color = cor, Material = material or Enum.Material.Neon })
 end
 
+-- ⚠️ v113 — "céu" fechado em volta da cena (espaço da Galáxia e da Queda
+-- Celestial). Era uma esfera com malha de escala NEGATIVA pra ser vista por
+-- dentro, mas o Roblox não desenha mais isso (na revisão a 0,2s o "espaço"
+-- mostrava o céu azul e o estádio). Agora são 6 placas Neon escuras: a face de
+-- dentro de cada uma aparece. Devolve um objeto em que `.Transparency = x`
+-- vale pras 6 (o resto do código continua igual). `piso` (opcional) = altura
+-- do chão da sala em relação ao centro (senão, -tamanho/2).
+local function salaEscura(pasta, nome, cor, cf, tamanho, piso)
+	local meia = tamanho / 2
+	local baixo = piso or -meia
+	local lados = {
+		{ V3(tamanho, 1, tamanho), V3(0, meia, 0) },
+		{ V3(tamanho, 0.2, tamanho), V3(0, baixo, 0) },
+		{ V3(1, tamanho, tamanho), V3(meia, 0, 0) },
+		{ V3(1, tamanho, tamanho), V3(-meia, 0, 0) },
+		{ V3(tamanho, tamanho, 1), V3(0, 0, meia) },
+		{ V3(tamanho, tamanho, 1), V3(0, 0, -meia) },
+	}
+	local placas = {}
+	for i, l in ipairs(lados) do
+		local p = parte(pasta, nome .. i, { Color = cor })
+		p.Size = l[1]
+		p.CFrame = cf * CFrame.new(l[2])
+		p.Transparency = 1
+		placas[i] = p
+	end
+	return setmetatable({ Placas = placas }, {
+		__newindex = function(_, k, v)
+			for _, p in ipairs(placas) do p[k] = v end
+		end,
+	})
+end
+
 -- Luz pontual numa parte
 local function luz(p, cor, alcance, brilho)
 	local l = Instance.new("PointLight")
@@ -1348,13 +1381,46 @@ function E.Galaxia(ctx)
 	-- 🌌 o espaço: esfera INVERTIDA (malha com escala negativa = dá pra ver de
 	-- dentro), estrelas, nebulosa e planetas
 	local centroEspaco = mundo(V3(0, spec.AlturaEspaco, -2))
-	local ceu = parte(pasta, "CeuGalaxia", { Material = Enum.Material.SmoothPlastic, Color = rgb(8, 6, 30) })
-	ceu.Size = V3(1, 1, 1)
-	ceu.CFrame = CFrame.new(centroEspaco)
-	local malha = Instance.new("SpecialMesh")
-	malha.MeshType = Enum.MeshType.Sphere
-	malha.Scale = V3(-240, -240, -240)
-	malha.Parent = ceu
+	-- ⚠️ v113 — pelo vídeo do IE3 a 0,2s (146.8s e 150.8s): o espaço é preto e a
+	-- TERRA fica embaixo deles. Sala escura com o chão rente ao gramado + a Terra
+	-- (com atmosfera e nuvens) saindo do chão.
+	local chaoSala = ctx.ChaoY + 0.1
+	local ceu = salaEscura(pasta, "CeuGalaxia", rgb(6, 5, 24), ctx.Inicio * CFrame.new(0, spec.AlturaEspaco, -2), 230,
+		chaoSala - spec.AlturaEspaco)
+	-- A TERRA vista de cima: um DISCO (cilindro deitado, que é bem redondo) com
+	-- uma borda de atmosfera brilhando, continentes e nuvens por cima. (Esfera
+	-- desse tamanho — Ball ou malha — renderiza com poucas faces e vira um
+	-- polígono/quadrado azul.)
+	local RT, TOPO = 26, chaoSala + 1.2
+	local deitado = CFrame.Angles(0, 0, math.rad(90))
+	local terra = parte(pasta, "Terra", { Shape = Enum.PartType.Cylinder, Material = Enum.Material.SmoothPlastic, Color = rgb(35, 95, 210) })
+	terra.Size = V3(1, RT * 2, RT * 2)
+	terra.CFrame = ctx.Inicio * CFrame.new(0, TOPO - 0.5, -2) * deitado
+	local atmosfera = parte(pasta, "TerraAtmosfera", { Shape = Enum.PartType.Cylinder, Color = rgb(120, 200, 255) })
+	atmosfera.Size = V3(0.8, RT * 2 + 3.5, RT * 2 + 3.5)
+	atmosfera.CFrame = ctx.Inicio * CFrame.new(0, TOPO - 0.8, -2) * deitado
+	local nuvensTerra = {}
+	local rngT = Random.new(5)
+	for i = 1, 16 do
+		local n = esfera(pasta, "TerraNuvem" .. i, rgb(240, 248, 255), Enum.Material.SmoothPlastic)
+		local ang = rngT:NextNumber(0, math.pi * 2)
+		local r = rngT:NextNumber(2, RT - 5)
+		n.Size = V3(rngT:NextNumber(3.5, 7), 0.5, rngT:NextNumber(1.8, 3.5))
+		n.CFrame = ctx.Inicio * CFrame.new(math.cos(ang) * r, TOPO + 0.6, math.sin(ang) * r - 2) * CFrame.Angles(0, rngT:NextNumber(0, 6), 0)
+		nuvensTerra[i] = n
+	end
+	-- continentes (verdes e areia), rentes à superfície, debaixo das nuvens
+	local continentes = {}
+	for i = 1, 7 do
+		local c = parte(pasta, "TerraContinente" .. i, { Shape = Enum.PartType.Cylinder, Material = Enum.Material.SmoothPlastic,
+			Color = i % 3 == 0 and rgb(190, 170, 110) or rgb(60, 140, 70) })
+		local ang = rngT:NextNumber(0, math.pi * 2)
+		local r = rngT:NextNumber(3, RT - 8)
+		local d = rngT:NextNumber(5, 10)
+		c.Size = V3(0.3, d, d * rngT:NextNumber(0.6, 1))
+		c.CFrame = ctx.Inicio * CFrame.new(math.cos(ang) * r, TOPO + 0.1, math.sin(ang) * r - 2) * CFrame.Angles(0, rngT:NextNumber(0, 6), 0) * deitado
+		continentes[i] = c
+	end
 	local estrelasPeca = parte(pasta, "Estrelas")
 	estrelasPeca.Size = V3(180, 120, 180)
 	estrelasPeca.CFrame = CFrame.new(centroEspaco)
@@ -1483,6 +1549,12 @@ function E.Galaxia(ctx)
 		-- o espaço
 		local espaco = smooth(phase(t, ph.Space[1], ph.Space[1] + 0.45)) * (1 - smooth(phase(t, ph.Space[2], spec.Duration)))
 		ceu.Transparency = 1 - espaco
+		-- a Terra só aparece quando a mão já passou do topo dela (ela sai do chão)
+		local vistaTerra = math.min(espaco, smooth(phase(t, 1.7, 2.0)))
+		terra.Transparency = 1 - vistaTerra
+		atmosfera.Transparency = 1 - vistaTerra * 0.55
+		for _, n in ipairs(nuvensTerra) do n.Transparency = 1 - vistaTerra * 0.85 end
+		for _, c in ipairs(continentes) do c.Transparency = 1 - vistaTerra end
 		for _, pl in ipairs(planetas) do
 			pl.Parte.Transparency = 1 - espaco
 			if pl.Anel then pl.Anel.Transparency = 1 - espaco * 0.6 end
@@ -1993,13 +2065,7 @@ function E.QuedaCelestial(ctx)
 	})
 	-- o ESPAÇO lá no alto (mesma esfera invertida da Galáxia)
 	local centro = mundo(spec.CentroEspaco)
-	local ceu = parte(pasta, "CeuQueda", { Material = Enum.Material.SmoothPlastic, Color = rgb(8, 6, 30) })
-	ceu.Size = V3(1, 1, 1)
-	ceu.CFrame = CFrame.new(centro)
-	local malha = Instance.new("SpecialMesh")
-	malha.MeshType = Enum.MeshType.Sphere
-	malha.Scale = V3(-200, -200, -200)
-	malha.Parent = ceu
+	local ceu = salaEscura(pasta, "CeuQueda", rgb(6, 5, 24), CFrame.new(centro) * ctx.Inicio.Rotation, 200) -- ⚠️ v113 (ver salaEscura)
 	local estrelasPeca = parte(pasta, "EstrelasQueda")
 	estrelasPeca.Size = V3(150, 100, 150)
 	estrelasPeca.CFrame = CFrame.new(centro)

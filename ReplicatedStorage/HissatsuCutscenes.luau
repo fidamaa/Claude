@@ -1363,15 +1363,21 @@ function GA.Camera(t, rootPos, ballPos)
 		-- de longe e de baixo: a mão subindo do gramado
 		return V3(0, -2, -13), V3(0, 2, 0), 65
 	elseif t < 2.05 then
-		return rootPos + V3(6, 8, -8), rootPos, 62
+		-- ⚠️ v113: mais de cima, pra Terra aparecer embaixo (146.8s do vídeo)
+		return rootPos + V3(6, 12, -8), rootPos + V3(0, -2, 0), 62
 	elseif t < 2.5 then
-		return rootPos + V3(-9, -2, -6), rootPos + V3(0, 1, 0), 58
+		-- ⚠️ v113 (vídeo do IE3, 146.8s/148.4s): de cima, os dois no espaço com a
+		-- mão abrindo e a TERRA lá embaixo. (De baixo e de lado, um dedo da mão
+		-- tampava metade da tela.)
+		local u = smooth(phase(t, 2.05, 2.5))
+		return rootPos + V3(-6, 13, -10):Lerp(V3(-5, 11, -9), u), rootPos + V3(0, -3, 0), 60
 	elseif t < GA.ImpactTime then
 		return rootPos + V3(2.5, 5, 5), ballPos, 60
 	end
-	-- impacto: por baixo da bola, ela descendo pra Terra
+	-- impacto: por trás e por cima, a bola descendo pra TERRA como meteoro
+	-- (vídeo do IE3, 151.4-152s). ⚠️ v113: era de baixo — só céu preto atrás.
 	local u = easeOut(phase(t, GA.ImpactTime, GA.Duration))
-	return GA.KickPoint + V3(3, -6, -6):Lerp(V3(2.5, -5, -5), u), ballPos, 64 - 14 * u
+	return GA.KickPoint + V3(-8, 10, 14):Lerp(V3(-7, 8.5, 12), u), GA.KickPoint:Lerp(ballPos, 0.6) + V3(0, -3, -3), 56 - 8 * u
 end
 
 
