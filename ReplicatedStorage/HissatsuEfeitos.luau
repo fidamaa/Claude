@@ -902,8 +902,13 @@ function E.Gelo(ctx)
 		local dist = rng:NextNumber(3.5, 21)
 		local altura = rng:NextNumber(2.5, 7)
 		local p = parte(pasta, "Cristal" .. i, { Material = Enum.Material.Ice, Color = GELO:Lerp(BRANCO, rng:NextNumber()) })
+		-- ⚠️ v113: ele corre e dá o mortal pra frente (até ~9 studs): nenhum
+		-- cristal nesse corredor, nem do lado direito dele (a câmera da corrida e do
+		-- mortal fica ali: os cristais tapavam tudo)
+		local cx, cz = math.cos(ang) * dist, math.sin(ang) * dist - 2
+		if cx > -3.5 and cx < 15 and cz > -14 and cz < 3 then cx = -(3.5 + math.abs(cx) * 0.6) end
 		cristais[i] = {
-			Parte = p, Base = V3(math.cos(ang) * dist, ctx.ChaoY, math.sin(ang) * dist - 2),
+			Parte = p, Base = V3(cx, ctx.ChaoY, cz),
 			Altura = altura, Largura = rng:NextNumber(0.8, 1.9),
 			Inclina = CFrame.Angles(rng:NextNumber(-0.4, 0.4), rng:NextNumber(0, 6), rng:NextNumber(-0.4, 0.4)),
 			Quando = 0.35 + (dist / 21) * 0.7,

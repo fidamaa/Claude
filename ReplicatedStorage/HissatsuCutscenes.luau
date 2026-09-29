@@ -921,13 +921,22 @@ end
 -- direito. O campo CONGELA, ele puxa a perna direita pra trás e chuta. A bola
 -- racha o campo congelado, cercada de redemoinhos de gelo". Chute PESADO:
 -- sem pulo, preparo lento, perna bem pra trás.
+-- ⚠️ v113 — REVISÃO PELO VÍDEO ("Inazuma Eleven - Freeze Shot", quadros a cada
+-- 0,2s). O anime NÃO é um chute parado: braços cruzados com a bola no pé
+-- (4.4s), o campo congela (4.8-5.2s), ele toca a bola pra frente e CORRE
+-- (5.4s), MERGULHA rente ao gelo (5.6-6.0s), apoia as mãos e dá um MORTAL PRA
+-- FRENTE com as pernas por cima (6.2-6.6s), cai já girando a perna e chuta
+-- (6.8-7.0s); a bola vai dentro de redemoinhos de gelo (7.2s+). Antes ele só
+-- descruzava e puxava a perna, parado.
+--   0.00-0.30 cruza os braços;  0.30-1.05 campo congela;  1.05-1.30 toca a bola;
+--   1.30-1.62 corre;  1.62-1.92 mergulha;  1.92-2.34 mortal;  2.34-2.60 CHUTE.
 local GL = {}
 Cutscenes.FuriaGlacial = GL
 GL.Motor = "V2"
 GL.Efeitos = "Gelo"
 GL.KickFoot = "Right"
-GL.Duration = 2.8
-GL.ImpactTime = 2.25
+GL.Duration = 3.2
+GL.ImpactTime = 2.6
 GL.TitleText = "FÚRIA GLACIAL"
 GL.Tema = {
 	Titulo = { rgb(255, 255, 255), rgb(170, 230, 255), rgb(80, 160, 230) },
@@ -935,20 +944,35 @@ GL.Tema = {
 	Tint = rgb(215, 235, 255), Saturation = -0.15, Contrast = 0.15, Brightness = 0.02,
 }
 GL.Phases = {
-	Cross = { 0, 0.3 }, Freeze = { 0.3, 1.1 }, Windup = { 1.15, 2.05 },
-	Kick = { 2.05, GL.ImpactTime }, Impact = { GL.ImpactTime, GL.Duration },
+	Cross = { 0, 0.3 }, Freeze = { 0.3, 1.05 }, Run = { 1.3, 1.62 }, Dive = { 1.62, 1.92 },
+	Flip = { 1.92, 2.34 }, Windup = { 1.62, 2.45 },
+	Kick = { 2.45, GL.ImpactTime }, Impact = { GL.ImpactTime, GL.Duration },
 }
 local GL_ROOT = {
-	{ 0, V3(0, 0, 0) }, { 1.2, V3(0, 0, 0) }, { 1.9, V3(0, -0.08, -0.3) }, -- (medido: -0.25 furava o gramado)
-	{ GL.ImpactTime, V3(0, -0.06, -0.7) }, { 2.8, V3(0, 0, -1.0) },
+	{ 0, V3(0, 0, 0) }, { 1.05, V3(0, 0, 0) }, { 1.3, V3(0, -0.1, -0.4) },
+	{ 1.62, V3(0, -0.08, -2.4) },  -- corre inclinado (medido: -0.35 furava o gelo)
+	{ 1.78, V3(0, -1.8, -3.6) },   -- mergulho rente ao gelo
+	{ 1.92, V3(0, -1.5, -4.4) },   -- as mãos tocam o gelo
+	{ 2.08, V3(0, -0.8, -5.2) },    -- parada de mão, pernas pro alto (medido no R6: a cabeça rente ao gelo)
+	{ 2.22, V3(0, -1.8, -5.9) },
+	{ 2.34, V3(0, 0.15, -6.3) },  -- cai agachado
+	{ 2.45, V3(0, 0, -6.4) },
+	{ GL.ImpactTime, V3(0, 0.04, -6.6) }, { 3.2, V3(0, 0.07, -6.9) },
+}
+-- mortal PRA FRENTE (ângulo negativo em X = a cabeça vai pra frente e pra baixo)
+local GL_PITCH = {
+	{ 0, 0 }, { 1.3, 0 }, { 1.62, -25 }, { 1.78, -80 }, { 1.92, -115 }, { 2.08, -185 },
+	{ 2.22, -275 }, { 2.34, -350 }, { 2.45, -360 }, { 3.2, -360 },
 }
 function GL.RootPosition(t) return sample(GL_ROOT, t) end
-function GL.RootCFrame(t) return CFrame.new(GL.RootPosition(t)) end
+function GL.RootCFrame(t)
+	return CFrame.new(GL.RootPosition(t)) * CFrame.Angles(rad(sample(GL_PITCH, t)), 0, 0)
+end
 GL.PeSobreBola = V3(0.6, -2.05, -1.5) -- a bola parada debaixo da sola direita
-GL.KickPoint = V3(0.3, -2.05, -2.9)
+GL.KickPoint = V3(0.3, -2.05, -8.8)
 table.insert(recalculos, function()
 	GL.PeSobreBola = V3(0.6, CAL.Chao + CAL.Raio, -1.5)
-	GL.KickPoint = V3(0.3, CAL.Chao + CAL.Raio, -2.9)
+	GL.KickPoint = V3(0.3, CAL.Chao + CAL.Raio, -8.8)
 end)
 GL.KickContactDir = V3(0, 0.28, -1).Unit
 local GL_PUSH = V3(0, 0.08, -1).Unit * 1.8
@@ -956,13 +980,15 @@ function GL.BallPosition(t, s)
 	s = s or V3(0, -2.3, -1.8)
 	if t < 0.08 then return s end
 	if t < 0.3 then return s:Lerp(GL.PeSobreBola, smooth(phase(t, 0.08, 0.3))) end
-	if t < 1.2 then return GL.PeSobreBola end
-	if t < 1.55 then return GL.PeSobreBola:Lerp(GL.KickPoint, smooth(phase(t, 1.2, 1.55))) end
+	if t < 1.15 then return GL.PeSobreBola end
+	-- o toque: a bola desliza no gelo e para onde ele vai cair do mortal
+	if t < 1.95 then return GL.PeSobreBola:Lerp(GL.KickPoint, easeOut(phase(t, 1.15, 1.95))) end
 	if t < GL.ImpactTime then return GL.KickPoint end
 	return GL.KickPoint + GL_PUSH * easeOut(phase(t, GL.ImpactTime, GL.Duration))
 end
 function GL.BallSpin(t)
-	if t < 1.2 then return 0 end
+	if t < 1.15 then return 0 end
+	if t < 1.95 then return 8 end
 	if t < GL.ImpactTime then return 2 end
 	return 26
 end
@@ -972,43 +998,71 @@ local GL_CRUZADO = {
 	RHip = { 105, 0, 8 }, RKnee = { -92, 0, 0 }, LKnee = { -8, 0, 0 },
 	RShoulder = { 75, 0, -30 }, RElbow = { 110, 0, 0 }, LShoulder = { 70, 0, 30 }, LElbow = { 110, 0, 0 },
 }
+-- braços esticados "pra cima" em relação ao tronco = pra frente no mergulho e
+-- apoiados no gelo de cabeça pra baixo
+local GL_BRACOS_APOIO = { RShoulder = { 172, 0, 12 }, LShoulder = { 172, 0, -12 }, RElbow = { 5, 0, 0 }, LElbow = { 5, 0, 0 } }
+local function comBracos(pose)
+	for k, v in pairs(GL_BRACOS_APOIO) do pose[k] = v end
+	return pose
+end
 local GL_POSE = {
 	{ 0.00, {} },
 	{ 0.30, GL_CRUZADO },
-	{ 1.10, GL_CRUZADO },
-	-- descruza, tira o pé da bola (ela rola pra frente)
-	{ 1.35, { Neck = { -6, 0, 0 }, RHip = { 10, 0, 0 }, RKnee = { -20, 0, 0 },
-		RShoulder = { 0, 0, 35 }, LShoulder = { 0, 0, -35 } } },
-	-- puxa a perna BEM pra trás, pesado
-	{ 1.90, { Root = { -5, 0, 0 }, Waist = { 0, -15, 0 }, Neck = { -10, 0, 0 }, LHip = { 30, 0, 0 }, LKnee = { -35, 0, 0 },
-		RHip = { -60, 0, 5 }, RKnee = { -110, 0, 0 }, RShoulder = { -25, 0, 65 }, LShoulder = { 55, 0, -75 } } },
-	{ 2.10, { Root = { -8, 0, 0 }, Waist = { 0, 0, 0 }, Neck = { -10, 0, 0 }, LHip = { 25, 0, 0 }, LKnee = { -32, 0, 0 },
-		RHip = { 10, 0, 0 }, RKnee = { -70, 0, 0 }, RShoulder = { -35, 0, 62 }, LShoulder = { 58, 0, -68 } } },
+	{ 1.05, GL_CRUZADO },
+	-- descruza e toca a bola pra frente com a direita
+	{ 1.22, { Neck = { -6, 0, 0 }, RHip = { 40, 0, 0 }, RKnee = { -15, 0, 0 }, LKnee = { -15, 0, 0 },
+		RShoulder = { -20, 0, 30 }, LShoulder = { 20, 0, -30 } } },
+	-- corre (braço oposto à perna)
+	{ 1.42, { Root = { -12, 0, 0 }, Neck = { 10, 0, 0 }, RHip = { -30, 0, 0 }, RKnee = { -60, 0, 0 }, LHip = { 55, 0, 0 },
+		LKnee = { -70, 0, 0 }, RShoulder = { 45, 0, 10 }, RElbow = { 80, 0, 0 }, LShoulder = { -40, 0, -10 }, LElbow = { 80, 0, 0 } } },
+	{ 1.62, { Root = { -8, 0, 0 }, Neck = { 25, 0, 0 }, RHip = { 45, 0, 0 }, RKnee = { -40, 0, 0 }, LHip = { -25, 0, 0 },
+		LKnee = { -50, 0, 0 }, RShoulder = { 120, 0, 15 }, RElbow = { 20, 0, 0 }, LShoulder = { 120, 0, -15 }, LElbow = { 20, 0, 0 } } },
+	-- mergulho: esticado, braços à frente, pernas atrás (5.6-6.0s)
+	{ 1.78, comBracos({ Neck = { 40, 0, 0 }, RHip = { -15, 0, 0 }, RKnee = { -25, 0, 0 }, LHip = { -5, 0, 0 }, LKnee = { -10, 0, 0 } }) },
+	{ 1.92, comBracos({ Neck = { 35, 0, 0 }, RHip = { 10, 0, 0 }, RKnee = { -20, 0, 0 }, LHip = { -20, 0, 0 }, LKnee = { -15, 0, 0 } }) },
+	-- parada de mão, pernas abertas por cima (6.2-6.4s)
+	{ 2.08, comBracos({ Neck = { 30, 0, 0 }, RHip = { 25, 0, 6 }, RKnee = { -35, 0, 0 }, LHip = { -35, 0, -6 }, LKnee = { -10, 0, 0 } }) },
+	-- as pernas passam por cima; ele se solta do gelo
+	{ 2.22, { Neck = { 10, 0, 0 }, RHip = { 70, 0, 5 }, RKnee = { -60, 0, 0 }, LHip = { 60, 0, -5 }, LKnee = { -50, 0, 0 },
+		RShoulder = { 120, 0, 40 }, LShoulder = { 120, 0, -40 } } },
+	-- cai agachado já armando a direita pra trás (6.8s)
+	{ 2.34, { Root = { -10, 0, 0 }, Neck = { -10, 0, 0 }, RHip = { 20, 0, 5 }, RKnee = { -100, 0, 0 }, LHip = { 70, 0, 0 },
+		LKnee = { -95, 0, 0 }, RShoulder = { -20, 0, 70 }, LShoulder = { 50, 0, -70 } } },
+	{ 2.45, { Root = { -5, 0, 0 }, Waist = { 0, -15, 0 }, Neck = { -10, 0, 0 }, LHip = { 35, 0, 0 }, LKnee = { -40, 0, 0 },
+		RHip = { -55, 0, 5 }, RKnee = { -105, 0, 0 }, RShoulder = { -25, 0, 65 }, LShoulder = { 55, 0, -75 } } },
 	-- CHUTE rente ao gelo (medido: com o quadril a 80° o pé passava 1.6 acima
 	-- do gramado e a bola saía flutuando)
 	{ GL.ImpactTime, { Root = { -10, 0, 0 }, Waist = { 0, 15, 0 }, Neck = { -12, 0, 0 }, LKnee = { -30, 0, 0 },
 		RHip = { 42, 0, -5 }, RKnee = { -8, 0, 0 }, RShoulder = { -40, 0, 60 }, LShoulder = { 60, 0, -60 } } },
-	{ 2.80, { Root = { -12, 0, 0 }, Waist = { 0, 15, 0 }, Neck = { -8, 0, 0 }, LKnee = { -28, 0, 0 },
+	{ 3.20, { Root = { -12, 0, 0 }, Waist = { 0, 15, 0 }, Neck = { -8, 0, 0 }, LKnee = { -28, 0, 0 },
 		RHip = { 80, 0, -5 }, RKnee = { -12, 0, 0 }, RShoulder = { -40, 0, 60 }, LShoulder = { 60, 0, -60 } } },
 }
 function GL.Pose(t) return samplePose(GL_POSE, t) end
 function GL.Camera(t, rootPos, ballPos)
 	if t < 0.55 then
-		-- de frente e baixo: braços cruzados, pé em cima da bola
+		-- de frente e baixo: braços cruzados, pé em cima da bola (4.4s)
 		return V3(2, -1.8, -4.5), V3(0, -0.8, -0.5), 55
-	elseif t < 1.2 then
-		-- do alto: o campo congelando em volta
-		local u = smooth(phase(t, 0.55, 1.2))
+	elseif t < 1.05 then
+		-- aberta: o campo congelando em volta dele (4.8-5.2s)
+		local u = smooth(phase(t, 0.55, 1.05))
 		return V3(0, 16 - 4 * u, 10 - 3 * u), V3(0, -2, -2), 60
-	elseif t < 2.1 then
-		local u = smooth(phase(t, 1.2, 2.1))
-		return rootPos + V3(6, -0.5, -2):Lerp(V3(5, -0.8, -1.5), u), rootPos + V3(0, -0.8, -1), 52
+	elseif t < 1.92 then
+		-- de lado, acompanhando a corrida e o mergulho rente ao gelo (5.4-6.0s)
+		local u = smooth(phase(t, 1.05, 1.92))
+		return rootPos + V3(11 - 2 * u, 0.2, 0.5), rootPos + V3(0, -0.8, -1.5), 58
+	elseif t < 2.34 then
+		-- de lado e baixo, como no anime (6.2-6.6s): o mortal inteiro de perfil
+		-- (de frente os braços apoiados sumiam atrás do corpo)
+		local u = smooth(phase(t, 1.92, 2.34))
+		return rootPos + V3(10, -1.2, -1):Lerp(V3(9, -0.8, -2.5), u), rootPos + V3(0, 0.2, -0.5), 60
 	elseif t < GL.ImpactTime then
 		return GL.KickPoint + V3(1.5, -0.3, -4), rootPos, 58
 	end
-	-- impacto: de trás e do alto, a rachadura correndo pro gol
+	-- impacto (7.0-7.6s do anime): na frente e do lado da bola, ela explodindo em
+	-- redemoinhos de gelo com ele logo atrás. (De trás, colada nas costas, o
+	-- corpo dele escondia a bola.)
 	local u = easeOut(phase(t, GL.ImpactTime, GL.Duration))
-	return rootPos + V3(1.5, 3, 7):Lerp(V3(1.2, 2.6, 5.5), u), V3(0, -2.5, -18), 60 - 10 * u
+	return GL.KickPoint + V3(4.5, 1, -6):Lerp(V3(3.8, 0.8, -7.5), u), ballPos:Lerp(rootPos, 0.3), 60 - 10 * u
 end
 
 -- ============================================================
