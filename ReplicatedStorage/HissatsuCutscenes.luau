@@ -898,7 +898,11 @@ function MA.Camera(t, rootPos, ballPos)
 	elseif t < 1.6 then
 		-- acompanha de lado (ele surfa de frente pra essa câmera) — ⚠️ v108: mais
 		-- aberta pra caber a onda gigante e os anéis d'água atrás dele
-		return rootPos + V3(-12, 2.5, -3.5), rootPos + V3(0, -1, 0), 66
+		-- ⚠️ v113 (vídeo a 0,2s): a -12 a câmera ficava DENTRO da onda (44 de
+		-- largura), debaixo do lábio — o jogador aparecia através de camadas de
+		-- água. Agora fica fora dela, de lado, com a lente fechada: plano limpo
+		-- dele surfando na bola de braços abertos (12.0-12.4s do vídeo)
+		return rootPos + V3(-27, 3.5, -3), rootPos + V3(0, -0.5, 0), 44
 	elseif t < 1.95 then
 		return rootPos + V3(2.5, -5, -4), rootPos, 66
 	elseif t < MA.ImpactTime then
