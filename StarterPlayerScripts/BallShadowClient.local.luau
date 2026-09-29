@@ -177,6 +177,15 @@ Remotes.PossessionChanged.OnClientEvent:Connect(function(quem, ganhou)
 	end
 end)
 
+-- ⚠️ v112: os GK Bots em campo (lista viva, sem varrer o workspace todo quadro)
+local goleirosBot = {}
+local function talvezBot(m)
+	if m:IsA("Model") and m.Name:sub(1, 6) == "GKBot_" then goleirosBot[m] = true end
+end
+for _, m in ipairs(workspace:GetChildren()) do talvezBot(m) end
+workspace.ChildAdded:Connect(talvezBot)
+workspace.ChildRemoved:Connect(function(m) goleirosBot[m] = nil end)
+
 local function esconder()
 	superficie.Enabled = false
 end
@@ -198,6 +207,14 @@ RunService.Heartbeat:Connect(function()
 	if donoDaBola then
 		esconder()
 		return
+	end
+	-- ⚠️ v112: o GK BOT não é jogador (não passa pelo aviso de posse) — com a
+	-- bola na mão dele (atributo BolaNaMao) também não tem sombra
+	for m in pairs(goleirosBot) do
+		if m:GetAttribute("BolaNaMao") then
+			esconder()
+			return
+		end
 	end
 
 	-- ⚠️ v112: procura o chão bem mais longe (antes 67 studs — bola mais alta

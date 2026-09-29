@@ -36,7 +36,10 @@ local Lighting = game:GetService("Lighting")
 -- ⚠️ v112 — PEDIDO (com print de referência, estilo Blue Lock): "melhora o visual
 -- da atmosfera". Preset novo EstadioBlueLock: nítido, verde fundo, linhas brancas,
 -- luz fria e o azul da arquibancada vivo.
-local ACTIVE_PRESET = "EstadioBlueLock" -- "EstadioBlueLock" | "TardeDourada" | "NoiteDeEstadio"
+-- ⚠️ v112: "muito claro... pode voltar pra iluminação que tinha antes, só dá um
+-- pouco de escurecida" — de volta ao TardeDourada, um pouco mais escuro (ver
+-- Brightness/ExposureCompensation dele). O EstadioBlueLock fica guardado.
+local ACTIVE_PRESET = "TardeDourada" -- "TardeDourada" | "EstadioBlueLock" | "NoiteDeEstadio"
 
 -- ============================================================
 -- PRESETS
@@ -106,10 +109,10 @@ local PRESETS = {
 			GeographicLatitude = 18,
 			-- Intensidade da luz do sol. Sobe o contraste entre a parte
 			-- iluminada e a sombra.
-			Brightness = 1.85, -- ⚠️ v35: era 2.1 ("tá muito claro")
+			Brightness = 1.6, -- ⚠️ v112: 1.85 -> 1.6 ("dá um pouco de escurecida") · v35: era 2.1 ("tá muito claro")
 			-- Exposição da "câmera" (como em fotografia). Um toque pra
 			-- cima deixa o gramado vivo sem lavar o branco das linhas.
-			ExposureCompensation = -0.06, -- ⚠️ v35: era +0.05
+			ExposureCompensation = -0.2, -- ⚠️ v112: -0.06 -> -0.2 (um pouco mais escuro) · v35: era +0.05
 			-- Borrão da borda da sombra: 0 = recorte duro, 1 = bem macia.
 			-- Estádio a céu aberto tem sombra bem definida — 0.2 mantém a
 			-- silhueta do jogador legível no chão.
