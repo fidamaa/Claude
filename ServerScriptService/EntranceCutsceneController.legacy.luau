@@ -67,18 +67,19 @@ _G.PlayEntranceCutscene = function()
 	-- Nenhum time com jogador nenhum (ex: testando sozinho no Studio antes
 	-- de qualquer Team ser atribuído) — não faz sentido tocar a cutscene
 	-- pra um túnel vazio, pula direto.
-	local timesComGente = 0
+	local quantos = {}
 	for _, list in pairs(roster) do
-		if #list > 0 then timesComGente += 1 end
+		table.insert(quantos, #list)
 	end
+	local timesComGente = 0
+	for _, n in ipairs(quantos) do if n > 0 then timesComGente += 1 end end
 	if timesComGente == 0 then return end
 
 	-- ⚠️ v112 — PEDIDO: "ir direto pra iniciar a partida, tipo meio segundo depois
 	-- do teleporte". A duração é a de verdade da cutscene: a caminhada + uma
 	-- apresentação por time que entrou + meio segundo (antes era uma estimativa
 	-- fixa que sobrava vários segundos).
-	local duracao = (Config.ENTRADA_INICIO_ANTES_DO_FIM + Config.ENTRADA_ANDA_DEPOIS_DO_FIM) / Config.ENTRADA_VELOCIDADE
-		+ Config.ENTRADA_APRESENTACAO_SEGUNDOS * timesComGente + 0.5
+	local duracao = Config.EntradaDuracao(quantos)
 	Remotes.PlayEntranceCutscene:FireAllClients(roster, duracao)
 	task.wait(duracao)
 end

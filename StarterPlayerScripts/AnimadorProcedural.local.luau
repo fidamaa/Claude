@@ -50,9 +50,13 @@ local extras = {} -- [model] = true
 -- revarrida a cada 0.5s: o boneco da cutscene de entrada ficava até meio segundo
 -- deslizando parado. Registrar agora força a varredura no próximo quadro.
 local varrerJa = false
-_G.AnimadorRegistrar = function(model)
+-- ⚠️ v112: opcoes.SempreNoChao — bonecos da cutscene de entrada. O piso do túnel
+-- não tem colisão: o teste de chão (raycast que respeita CanCollide) não achava
+-- nada, o boneco ficava na pose "no ar" e só começava a passada perto do fim do
+-- túnel ("a animação só começa a andar perto do final do túnel").
+_G.AnimadorRegistrar = function(model, opcoes)
 	if typeof(model) == "Instance" and model:IsA("Model") then
-		extras[model] = true
+		extras[model] = typeof(opcoes) == "table" and opcoes or true
 		varrerJa = true
 	end
 end
@@ -437,7 +441,13 @@ local function atualizar(estado, dt)
 	local jog = jogadorDe(model)
 	local goleiro = ehGoleiroBot(model) or (jog ~= nil and GKAreaUtil.IsEffectiveGK(jog))
 
-	local estaNoChao, alturaChao = noChao(estado)
+	local estaNoChao, alturaChao
+	local opcoesExtra = extras[model]
+	if typeof(opcoesExtra) == "table" and opcoesExtra.SempreNoChao then
+		estaNoChao, alturaChao = true, nil
+	else
+		estaNoChao, alturaChao = noChao(estado)
+	end
 	corrigirChao(estado, estaNoChao and alturaChao or nil)
 
 	local pose = Anim.Locomocao(estado.Loco, {

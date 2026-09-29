@@ -566,10 +566,11 @@ local function playEntranceCutscene(roster, duration)
 				if dummy then
 					-- a animação é a do jogo (AnimadorProcedural), não o asset antigo
 					if walkTrack then pcall(function() walkTrack:Stop(0) end) end
-					if _G.AnimadorRegistrar then _G.AnimadorRegistrar(dummy) end
+					-- SempreNoChao: o piso do túnel não tem colisão (ver AnimadorProcedural)
+					if _G.AnimadorRegistrar then _G.AnimadorRegistrar(dummy, { SempreNoChao = true }) end
 					local inicio = frenteDaFila - frente * (i - 1) * espaco
 					dummy:PivotTo(CFrame.lookAt(inicio, inicio + frente))
-					table.insert(dummies, { model = dummy, inicio = inicio })
+					table.insert(dummies, { model = dummy, inicio = inicio, time = teamName })
 				end
 			end
 		end
@@ -587,8 +588,14 @@ local function playEntranceCutscene(roster, duration)
 	camera.FieldOfView = Config.ENTRADA_CAMERA_FOV or 60
 
 	-- ===== FASE 2: filas no círculo central + câmera de rosto =====
-	local HOLD = math.max(Config.ENTRADA_APRESENTACAO_SEGUNDOS or 2.5, 0.5)
-	local planos = nil -- { { de = CFrame, para = CFrame }, ... } um por time
+	-- ⚠️ v112 — PEDIDO: "tem que aparecer todo mundo da lista... você tá mostrando as
+	-- costas de um e o rosto do mesmo cara; mostre o rosto de todo mundo, dos dois
+	-- lados". Antes a fila era montada com os PERSONAGENS DE VERDADE — só o seu
+	-- obedece (o dos outros é do computador de cada um e volta pro lugar): gente
+	-- de costas, faltando ou repetida. Agora são os BONECOS da cutscene, que são
+	-- 100% daqui: todo mundo aparece, virado pra câmera, e ela passa de lado na
+	-- frente dos rostos, um time e depois o outro.
+	local planos = nil -- { { de, para, dur }, ... } um por time
 	local function montarApresentacao()
 		local golAzul = Workspace:FindFirstChild(Config.BLUE_GOAL_NAME, true)
 		local golAmarelo = Workspace:FindFirstChild(Config.YELLOW_GOAL_NAME, true)
@@ -607,29 +614,28 @@ local function playEntranceCutscene(roster, duration)
 			local sentido = (indice == 1) and -1 or 1
 			local origem = centro + eixo * (raio * sentido)
 			local olhar = eixo * -sentido -- pra dentro, pro outro time
-			local total = #roster[teamName]
-			local rosto = nil
-			for i, entrada in ipairs(roster[teamName]) do
-				local plr = Players:GetPlayerByUserId(entrada.UserId)
-				local personagem = plr and plr.Character
-				if personagem then
-					local desl = (i - 1 - (total - 1) / 2) * passo
-					local pos = origem + ladoFila * desl
-					local y = (entrada.FieldCFrame and entrada.FieldCFrame.Position.Y) or pos.Y
-					pos = Vector3.new(pos.X, y, pos.Z)
-					personagem:PivotTo(CFrame.lookAt(pos, pos + olhar))
-					rosto = rosto or alturaDoRosto(personagem, y)
-				end
+			local doTime = {}
+			for _, d in ipairs(dummies) do
+				if d.time == teamName and d.model.Parent then table.insert(doTime, d) end
 			end
-			rosto = rosto or (origem.Y + 1.6)
-			-- a câmera passa rente de uma ponta da fila à outra, na altura do rosto
+			local total = #doTime
+			if total == 0 then continue end
+			local rosto = nil
+			for i, d in ipairs(doTime) do
+				local desl = (i - 1 - (total - 1) / 2) * passo
+				local pos = origem + ladoFila * desl
+				pos = Vector3.new(pos.X, d.inicio.Y, pos.Z)
+				d.model:PivotTo(CFrame.lookAt(pos, pos + olhar))
+				rosto = rosto or alturaDoRosto(d.model, pos.Y)
+			end
+			-- a câmera passa de lado, de uma ponta da fila à outra, na altura do rosto
 			local meia = math.max((total - 1) / 2 * passo, 1.5)
-			local function quadro(d)
-				local alvo = Vector3.new(origem.X, rosto + 0.5, origem.Z) + ladoFila * d
+			local function quadro(desl)
+				local alvo = Vector3.new(origem.X, rosto + 0.5, origem.Z) + ladoFila * desl
 				local pos = alvo + olhar * dist + Vector3.new(0, 0.2, 0)
 				return CFrame.lookAt(pos, alvo)
 			end
-			table.insert(lista, { de = quadro(-meia - 1), para = quadro(meia + 1) })
+			table.insert(lista, { de = quadro(-meia - 1), para = quadro(meia + 1), dur = Config.EntradaTempoDoTime(total) })
 		end
 		return lista
 	end
@@ -686,23 +692,28 @@ local function playEntranceCutscene(roster, duration)
 		-- ===== FASE 2 =====
 		if not fase2Desde then
 			fase2Desde = os.clock()
-			for _, d in ipairs(dummies) do
-				if _G.AnimadorRemover then _G.AnimadorRemover(d.model) end
-				if d.model.Parent then d.model:Destroy() end
-			end
-			restoreHiddenOriginals()
 			planos = montarApresentacao()
 			if planos then camera.FieldOfView = Config.ENTRADA_ROSTO_FOV or 40 end
 		end
 		local f = t - T1
+		local duracaoFase2 = 0.5
 		if planos and #planos > 0 then
-			local qual = math.min(math.floor(f / HOLD) + 1, #planos)
-			local u = math.clamp((f - (qual - 1) * HOLD) / HOLD, 0, 1)
+			duracaoFase2 = 0
+			for _, pl in ipairs(planos) do duracaoFase2 += pl.dur end
+			-- qual plano (time) está no ar agora, e quanto dele já passou
+			local acumulado, atual, u = 0, planos[#planos], 1
+			for _, pl in ipairs(planos) do
+				if f < acumulado + pl.dur then
+					atual, u = pl, (f - acumulado) / pl.dur
+					break
+				end
+				acumulado += pl.dur
+			end
+			u = math.clamp(u, 0, 1)
 			u = u * u * (3 - 2 * u)
-			camera.CFrame = planos[qual].de:Lerp(planos[qual].para, u)
+			camera.CFrame = atual.de:Lerp(atual.para, u)
 		end
-		local duracaoFase2 = planos and (HOLD * #planos) or 0.5
-		if f >= duracaoFase2 or t > T1 + HOLD * 2 + 4 then
+		if f >= duracaoFase2 or t > T1 + duracaoFase2 + 4 then
 			connection:Disconnect()
 			terminar()
 		end

@@ -2921,8 +2921,21 @@ Config.ENTRADA_CAMERA_FOV = 60
 Config.ENTRADA_APRESENTACAO_SEGUNDOS = 2.5 -- por time
 Config.ENTRADA_ROSTO_DISTANCIA = 7.5       -- câmera a isso na frente dos rostos
 Config.ENTRADA_ROSTO_FOV = 40
-Config.ENTRANCE_CUTSCENE_DURATION = (Config.ENTRADA_INICIO_ANTES_DO_FIM + Config.ENTRADA_ANDA_DEPOIS_DO_FIM) / Config.ENTRADA_VELOCIDADE
-	+ Config.ENTRADA_APRESENTACAO_SEGUNDOS * 2 + 0.5
+-- ⚠️ v112: "tem que aparecer todo mundo da lista, o rosto de todo mundo, dos dois
+-- lados" — o tempo de cada time cresce com quantos jogadores a câmera passa
+Config.ENTRADA_SEGUNDOS_POR_JOGADOR = 0.8
+Config.EntradaTempoDoTime = function(quantos)
+	return math.max(Config.ENTRADA_APRESENTACAO_SEGUNDOS, Config.ENTRADA_SEGUNDOS_POR_JOGADOR * (quantos or 1))
+end
+-- duração total (servidor espera isto): caminhada + um plano por time + 0.5s
+Config.EntradaDuracao = function(quantosPorTime)
+	local total = (Config.ENTRADA_INICIO_ANTES_DO_FIM + Config.ENTRADA_ANDA_DEPOIS_DO_FIM) / Config.ENTRADA_VELOCIDADE
+	for _, n in ipairs(quantosPorTime) do
+		if n > 0 then total += Config.EntradaTempoDoTime(n) end
+	end
+	return total + 0.5
+end
+Config.ENTRANCE_CUTSCENE_DURATION = Config.EntradaDuracao({ 1, 1 })
 
 -- ============================================================
 -- ELEMENTOS (reinserido a pedido do usuário — a versão antiga, puramente
