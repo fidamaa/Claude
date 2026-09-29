@@ -2121,7 +2121,10 @@ function E.QuedaCelestial(ctx)
 	})
 	-- o ESPAÇO lá no alto (mesma esfera invertida da Galáxia)
 	local centro = mundo(spec.CentroEspaco)
-	local ceu = salaEscura(pasta, "CeuQueda", rgb(6, 5, 24), CFrame.new(centro) * ctx.Inicio.Rotation, 200) -- ⚠️ v113 (ver salaEscura)
+	-- ⚠️ v113 (ver salaEscura): chão da sala rente ao gramado (no espaço o campo
+	-- aparecia lá embaixo)
+	local ceu = salaEscura(pasta, "CeuQueda", rgb(6, 5, 24), CFrame.new(centro) * ctx.Inicio.Rotation, 200,
+		ctx.ChaoY + 0.1 - spec.CentroEspaco.Y)
 	local estrelasPeca = parte(pasta, "EstrelasQueda")
 	estrelasPeca.Size = V3(150, 100, 150)
 	estrelasPeca.CFrame = CFrame.new(centro)
@@ -2158,7 +2161,9 @@ function E.QuedaCelestial(ctx)
 			ctx.Flash(rgb(255, 245, 190), 0.35, 0.3)
 		end
 		-- espaço
-		local espaco = smooth(phase(t, ph.Space[1], ph.Space[1] + 0.3)) * (1 - smooth(phase(t, ph.Space[2] - 0.15, spec.Duration)))
+		-- ⚠️ v113: some logo depois do voleio — o plano seguinte é do gramado, a bola
+		-- brilhando no céu do estádio (10.8s do vídeo); antes ficava tudo preto
+		local espaco = smooth(phase(t, ph.Space[1], ph.Space[1] + 0.3)) * (1 - smooth(phase(t, spec.ImpactTime, spec.ImpactTime + 0.12)))
 		ceu.Transparency = 1 - espaco
 		if not espacoLigado and t >= ph.Space[1] then
 			espacoLigado = true
