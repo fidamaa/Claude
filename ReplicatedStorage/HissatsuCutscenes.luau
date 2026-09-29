@@ -1211,13 +1211,16 @@ function ZM.Camera(t, rootPos, ballPos)
 		local u = smooth(phase(t, 1.9, 2.3))
 		return ZM.Centro + V3(1.5, -9 + 1.5 * u, 2.5), ZM.Centro, 72
 	elseif t < ZM.ImpactTime then
-		-- close: os três girando em volta da esfera de energia
+		-- os três girando em volta da esfera de energia (anime 16.0-17.6s)
+		-- ⚠️ v113: de cima e mais longe. A 8 studs, no meio da volta as sombras
+		-- passavam coladas na câmera e tampavam a esfera
 		local u = smooth(phase(t, 2.3, ZM.ImpactTime))
-		return ZM.Centro + V3(3.5 - u, 2.2, 8.5 - 2 * u), ZM.Centro, 58
+		return ZM.Centro + V3(2, 9 - 1.5 * u, 10 - 2 * u), ZM.Centro, 58
 	end
-	-- impacto: de frente e de baixo, a bola vindo pra câmera
+	-- impacto: de frente e de baixo, a bola vindo pra câmera (anime 17.8-18.2s)
+	-- ⚠️ v113: mais longe — a 7 studs a esfera e as pernas das sombras enchiam a tela
 	local u = easeOut(phase(t, ZM.ImpactTime, ZM.Duration))
-	return ZM.Centro + V3(-2.5, -3, -7):Lerp(V3(-2, -2.4, -5.5), u), ballPos, 64 - 16 * u
+	return ZM.Centro + V3(-4, -5.5, -13):Lerp(V3(-3.5, -4.8, -11), u), ballPos, 62 - 12 * u
 end
 
 -- ============================================================

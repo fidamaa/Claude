@@ -1152,9 +1152,12 @@ function E.ZonaMorta(ctx)
 	local ceu = parte(pasta, "NebulosaZona")
 	ceu.Size = V3(40, 40, 40)
 	ceu.CFrame = CFrame.new(mundo(spec.Centro))
+	-- ⚠️ v113 (anime a 0,2s, 13.6-17.6s): o fundo é um VAZIO roxo escuro. Com
+	-- brilho 0.35 e cor clara as nuvens saíam lilás claras, em blocos, com o céu
+	-- azul aparecendo. Agora mais escuras, maiores e mais densas.
 	local nebulosa = emissor(ceu, {
-		Textura = TEX.Fumaca, Cor = cores({ { 0, rgb(120, 40, 200) }, { 0.5, rgb(70, 10, 130) }, { 1, PRETO_ROXO } }), Brilho = 0.35,
-		Tamanho = numeros({ { 0, 14 }, { 1, 26 } }), Transp = numeros({ { 0, 1 }, { 0.3, 0.45 }, { 1, 1 } }),
+		Textura = TEX.Fumaca, Cor = cores({ { 0, rgb(95, 25, 170) }, { 0.5, rgb(50, 5, 95) }, { 1, PRETO_ROXO } }), Brilho = 0.08,
+		Tamanho = numeros({ { 0, 20 }, { 1, 34 } }), Transp = numeros({ { 0, 1 }, { 0.25, 0.25 }, { 1, 1 } }),
 		Vida = { 1.2, 1.8 }, Vel = { 3, 6 }, RotVel = 60,
 		Forma = Enum.ParticleEmitterShape.Sphere, Estilo = Enum.ParticleEmitterShapeStyle.Surface,
 		Sentido = Enum.ParticleEmitterShapeInOut.Inward, ZOffset = -4,
@@ -1237,7 +1240,7 @@ function E.ZonaMorta(ctx)
 		end
 		-- vórtice roxo lá em cima enquanto o triângulo existe
 		nebulosa.Enabled = t >= ph.Jump[2] - 0.3 and t < spec.ImpactTime + 0.2
-		nebulosa.Rate = 26
+		nebulosa.Rate = 40
 
 		local bola = s.BolaMundo
 		local triangulo = t >= ph.Triangle[1] and t < spec.ImpactTime + 0.05

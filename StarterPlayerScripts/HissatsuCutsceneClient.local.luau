@@ -438,8 +438,11 @@ end
 local Efeitos = require(ReplicatedStorage:WaitForChild("HissatsuEfeitos"))
 
 -- Sombra do chutador (Zona Morta): clone do personagem inteiro, sem
--- script/som/física, pintado de energia (ForceField). Mesmo truque do
+-- script/som/física, pintado de energia. Mesmo truque do
 -- replay de gol: Archivable liga, clona, volta como estava.
+-- ⚠️ v113 (revisão a 0,2s): era material ForceField — em corpo de blocos (R6)
+-- ele fica quase invisível e só o cabelo aparecia, flutuando. Agora é uma
+-- silhueta roxa escura sólida com contorno de energia (Highlight).
 local function criarSombra(character, cor, pasta)
 	local antes = character.Archivable
 	character.Archivable = true
@@ -458,8 +461,8 @@ local function criarSombra(character, cor, pasta)
 			inst.CanTouch = false
 			inst.CastShadow = false
 			inst.Anchored = inst.Name == "HumanoidRootPart"
-			inst.Material = Enum.Material.ForceField
-			inst.Color = cor
+			inst.Material = Enum.Material.SmoothPlastic
+			inst.Color = cor:Lerp(Color3.new(0, 0, 0), 0.6)
 			if inst:IsA("MeshPart") then inst.TextureID = "" end
 		elseif inst:IsA("SpecialMesh") then
 			inst.TextureId = ""
@@ -468,6 +471,13 @@ local function criarSombra(character, cor, pasta)
 			inst.EvaluateStateMachine = false
 		end
 	end
+	local contorno = Instance.new("Highlight")
+	contorno.FillColor = cor
+	contorno.FillTransparency = 0.55
+	contorno.OutlineColor = cor:Lerp(Color3.new(1, 1, 1), 0.55)
+	contorno.OutlineTransparency = 0
+	contorno.DepthMode = Enum.HighlightDepthMode.Occluded
+	contorno.Parent = sombra
 	sombra.Parent = pasta
 	return sombra
 end
