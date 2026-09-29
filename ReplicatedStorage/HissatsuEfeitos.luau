@@ -4240,4 +4240,364 @@ function E.FlowRin(ctx)
 end
 
 
+-- ============================================================
+-- ⚡ BASE COMUM DAS CENAS DE FLOW (⚠️ v113)
+-- ============================================================
+-- Palco (sala com chão rente ao gramado), contorno do corpo, olhos acesos,
+-- aura de chama, luz no rosto e um emissor de "partículas do tema" (pétalas,
+-- brasas...). Cada Flow passa as cores e os tempos; Atualizar(t) liga/desliga.
+--   op.Sala (cor), op.SalaCor2 + op.SalaVira {t0,t1} (troca de cor), op.Contorno
+--   (cor), op.ContornoDe (t), op.Olhos (cor), op.OlhosDe (t), op.Aura {claro,
+--   cor, escuro}, op.AuraDe (t), op.Rosto { {t0,t1}, ... } (luz no rosto),
+--   op.Particulas { Cor, Tamanho, Taxa, De, Ate, Textura, Vel, Acel }
+local function flowBase(ctx, op)
+	local pasta = ctx.Pasta
+	local character = ctx.Character
+	local head = character:FindFirstChild("Head")
+	local B = {}
+	local sala = salaEscura(pasta, "SalaFlow", op.Sala or rgb(14, 14, 18), ctx.Inicio * CFrame.new(0, 20, -8), 150, ctx.ChaoY + 0.1 - 20)
+	sala.Transparency = 0
+	B.Sala = sala
+	local contorno = Instance.new("Highlight")
+	contorno.FillTransparency = 1
+	contorno.OutlineColor = op.Contorno or Color3.new(1, 1, 1)
+	contorno.OutlineTransparency = 1
+	contorno.DepthMode = Enum.HighlightDepthMode.Occluded
+	contorno.Adornee = character
+	contorno.Parent = pasta
+	B.Contorno = contorno
+	local olhos = { esfera(pasta, "OlhoFlow1", op.Olhos or Color3.new(1, 1, 1)), esfera(pasta, "OlhoFlow2", op.Olhos or Color3.new(1, 1, 1)) }
+	local auras = {}
+	if op.Aura then
+		local function aura(pai, tam)
+			if not pai then return end
+			table.insert(auras, emissor(pai, {
+				Textura = TEX.Fogo, Cor = cores({ { 0, op.Aura[1] }, { 0.4, op.Aura[2] }, { 1, op.Aura[3] } }), Brilho = 0.95,
+				Tamanho = numeros({ { 0, tam }, { 1, 0.2 } }), Transp = numeros({ { 0, 0.2 }, { 1, 1 } }), Vida = { 0.35, 0.65 },
+				Vel = { 2, 5 }, Spread = 30, Direcao = Enum.NormalId.Top,
+			}))
+		end
+		aura(character:FindFirstChild("Torso") or character:FindFirstChild("UpperTorso"), 2.5)
+		aura(head, 1.7)
+	end
+	local luzRosto = parte(pasta, "LuzRostoFlow")
+	local luzRostoL = luz(luzRosto, rgb(240, 240, 255), 0, 1.5)
+	local part
+	if op.Particulas then
+		local pp = op.Particulas
+		local caixa = parte(pasta, "ParticulasFlow")
+		caixa.Size = V3(34, 16, 34)
+		caixa.CFrame = ctx.Inicio * CFrame.new(0, 6, -8)
+		part = emissor(caixa, {
+			Textura = pp.Textura, Cor = pp.Cor, Tamanho = pp.Tamanho or numeros({ { 0, 0.5 }, { 1, 0.4 } }),
+			Transp = numeros({ { 0, 0.1 }, { 0.8, 0.25 }, { 1, 1 } }), Vida = pp.Vida or { 3, 5 }, Vel = pp.Vel or { 0.5, 2 },
+			Acel = pp.Acel or V3(0, -1, 0), Drag = 0.4, RotVel = 120, Taxa = pp.Taxa or 25,
+			Forma = Enum.ParticleEmitterShape.Box, Estilo = Enum.ParticleEmitterShapeStyle.Volume,
+		})
+		if pp.Achatar then part.Squash = numeros({ { 0, pp.Achatar }, { 1, pp.Achatar } }) end
+	end
+	function B.Atualizar(t)
+		if op.SalaCor2 and op.SalaVira then
+			sala.Color = (op.Sala or rgb(14, 14, 18)):Lerp(op.SalaCor2, smooth(phase(t, op.SalaVira[1], op.SalaVira[2])))
+		end
+		contorno.OutlineTransparency = t >= (op.ContornoDe or 0) and 0 or 1
+		if head then
+			local o = FlowCenaOlhos(head)
+			local a = t >= (op.OlhosDe or math.huge)
+			for i, e in ipairs(olhos) do
+				e.Size = Vector3.one * 0.28
+				e.CFrame = head.CFrame * CFrame.new(o[i])
+				e.Transparency = a and 0 or 1
+			end
+			luzRosto.CFrame = head.CFrame * CFrame.new(0, -0.2, -2.6)
+			local r = 0
+			for _, j in ipairs(op.Rosto or {}) do
+				if t >= j[1] and t < j[2] then r = 7 end
+			end
+			luzRostoL.Range = r
+		end
+		for _, a in ipairs(auras) do
+			a.Enabled = t >= (op.AuraDe or math.huge)
+			a.Rate = 80
+		end
+		if part then
+			part.Enabled = t >= (op.Particulas.De or 0) and t < (op.Particulas.Ate or math.huge)
+		end
+	end
+	return B
+end
+E.FlowBase = flowBase
+
+-- 🐆 FLOW DO CHIGIRI (⚠️ v113): pétalas, olhos rosa, a PANTERA de peças
+-- correndo ao lado (corpo, cabeça, orelhas, patas galopando, rabo) e o rastro
+-- rosa das pernas na corrida.
+function E.FlowChigiri(ctx)
+	local pasta = ctx.Pasta
+	local ROSA, VINHO = rgb(255, 110, 150), rgb(90, 10, 30)
+	local base = flowBase(ctx, {
+		Sala = rgb(24, 10, 16), Contorno = ROSA, ContornoDe = 3.6, Olhos = ROSA, OlhosDe = 3.0,
+		Aura = { rgb(255, 230, 240), ROSA, rgb(80, 0, 30) }, AuraDe = 9,
+		Rosto = { { 2.2, 3.6 }, { 9, 12 } },
+		Particulas = { Cor = cores({ { 0, rgb(255, 200, 220) }, { 1, ROSA } }), Tamanho = numeros({ { 0, 0.5 }, { 1, 0.4 } }), Taxa = 30, Achatar = 1.3 },
+	})
+	-- rastro rosa nas pernas
+	local rastros = {}
+	for _, nome in ipairs({ "Right Leg", "Left Leg", "RightLowerLeg", "LeftLowerLeg" }) do
+		local p = ctx.Character:FindFirstChild(nome)
+		if p then table.insert(rastros, rastroDuplo(p, 0.7, ROSA, rgb(255, 230, 240), 0.35)) end
+	end
+	-- a pantera
+	local P = {}
+	local function peca(nome, props, tam)
+		local p = parte(pasta, nome, props)
+		p.Material = Enum.Material.SmoothPlastic
+		p.Size = tam
+		table.insert(P, p)
+		return p
+	end
+	local corpo = peca("PCorpo", { Shape = Enum.PartType.Cylinder, Color = VINHO }, V3(4.2, 1.4, 1.4))
+	local cabeca = peca("PCabeca", { Shape = Enum.PartType.Ball, Color = VINHO }, V3(1.3, 1.3, 1.3))
+	local orelhas = { peca("POrelha1", { Color = VINHO }, V3(0.3, 0.45, 0.2)), peca("POrelha2", { Color = VINHO }, V3(0.3, 0.45, 0.2)) }
+	local olhosP = { peca("POlho1", { Shape = Enum.PartType.Ball, Color = ROSA, Material = Enum.Material.Neon }, V3(0.22, 0.22, 0.22)),
+		peca("POlho2", { Shape = Enum.PartType.Ball, Color = ROSA, Material = Enum.Material.Neon }, V3(0.22, 0.22, 0.22)) }
+	olhosP[1].Material, olhosP[2].Material = Enum.Material.Neon, Enum.Material.Neon
+	local patas = {}
+	for i = 1, 4 do patas[i] = peca("PPata" .. i, { Color = VINHO }, V3(0.4, 1.6, 0.4)) end
+	local rabo = peca("PRabo", { Shape = Enum.PartType.Cylinder, Color = VINHO }, V3(2.2, 0.3, 0.3))
+	-- (maior: do tamanho de um bicho de verdade ao lado dele)
+	for _, p in ipairs(P) do p.Size = p.Size * 1.4 end
+	local modelo = Instance.new("Model")
+	modelo.Name = "Pantera"
+	modelo.Parent = pasta
+	for _, p in ipairs(P) do p.Parent = modelo end
+	local hl = Instance.new("Highlight")
+	hl.FillTransparency = 1
+	hl.OutlineColor = ROSA
+	hl.DepthMode = Enum.HighlightDepthMode.Occluded
+	hl.Adornee = modelo
+	hl.Parent = pasta
+
+	local efeitos = {}
+	function efeitos.Quadro(t, _dt, s)
+		base.Atualizar(t)
+		for _, r in ipairs(rastros) do r.Ligar(t >= 3.8 and t < 8.4) end
+		-- pantera: aparece na corrida, ao lado (x+2.6), começa na frente e ele a passa
+		local vis = smooth(phase(t, 3.8, 4.2)) * (1 - smooth(phase(t, 7.2, 7.6)))
+		local r = s.RootLocal
+		local frente = 3 - 6 * smooth(phase(t, 4, 7.4))
+		local galope = (t - 3.6) * math.pi * 2 * 3
+		local salto = math.abs(math.sin(galope)) * 0.5
+		local E_ = 1.4
+		local cf = ctx.Inicio * CFrame.new(r.X + 3.2, ctx.ChaoY + 1.7 * E_ + salto, r.Z - frente) * CFrame.Angles(math.sin(galope) * 0.12, 0, 0)
+		corpo.CFrame = cf * CFrame.Angles(0, math.rad(90), 0)
+		cabeca.CFrame = cf * CFrame.new(0, 0.35 * E_, -2.5 * E_)
+		orelhas[1].CFrame = cabeca.CFrame * CFrame.new(0.35 * E_, 0.65 * E_, 0)
+		orelhas[2].CFrame = cabeca.CFrame * CFrame.new(-0.35 * E_, 0.65 * E_, 0)
+		olhosP[1].CFrame = cabeca.CFrame * CFrame.new(0.28 * E_, 0.1 * E_, -0.58 * E_)
+		olhosP[2].CFrame = cabeca.CFrame * CFrame.new(-0.28 * E_, 0.1 * E_, -0.58 * E_)
+		for i, pata in ipairs(patas) do
+			local frenteTras = i <= 2 and -1.5 or 1.5
+			local lado = (i % 2 == 0) and 0.45 or -0.45
+			local fase = galope + (i <= 2 and 0 or math.pi) + (i % 2) * 0.5
+			pata.CFrame = cf * CFrame.new(lado * E_, -0.4 * E_, frenteTras * E_) * CFrame.Angles(math.sin(fase) * 0.9, 0, 0) * CFrame.new(0, -0.7 * E_, 0)
+		end
+		rabo.CFrame = cf * CFrame.new(0, 0.3 * E_, 2.9 * E_) * CFrame.Angles(math.rad(25) + math.sin(galope) * 0.2, math.rad(90), 0)
+		for _, p in ipairs(P) do p.Transparency = 1 - vis end
+		hl.OutlineTransparency = 1 - vis
+	end
+	function efeitos.Impacto(_s)
+		ctx.Flash(rgb(255, 210, 225), 0.2, 0.4)
+		anelVazado(pasta, ctx.Root.Position, Vector3.yAxis, ROSA, 2, 22, 0.45, 0.3)
+	end
+	return efeitos
+end
+
+
+-- bola de cena (cópia da bola; a de verdade não sai do lugar)
+local function bolaDeCena(ctx)
+	local bola
+	if ctx.Ball then
+		local ok, c = pcall(function() return ctx.Ball:Clone() end)
+		if ok and c then
+			bola = c
+			for _, d in ipairs(bola:GetDescendants()) do
+				if d:IsA("Script") or d:IsA("LocalScript") or d:IsA("Sound") or d:IsA("BillboardGui") or d:IsA("Trail")
+					or d:IsA("VectorForce") or d:IsA("Highlight") then d:Destroy() end
+			end
+			if bola:IsA("BasePart") then bola.Anchored, bola.CanCollide, bola.CanQuery, bola.CanTouch = true, false, false, false end
+			bola.Parent = ctx.Pasta
+		end
+	end
+	if not bola then
+		bola = esfera(ctx.Pasta, "BolaCena", rgb(250, 250, 250), Enum.Material.SmoothPlastic)
+		bola.Size = Vector3.one * (ctx.TamanhoBola or 1.7)
+	end
+	return bola
+end
+
+-- 🔥 FLOW DO KUNIGAMI (⚠️ v113): chamas subindo atrás, o chute de canhota que
+-- racha o chão, a bola de FOGO, olhos laranja, aura.
+function E.FlowKunigami(ctx)
+	local pasta, spec = ctx.Pasta, ctx.Spec
+	local LARANJA, AMARELO = rgb(255, 150, 40), rgb(255, 225, 120)
+	local base = flowBase(ctx, {
+		Sala = rgb(20, 10, 4), SalaCor2 = rgb(55, 18, 4), SalaVira = { 2.2, 3.4 },
+		Contorno = LARANJA, ContornoDe = 3.8, Olhos = LARANJA, OlhosDe = 2.6,
+		Aura = { AMARELO, LARANJA, rgb(90, 20, 0) }, AuraDe = 2.6, Rosto = { { 0, 3.8 }, { 8.5, 12 } },
+		Particulas = { Textura = TEX.Faisca, Cor = cores({ { 0, AMARELO }, { 1, LARANJA } }), Tamanho = numeros({ { 0, 0.3 }, { 1, 0 } }),
+			Taxa = 40, Vel = { 1, 3 }, Acel = V3(0, 3, 0), De = 2.2 },
+	})
+	-- muro de chamas atrás dele
+	local muro = parte(pasta, "MuroChamas")
+	muro.Size = V3(26, 2, 4)
+	muro.CFrame = ctx.Inicio * CFrame.new(0, ctx.ChaoY + 1, 7)
+	local chamas = emissor(muro, {
+		Textura = TEX.Fogo, Cor = cores({ { 0, AMARELO }, { 0.5, LARANJA }, { 1, rgb(80, 15, 0) } }), Brilho = 0.9,
+		Tamanho = numeros({ { 0, 5 }, { 1, 1 } }), Transp = numeros({ { 0, 0.2 }, { 1, 1 } }), Vida = { 0.8, 1.3 },
+		Vel = { 8, 14 }, Spread = 12, Direcao = Enum.NormalId.Top, Forma = Enum.ParticleEmitterShape.Box,
+		Estilo = Enum.ParticleEmitterShapeStyle.Volume,
+	})
+	local bola = bolaDeCena(ctx)
+	local fogoBola = emissor(bola, {
+		Textura = TEX.Fogo, Cor = cores({ { 0, AMARELO }, { 1, LARANJA } }), Brilho = 0.9, Tamanho = numeros({ { 0, 3 }, { 1, 0.3 } }),
+		Vida = { 0.25, 0.45 }, Vel = { 1, 3 }, Taxa = 0,
+	})
+	local rastroBola = rastroDuplo(bola, 1.1, LARANJA, AMARELO, 0.4)
+	local racha = {}
+	for i = 1, 10 do racha[i] = parte(pasta, "RachaFogo" .. i, { Color = LARANJA }) end
+	local chutou = false
+	local efeitos = {}
+	function efeitos.Quadro(t, _dt, s)
+		base.Atualizar(t)
+		if not chutou and t >= spec.Chute then
+			chutou = true
+			local p = ctx.Mundo(V3(-0.5, ctx.ChaoY + 0.9, -7.6))
+			ctx.Flash(rgb(255, 210, 140), 0.2, 0.3)
+			onda(pasta, p, ctx.Inicio.LookVector, LARANJA, 26, 0.35, 0.4)
+			onda(pasta, ctx.Mundo(V3(0, ctx.ChaoY + 0.1, -6.6)), Vector3.yAxis, AMARELO, 24, 0.4, 0.25)
+			ctx.Tremer(1.1, 0.4)
+		end
+		chamas.Enabled = t >= 2.3 and t < 11.6
+		chamas.Rate = 45
+		local r = s.RootLocal
+		local pos
+		if t < spec.Chute then
+			pos = ctx.Mundo(V3(-0.5, ctx.ChaoY + 0.9, -7.6))
+		else
+			local u = easeOut(phase(t, spec.Chute, 8.5))
+			pos = ctx.Mundo(V3(-0.5, ctx.ChaoY + 0.9, -7.6)):Lerp(ctx.Mundo(V3(-0.5, 4, -80)), u)
+		end
+		bola.CFrame = CFrame.new(pos) * CFrame.Angles(t * 6, 0, 0)
+		bola.Transparency = (t >= 3.6 and t < 8.5) and 0 or 1
+		fogoBola.Enabled = t >= spec.Chute and t < 8.5
+		fogoBola.Rate = 120
+		rastroBola.Ligar(t >= spec.Chute and t < 8.5)
+		-- rachaduras em leque no chão, a partir do pé de apoio
+		local k = phase(t, spec.Chute, spec.Chute + 0.3)
+		for i, p in ipairs(racha) do
+			if k > 0 and t < 11.5 then
+				local a = math.rad(-80 + (i - 1) * 17)
+				local de = ctx.Mundo(V3(0, ctx.ChaoY + 0.05, -6.6))
+				local comp = (4 + (i % 3) * 2) * k
+				local para = de + ctx.Inicio:VectorToWorldSpace(V3(math.sin(a), 0, -math.cos(a)) * comp)
+				p.Size = V3(0.25, 0.06, math.max(comp, 0.05))
+				p.CFrame = CFrame.lookAt((de + para) / 2, para)
+				p.Transparency = 0.05
+			else
+				p.Transparency = 1
+			end
+		end
+	end
+	function efeitos.Impacto(_s)
+		ctx.Flash(AMARELO, 0.25, 0.4)
+	end
+	return efeitos
+end
+
+-- 🪞 FLOW DO REO (⚠️ v113): espelhos em volta (vidro com reflexo e moldura
+-- roxa), as cópias em cores diferentes, os espelhos estilhaçam, as cópias
+-- entram nele, olhos roxos, aura.
+function E.FlowReo(ctx)
+	local pasta, spec = ctx.Pasta, ctx.Spec
+	local ROXO, LILAS = rgb(170, 100, 255), rgb(230, 210, 255)
+	local base = flowBase(ctx, {
+		Sala = rgb(18, 10, 28), Contorno = ROXO, ContornoDe = 6.5, Olhos = ROXO, OlhosDe = 6.3,
+		Aura = { LILAS, ROXO, rgb(40, 0, 70) }, AuraDe = 6.3, Rosto = { { 9, 12 } },
+		Particulas = { Cor = LILAS, Tamanho = numeros({ { 0, 0.2 }, { 1, 0 } }), Taxa = 25, Vel = { 0.3, 1 }, Acel = V3(0, 0.5, 0) },
+	})
+	-- as cópias em cores de outros jogadores
+	local CORES = { rgb(70, 140, 255), rgb(255, 215, 70), rgb(240, 240, 255), rgb(255, 110, 150), rgb(40, 220, 200) }
+	for i, s in pairs(ctx.Clones or {}) do
+		if s.Modelo and not s.Real then
+			local c = CORES[i] or ROXO
+			for _, d in ipairs(s.Modelo:GetDescendants()) do
+				if d:IsA("BasePart") then d.Color = c:Lerp(Color3.new(0, 0, 0), 0.45)
+				elseif d:IsA("Highlight") then d.FillColor = c; d.OutlineColor = c:Lerp(Color3.new(1, 1, 1), 0.5) end
+			end
+		end
+	end
+	-- espelhos: vidro + moldura; estilhaçam em cacos
+	local espelhos = {}
+	for i, p in ipairs(spec.Espelhos) do
+		local vidro = parte(pasta, "Espelho" .. i, { Material = Enum.Material.Glass, Color = rgb(200, 190, 230) })
+		vidro.Reflectance = 0.35
+		vidro.Size = V3(3.4, 6, 0.2)
+		-- moldura: 4 filetes finos (uma placa inteira tampava o vidro)
+		local moldura = {}
+		for k, dim in ipairs({ { 3.6, 0.14, 0, 3.05 }, { 3.6, 0.14, 0, -3.05 }, { 0.14, 6.2, 1.75, 0 }, { 0.14, 6.2, -1.75, 0 } }) do
+			local f = parte(pasta, "Moldura" .. i .. "_" .. k, { Color = ROXO })
+			f.Size = V3(dim[1], dim[2], 0.14)
+			moldura[k] = { Parte = f, X = dim[3], Y = dim[4] }
+		end
+		local cacos = {}
+		local rng = Random.new(40 + i)
+		for k = 1, 8 do
+			local caco = parte(pasta, "Caco" .. i .. "_" .. k, { Material = Enum.Material.Glass, Color = rgb(210, 200, 240) })
+			caco.Size = V3(rng:NextNumber(0.6, 1.3), rng:NextNumber(0.8, 1.6), 0.08)
+			cacos[k] = { Parte = caco, Rel = V3(rng:NextNumber(-1.4, 1.4), rng:NextNumber(-2.5, 2.5), 0),
+				Vel = V3(rng:NextNumber(-6, 6), rng:NextNumber(2, 9), rng:NextNumber(3, 9)), Giro = V3(rng:NextNumber(-9, 9), rng:NextNumber(-9, 9), 0) }
+		end
+		espelhos[i] = { Vidro = vidro, Moldura = moldura, Cacos = cacos, Pos = p }
+	end
+	local quebrou = false
+	local efeitos = {}
+	function efeitos.Quadro(t, _dt, _s)
+		base.Atualizar(t)
+		local sobe = easeOut(phase(t, 0.2, 1.4))
+		for _, e in ipairs(espelhos) do
+			local centro = V3(e.Pos.X, ctx.ChaoY + 3.1 - 6 * (1 - sobe), e.Pos.Z) * V3(1.12, 1, 1.12)
+			local cf = CFrame.lookAt(ctx.Mundo(centro), ctx.Mundo(V3(0, centro.Y, 0)))
+			local inteiro = t < spec.Phases.Quebra[1]
+			e.Vidro.CFrame = cf
+			e.Vidro.Transparency = inteiro and 0.45 or 1
+			for _, f in ipairs(e.Moldura) do
+				f.Parte.CFrame = cf * CFrame.new(f.X, f.Y, 0)
+				f.Parte.Transparency = inteiro and 0 or 1
+			end
+			local dt = math.max(t - spec.Phases.Quebra[1], 0)
+			for _, c in ipairs(e.Cacos) do
+				if not inteiro and dt < 1.2 then
+					local p = cf:PointToWorldSpace(c.Rel + c.Vel * dt + V3(0, -18 * dt * dt, 0))
+					c.Parte.CFrame = CFrame.new(p) * (cf - cf.Position) * CFrame.Angles(c.Giro.X * dt, c.Giro.Y * dt, 0)
+					c.Parte.Transparency = 0.3 + 0.7 * (dt / 1.2)
+				else
+					c.Parte.Transparency = 1
+				end
+			end
+		end
+		if not quebrou and t >= spec.Phases.Quebra[1] then
+			quebrou = true
+			ctx.Flash(LILAS, 0.3, 0.3)
+			ctx.Tremer(0.6, 0.3)
+			anelVazado(pasta, ctx.Root.Position, Vector3.yAxis, ROXO, 3, 20, 0.45, 0.3)
+		end
+	end
+	function efeitos.Impacto(_s)
+		ctx.Flash(LILAS, 0.2, 0.4)
+		onda(pasta, ctx.Root.Position, Vector3.yAxis, ROXO, 20, 0.4, 0.3)
+	end
+	return efeitos
+end
+
+
 return E

@@ -2804,4 +2804,266 @@ function FR.Camera(t, rootPos)
 end
 
 
+-- ============================================================
+-- 🐆 FLOW DO CHIGIRI — cena de ativação (⚠️ v113)
+-- ============================================================
+-- A melhor cena dele: o despertar da velocidade — agachado segurando o
+-- joelho (a lesão que o travava), levanta decidido, os olhos acendem e ele
+-- DISPARA; a pantera (o apelido dele) corre ao lado e ele a passa; corta pra
+-- dentro freando; pétalas cor-de-rosa (o motivo da loja).
+--   0.0-2.2 agachado, mão no joelho;  2.2-3.6 levanta, close, olhos rosa;
+--   3.6-7.6 corrida com a pantera;  7.6-9.0 freia e corta pra dentro;
+--   9.0-12  pose final, pétalas e aura.
+local FC = {}
+Cutscenes.Flow_Chigiri = FC
+FC.Motor = "V2"
+FC.Efeitos = "FlowChigiri"
+FC.KickFoot = "Right"
+FC.Duration = 12
+FC.ImpactTime = 11.3
+FC.ColarNoPe = false
+FC.TitleText = "FLOW · CHIGIRI HYOMA"
+FC.Tema = {
+	Titulo = { rgb(255, 245, 250), rgb(255, 110, 150), rgb(150, 20, 60) },
+	Contorno = rgb(40, 0, 15), Flash = rgb(255, 200, 220),
+	Tint = rgb(255, 245, 248), Saturation = 0.1, Contrast = 0.15, Brightness = 0,
+}
+FC.Phases = {
+	Joelho = { 0, 2.2 }, Levanta = { 2.2, 3.6 }, Corre = { 3.6, 7.6 }, Corta = { 7.6, 9 },
+	Final = { 9, 12 }, Kick = { 11, FC.ImpactTime }, Impact = { FC.ImpactTime, FC.Duration },
+}
+local FC_ROOT = {
+	{ 0, V3(0, -0.9, 0) }, { 2.2, V3(0, -0.9, 0) }, { 3.0, V3(0, 0, 0) }, { 3.6, V3(0, 0, 0) },
+	{ 4.2, V3(0, -0.3, -3) }, { 7.6, V3(0, -0.3, -40) }, { 8.4, V3(-3, -0.5, -45) }, { 9.0, V3(-4.5, 0, -46) }, { 12, V3(-4.5, 0, -46) },
+}
+local FC_YAW = { { 0, 0 }, { 7.6, 0 }, { 8.4, 55 }, { 9, 40 }, { 12, 40 } }
+local FC_ROLL = { { 0, 0 }, { 7.5, 0 }, { 8.0, 22 }, { 8.6, 10 }, { 9.0, 0 }, { 12, 0 } }
+function FC.RootPosition(t) return sample(FC_ROOT, t) end
+function FC.RootCFrame(t)
+	return CFrame.new(FC.RootPosition(t)) * CFrame.Angles(0, rad(sample(FC_YAW, t)), 0) * CFrame.Angles(0, 0, rad(sample(FC_ROLL, t)))
+end
+function FC.BallPosition(_t, s) return s or V3(0, -2.3, -1.8) end
+function FC.BallVisible(t) return t < 0.05 end
+function FC.BallSpin() return 0 end
+local FC_AGACHADO = { Root = { -30, 0, 0 }, Neck = { -10, 0, 0 }, RHip = { 80, 0, 6 }, LHip = { 45, 0, -6 },
+	RShoulder = { 55, 0, 12 }, LShoulder = { 30, 0, -20 } }
+local FC_POSE = {
+	{ 0.00, FC_AGACHADO }, { 2.20, FC_AGACHADO },
+	{ 3.00, { Root = { -4, 0, 0 }, Neck = { 12, 0, 0 }, RShoulder = { -10, 0, 12 }, LShoulder = { -10, 0, -12 } } },
+	{ 3.60, { Root = { -8, 0, 0 }, Neck = { 8, 0, 0 }, RShoulder = { -10, 0, 12 }, LShoulder = { -10, 0, -12 } } },
+	-- (3.6-7.6: corrida, calculada abaixo)
+	{ 8.00, { Root = { -25, 0, 0 }, Neck = { 20, 0, 0 }, RHip = { 60, 0, 25 }, LHip = { -20, 0, -10 },
+		RShoulder = { 20, 0, 60 }, LShoulder = { -20, 0, -70 } } }, -- freia inclinado
+	{ 9.00, { Root = { -10, 0, 0 }, Neck = { 12, 0, 0 }, RHip = { 20, 0, 10 }, LHip = { -5, 0, 0 },
+		RShoulder = { 10, 0, 35 }, LShoulder = { 10, 0, -35 } } },
+	{ 12.00, { Root = { -6, 0, 0 }, Neck = { 10, 10, 0 }, RHip = { 10, 0, 8 }, LHip = { -5, 0, 0 },
+		RShoulder = { 5, 0, 30 }, LShoulder = { 60, 0, -40 } } }, -- afasta o cabelo (mão esquerda perto do rosto)
+}
+function FC.Pose(t)
+	if t >= 3.6 and t < 7.6 then
+		local w = math.sin((t - 3.6) * math.pi * 2 * 3.6)
+		local entra = smooth(phase(t, 3.6, 3.9)) * (1 - smooth(phase(t, 7.4, 7.6)))
+		return {
+			Root = { -24 * entra, 0, 0 }, Neck = { 16, 0, 0 },
+			RHip = { 60 * w * entra, 0, 0 }, LHip = { -60 * w * entra, 0, 0 },
+			RShoulder = { -55 * w * entra, 0, 10 }, LShoulder = { 55 * w * entra, 0, -10 },
+		}
+	end
+	return samplePose(FC_POSE, t)
+end
+function FC.Camera(t, rootPos)
+	local cabeca = rootPos + V3(0, 1.5, 0)
+	if t < 2.2 then
+		local u = smooth(phase(t, 0, 2.2))
+		return V3(3.5, -1.2, -6):Lerp(V3(2.6, -1, -5), u), V3(0, -0.6, 0), 52
+	elseif t < 3.6 then
+		local u = smooth(phase(t, 2.2, 3.6))
+		return cabeca + V3(0.4, -0.3, -4.4):Lerp(V3(0.3, -0.25, -3.4), u), cabeca, 38
+	elseif t < 7.6 then
+		-- de frente-lado: ele e a pantera lado a lado (de lado ela sumia atrás dele)
+		return rootPos + V3(-8, 2.2, -9), rootPos + V3(1.6, 0.4, -1.5), 52
+	elseif t < 9 then
+		return rootPos + V3(-4, 1, -8), rootPos + V3(0, 0, 0), 55
+	end
+	local u = smooth(phase(t, 9, 12))
+	return cabeca + V3(-1.4, -0.4, -4.6):Lerp(V3(-1, -0.3, -3.6), u), cabeca, 40
+end
+
+
+-- ============================================================
+-- 🔥 FLOW DO KUNIGAMI — cena de ativação (⚠️ v113)
+-- ============================================================
+-- A melhor cena dele: o HERÓI e o canhão de canhota. Punho no peito, cabeça
+-- baixa; ergue o olhar e as chamas sobem atrás; corrida curta e o chute de
+-- CANHOTA que racha o chão; a bola vira uma bola de fogo; pose de herói.
+--   0.0-2.0 punho no peito;  2.0-3.8 close, olhos laranja, chamas;
+--   3.8-6.3 corrida e o chute;  6.3-8.5 a bola de fogo indo;  8.5-12 pose de herói.
+local FK = {}
+Cutscenes.Flow_Kunigami = FK
+FK.Motor = "V2"
+FK.Efeitos = "FlowKunigami"
+FK.KickFoot = "Left"
+FK.Duration = 12
+FK.ImpactTime = 11.3 -- clarão final (o chute, aos 6.3s, tem tremor próprio)
+FK.Chute = 6.3
+FK.ColarNoPe = false
+FK.TitleText = "FLOW · KUNIGAMI RENSUKE"
+FK.Tema = {
+	Titulo = { rgb(255, 250, 225), rgb(255, 160, 50), rgb(160, 60, 10) },
+	Contorno = rgb(40, 15, 0), Flash = rgb(255, 210, 140),
+	Tint = rgb(255, 240, 220), Saturation = 0.2, Contrast = 0.2, Brightness = 0,
+}
+FK.Phases = {
+	Punho = { 0, 2 }, Rosto = { 2, 3.8 }, Corre = { 3.8, 5.8 }, Kick = { 5.8, FK.Chute },
+	Voa = { FK.Chute, 8.5 }, Heroi = { 8.5, 12 }, Impact = { FK.ImpactTime, FK.Duration },
+}
+local FK_ROOT = { { 0, V3(0, 0, 0) }, { 3.8, V3(0, 0, 0) }, { 5.6, V3(0, -0.2, -5) }, { FK.Chute, V3(0, -0.3, -6.2) },
+	{ 8.5, V3(0, 0, -6.4) }, { 12, V3(0, 0, -6.4) } }
+function FK.RootPosition(t) return sample(FK_ROOT, t) end
+function FK.RootCFrame(t) return CFrame.new(FK.RootPosition(t)) end
+function FK.BallPosition(_t, s) return s or V3(0, -2.3, -1.8) end
+function FK.BallVisible(t) return t < 0.05 end
+function FK.BallSpin() return 0 end
+local FK_PUNHO = { Root = { -4, 0, 0 }, Neck = { -22, 0, 0 }, RShoulder = { 70, 0, -35 }, RElbow = { 100, 0, 0 }, LShoulder = { -5, 0, -8 } }
+local FK_HEROI = { Root = { 4, 0, 0 }, Neck = { 6, 0, 0 }, RHip = { 5, 0, 12 }, LHip = { 5, 0, -12 },
+	RShoulder = { -8, 0, 22 }, LShoulder = { -8, 0, -22 } }
+local FK_POSE = {
+	{ 0.00, FK_PUNHO }, { 2.00, FK_PUNHO },
+	{ 2.60, { Root = { 2, 0, 0 }, Neck = { 8, 0, 0 }, RShoulder = { 70, 0, -35 }, RElbow = { 100, 0, 0 }, LShoulder = { -5, 0, -8 } } },
+	{ 3.80, { Root = { -6, 0, 0 }, Neck = { 6, 0, 0 }, RShoulder = { -10, 0, 12 }, LShoulder = { -10, 0, -12 } } },
+	-- (3.8-5.6 corrida)
+	{ 5.60, { Root = { -8, 0, 0 }, Neck = { -10, 0, 0 }, RHip = { 30, 0, 0 }, LHip = { -60, 0, 0 },
+		RShoulder = { 40, 0, 50 }, LShoulder = { -30, 0, -60 } } }, -- arma a canhota
+	{ FK.Chute, { Root = { -14, 0, 0 }, Neck = { -12, 0, 0 }, RHip = { -15, 0, 0 }, LHip = { 95, 0, 0 },
+		RShoulder = { -40, 0, 60 }, LShoulder = { 50, 0, -55 } } }, -- CHUTE
+	{ 7.20, { Root = { -10, 0, 0 }, Neck = { -5, 0, 0 }, RHip = { -10, 0, 0 }, LHip = { 70, 0, 0 },
+		RShoulder = { -40, 0, 60 }, LShoulder = { 50, 0, -55 } } },
+	{ 8.50, FK_HEROI }, { 12.00, FK_HEROI },
+}
+function FK.Pose(t)
+	if t >= 3.8 and t < 5.5 then
+		local w = math.sin((t - 3.8) * math.pi * 2 * 2.6)
+		local e = smooth(phase(t, 3.8, 4.0)) * (1 - smooth(phase(t, 5.3, 5.5)))
+		return { Root = { -16 * e, 0, 0 }, Neck = { 10, 0, 0 }, RHip = { 50 * w * e, 0, 0 }, LHip = { -50 * w * e, 0, 0 },
+			RShoulder = { -45 * w * e, 0, 10 }, LShoulder = { 45 * w * e, 0, -10 } }
+	end
+	return samplePose(FK_POSE, t)
+end
+function FK.Camera(t, rootPos)
+	local cabeca = rootPos + V3(0, 1.5, 0)
+	if t < 2 then
+		local u = smooth(phase(t, 0, 2))
+		return V3(2.5, -0.4, -7):Lerp(V3(2, -0.2, -5.8), u), V3(0, 0.6, 0), 50
+	elseif t < 3.8 then
+		local u = smooth(phase(t, 2, 3.8))
+		return cabeca + V3(0.4, -0.4, -4.4):Lerp(V3(0.3, -0.3, -3.4), u), cabeca, 38
+	elseif t < FK.Chute then
+		-- de lado e baixo: a corrida e a canhota
+		return rootPos + V3(-8, -0.6, -1.5), rootPos + V3(0, 0, -1.5), 55
+	elseif t < 8.5 then
+		-- atrás dele: a bola de fogo indo embora
+		return rootPos + V3(1.5, 1.6, 6), rootPos + V3(0, 0.5, -30), 52
+	end
+	-- herói: de baixo, de frente
+	local u = smooth(phase(t, 8.5, 12))
+	return rootPos + V3(1.8, -2.4, -6.5):Lerp(V3(1.2, -2.1, -5.2), u), rootPos + V3(0, 1.2, 0), 55
+end
+
+-- ============================================================
+-- 🪞 FLOW DO REO — cena de ativação (⚠️ v113)
+-- ============================================================
+-- A melhor cena dele: o CAMALEÃO que copia todo mundo. ESPELHOS sobem em
+-- volta; em cada um aparece uma cópia (de outra cor: o chute, o drible, o
+-- domínio...); os espelhos se estilhaçam e as cópias entram nele; ele faz os
+-- movimentos copiados em sequência (chute, giro do drible, cabeceio) e fecha
+-- com o sorriso confiante, olhos roxos.
+local FRe = {}
+Cutscenes.Flow_Reo = FRe
+FRe.Motor = "V2"
+FRe.Efeitos = "FlowReo"
+FRe.KickFoot = "Right"
+FRe.Duration = 12
+FRe.ImpactTime = 11.3
+FRe.ColarNoPe = false
+FRe.TitleText = "FLOW · MIKAGE REO"
+FRe.Tema = {
+	Titulo = { rgb(250, 240, 255), rgb(190, 120, 255), rgb(90, 30, 150) },
+	Contorno = rgb(25, 0, 40), Flash = rgb(230, 200, 255),
+	Tint = rgb(248, 242, 255), Saturation = 0.1, Contrast = 0.15, Brightness = 0,
+}
+FRe.Phases = {
+	Espelhos = { 0, 2 }, Copias = { 2, 4.5 }, Quebra = { 4.5, 5.2 }, Entram = { 5.2, 6.5 },
+	Copia = { 6.5, 9 }, Final = { 9, 12 }, Kick = { 11, FRe.ImpactTime }, Impact = { FRe.ImpactTime, FRe.Duration },
+}
+local FRE_ROOT = { { 0, V3(0, 0, 0) }, { 6.9, V3(0, 0, 0) }, { 7.6, V3(0, 0, -1) }, { 8.2, V3(0, 3.2, -1.5) }, { 8.8, V3(0, 0, -2) }, { 12, V3(0, 0, -2) } }
+local FRE_YAW = { { 0, 0 }, { 7.6, 0 }, { 8.1, 360 }, { 12, 360 } } -- o giro do drible copiado
+function FRe.RootPosition(t) return sample(FRE_ROOT, t) end
+function FRe.RootCFrame(t) return CFrame.new(FRe.RootPosition(t)) * CFrame.Angles(0, rad(sample(FRE_YAW, t)), 0) end
+function FRe.BallPosition(_t, s) return s or V3(0, -2.3, -1.8) end
+function FRe.BallVisible(t) return t < 0.05 end
+function FRe.BallSpin() return 0 end
+local FRE_PARADO = { Root = { 0, 0, 0 }, Neck = { 10, 0, 0 }, RShoulder = { -5, 0, 10 }, LShoulder = { -5, 0, -10 } }
+local FRE_POSE = {
+	{ 0.00, FRE_PARADO }, { 5.20, FRE_PARADO },
+	{ 5.80, { Root = { 10, 0, 0 }, Neck = { 25, 0, 0 }, RShoulder = { 35, 0, 100 }, LShoulder = { 35, 0, -100 } } }, -- recebe as cópias
+	{ 6.50, FRE_PARADO },
+	{ 6.90, { Root = { -8, 0, 0 }, RHip = { -50, 0, 0 }, RShoulder = { -30, 0, 60 }, LShoulder = { 50, 0, -70 } } }, -- arma o chute
+	{ 7.20, { Root = { -12, 0, 0 }, RHip = { 95, 0, 0 }, LHip = { -10, 0, 0 }, RShoulder = { -40, 0, 60 }, LShoulder = { 60, 0, -60 } } }, -- chute
+	{ 7.60, { Root = { -20, 0, 0 }, RHip = { 40, 0, 20 }, LHip = { 20, 0, -12 }, RShoulder = { 10, 0, 70 }, LShoulder = { 10, 0, -70 } } }, -- drible
+	{ 8.10, { Root = { -20, 0, 0 }, RHip = { 40, 0, 20 }, LHip = { 20, 0, -12 }, RShoulder = { 10, 0, 70 }, LShoulder = { 10, 0, -70 } } },
+	{ 8.40, { Root = { 18, 0, 0 }, Neck = { -35, 0, 0 }, RHip = { -20, 0, 0 }, LHip = { 20, 0, 0 }, RShoulder = { -20, 0, 50 }, LShoulder = { -20, 0, -50 } } }, -- cabeceio
+	{ 9.00, FRE_PARADO },
+	-- sorriso confiante: mão no queixo
+	{ 9.60, { Root = { 2, 0, 0 }, Neck = { 12, 12, 0 }, RShoulder = { 78, 0, -42 }, LShoulder = { 20, 0, -10 } } },
+	{ 12.00, { Root = { 2, 0, 0 }, Neck = { 14, 16, 0 }, RShoulder = { 80, 0, -44 }, LShoulder = { 20, 0, -10 } } },
+}
+function FRe.Pose(t) return samplePose(FRE_POSE, t) end
+-- as cópias: 5 espelhos em volta
+FRe.Espelhos = {}
+for i = 1, 5 do
+	-- meia-lua ATRÁS dele (na frente, tampavam ele da câmera)
+	local a = math.rad(90 + (i - 3) * 36)
+	FRe.Espelhos[i] = V3(math.cos(a) * 6, 0, math.sin(a) * 6)
+end
+local FRE_POSES_COPIA = {
+	{ RHip = { 95, 0, 0 }, LHip = { -15, 0, 0 }, RShoulder = { -40, 0, 60 }, LShoulder = { 60, 0, -60 } }, -- chute
+	{ Root = { -20, 0, 0 }, RHip = { 40, 0, 20 }, LHip = { 20, 0, -12 }, RShoulder = { 10, 0, 70 }, LShoulder = { 10, 0, -70 } }, -- drible
+	{ Root = { 18, 0, 0 }, Neck = { -35, 0, 0 }, RShoulder = { -20, 0, 50 }, LShoulder = { -20, 0, -50 } }, -- cabeceio
+	{ RHip = { 60, 0, 0 }, RShoulder = { 20, 0, 30 }, LShoulder = { 20, 0, -30 } }, -- domínio
+	{ Root = { -25, 0, 0 }, RHip = { 50, 0, 0 }, LHip = { -40, 0, 0 }, RShoulder = { -40, 0, 10 }, LShoulder = { 40, 0, -10 } }, -- corrida
+}
+FRe.Clones = {
+	Quantidade = 5,
+	Cor = rgb(150, 90, 230),
+	CFrame = function(i, t)
+		local p = FRe.Espelhos[i] * 0.88 -- um pouco na frente do vidro
+		local entra = smooth(phase(t, 5.2, 6.3))
+		local pos = p:Lerp(V3(0, 0, 0), entra)
+		return CFrame.lookAt(pos, V3(0, 0, 0)) * CFrame.Angles(0, math.pi, 0)
+	end,
+	Pose = function(i, _t) return FRE_POSES_COPIA[i] end,
+	Alpha = function(_i, t)
+		if t < 2.2 then return 0 end
+		if t < 2.8 then return smooth(phase(t, 2.2, 2.8)) end
+		if t < 5.8 then return 1 end
+		return 1 - smooth(phase(t, 5.8, 6.4))
+	end,
+}
+function FRe.Camera(t, rootPos)
+	local cabeca = rootPos + V3(0, 1.5, 0)
+	if t < 4.5 then
+		-- aberta, de frente e um pouco de cima: ele no meio dos espelhos
+		local u = smooth(phase(t, 0, 4.5))
+		return V3(0, 3.5, -13):Lerp(V3(0, 2.5, -11), u), V3(0, 0.5, 1.5), 55
+	elseif t < 6.5 then
+		return V3(3, 1.5, -9), V3(0, 0.8, 0), 55
+	elseif t < 9 then
+		return rootPos + V3(-7, 0.5, -4), rootPos + V3(0, 0.5, 0), 55
+	end
+	local u = smooth(phase(t, 9, 12))
+	-- (do lado esquerdo dele: o braço da mão no queixo não passa na frente)
+	return cabeca + V3(-1.1, -0.3, -4.6):Lerp(V3(-0.9, -0.25, -3.6), u), cabeca, 38
+end
+
+
 return Cutscenes
