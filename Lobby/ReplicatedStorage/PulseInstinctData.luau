@@ -267,6 +267,7 @@ Data.Pulses = {
 	-- marcador em cima. O preço é o teto de força mais baixo dos 8.
 	{
 		Name = "Raio Um",
+		Image = "rbxassetid://89599040324731", -- ⚠️ v111: arte do artista (pacote "Imagens (3)")
 		Rarity = "Common",
 		Element = "Luz",
 		Description = "Raio Um é chute de DUPLA: precisa de 1 companheiro perto, e os dois acertam o QTE juntos. Sai rápido — dá pra soltar com um zagueiro em cima — mas é o mais fraco em força.",
@@ -294,6 +295,7 @@ Data.Pulses = {
 	-- quando um companheiro cruza. Hissatsu de jogar acompanhado.
 	{
 		Name = "Cabeça de Kung Fu",
+		Image = "rbxassetid://74389261411146", -- ⚠️ v111: arte do artista (pacote "Imagens (3)")
 		Rarity = "Common",
 		Element = "Natureza",
 		Description = "Cabeça de Kung Fu para a bola no ar perto de você, te faz saltar, e solta a cabeçada com muito mais alcance que a normal quando você acerta os cliques do QTE.",
@@ -850,6 +852,7 @@ Data.Pulses = {
 	-- FreezeSelf (quem ergue a muralha não sai do lugar).
 	{
 		Name = "Muralha Infinita",
+		Image = "rbxassetid://93637924854792", -- ⚠️ v111: arte do artista (pacote "Imagens (3)")
 		Rarity = "Legendary",
 		Element = "Natureza",
 		Description = "Muralha Infinita levanta uma parede na frente do gol que CRESCE com companheiros perto de você — sozinho é comum, com apoio nenhum chute passa. Você fica preso no lugar enquanto ela estiver de pé.",
@@ -990,6 +993,7 @@ Data.Pulses = {
 	-- Divina. Agora tem uma pra cada raridade.
 	{
 		Name = "Soco Explosivo",
+		Image = "rbxassetid://86430264517813", -- ⚠️ v111: arte do artista (pacote "Imagens (3)")
 		Rarity = "Common",
 		Element = "Fogo",
 		RoleRequired = "GK",
