@@ -1162,7 +1162,7 @@ end
 
 -- (a Chuva de Meteoros agora é cutscene — HissatsuCutscenes.ChuvaDeMeteoros)
 
-Remotes.HissatsuVFX.OnClientEvent:Connect(function(character, nome, elemento, dados)
+local function aoHissatsuVFX(character, nome, elemento, dados)
 	if typeof(character) ~= "Instance" or not character:IsA("Model") then return end
 	local root = character:FindFirstChild("HumanoidRootPart")
 	local f = VFX[nome]
@@ -1170,4 +1170,7 @@ Remotes.HissatsuVFX.OnClientEvent:Connect(function(character, nome, elemento, da
 		local ok, err = pcall(f, character, root, typeof(dados) == "table" and dados or nil, elemento)
 		if not ok then warn("[HissatsuVFX] " .. tostring(nome) .. ": " .. tostring(err)) end
 	end
-end)
+end
+Remotes.HissatsuVFX.OnClientEvent:Connect(aoHissatsuVFX)
+-- ⚠️ v112: o replay de gol repete os efeitos de Hissatsu (drible/carrinho) no fantasma
+_G.HissatsuVFXLocal = aoHissatsuVFX

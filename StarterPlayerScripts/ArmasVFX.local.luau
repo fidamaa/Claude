@@ -567,7 +567,7 @@ RunService.RenderStepped:Connect(function()
 	end
 end)
 
-Remotes.ArmaVFX.OnClientEvent:Connect(function(character, nome, raridade, ligado, duracao, extra)
+local function aoArmaVFX(character, nome, raridade, ligado, duracao, extra)
 	if typeof(character) ~= "Instance" or not character:IsA("Model") then return end
 	local cor = COR_RARIDADE[raridade] or COR_RARIDADE.Rare
 	if typeof(nome) == "string" and ATIVAS[nome] then return ATIVAS[nome](character, extra) end
@@ -597,4 +597,7 @@ Remotes.ArmaVFX.OnClientEvent:Connect(function(character, nome, raridade, ligado
 	else
 		generico(character, cor)
 	end
-end)
+end
+Remotes.ArmaVFX.OnClientEvent:Connect(aoArmaVFX)
+-- ⚠️ v112: o replay de gol repete os efeitos de Arma no fantasma
+_G.ArmaVFXLocal = aoArmaVFX

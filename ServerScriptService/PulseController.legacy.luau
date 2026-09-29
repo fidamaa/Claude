@@ -746,7 +746,7 @@ local function executeRoot(player, effect, slot, def)
 		-- de alguém". Quem usa fica plantado enquanto a sombra corre.
 		freezeMovement(player, ATRASO + alcance / VEL + 0.05)
 		if Remotes.HissatsuVFX and player.Character then
-			Remotes.HissatsuVFX:FireAllClients(player.Character, "Costura de Sombra", nil,
+			Config.DispararVFX("HissatsuVFX", player.Character, "Costura de Sombra", nil,
 				{ Dir = direcao, Alcance = alcance, Vel = VEL, Atraso = ATRASO })
 		end
 		task.delay(ATRASO, function()
@@ -784,7 +784,7 @@ local function executeRoot(player, effect, slot, def)
 						end
 						segurar()
 						if Remotes.HissatsuVFX and player.Character then
-							Remotes.HissatsuVFX:FireAllClients(player.Character, "Costura de Sombra@agarra", nil,
+							Config.DispararVFX("HissatsuVFX", player.Character, "Costura de Sombra@agarra", nil,
 								{ Alvo = other.Character, Duracao = fim - tick() })
 						end
 						if slot and _G.StartHissatsuQTE and _G.RegisterQTEHitCallback then
@@ -797,7 +797,7 @@ local function executeRoot(player, effect, slot, def)
 									fim = novoFim
 									segurar()
 									if Remotes.HissatsuVFX and player.Character then
-										Remotes.HissatsuVFX:FireAllClients(player.Character, "Costura de Sombra@segura", nil,
+										Config.DispararVFX("HissatsuVFX", player.Character, "Costura de Sombra@segura", nil,
 											{ Alvo = other.Character, Duracao = fim - tick() })
 									end
 								end
@@ -1539,7 +1539,7 @@ local function resolveAndExecute(player, slot, def, effect)
 		feedback(player, "Fired", def.Name)
 		-- ⚠️ v109: VFX das Hissatsus sem cutscene (dribles/defesas) em todo cliente
 		if Remotes.HissatsuVFX and player.Character and not def.Cutscene and action ~= "Tackle" and action ~= "Root" then
-			Remotes.HissatsuVFX:FireAllClients(player.Character, def.Name, def.Element)
+			Config.DispararVFX("HissatsuVFX", player.Character, def.Name, def.Element)
 		end
 	else
 		-- A precondição já passou no aperto do botão, mas o estado do jogo

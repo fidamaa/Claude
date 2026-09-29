@@ -829,6 +829,9 @@ local function playReplay(_scoringTeam, samples, eventos)
 			table.sort(listaEventos, function(a, b) return a.t < b.t end)
 		end
 		local proximoEvento = 1
+		-- ⚠️ v112: quantos eventos de cada tipo o replay tocou (diagnóstico,
+		-- atributo ReplayUltimo no jogador local)
+		local contagem = { Acao = 0, Cutscene = 0, VFX = 0 }
 		local vidaGui, vidaLabel = nil, nil
 		if fantasmaDaBola then vidaGui, vidaLabel = criarVidaDaBola(fantasmaDaBola) end
 		local pastaVisuais = Instance.new("Folder")
@@ -859,7 +862,18 @@ local function playReplay(_scoringTeam, samples, eventos)
 						emCutscene[fantasma] = nil
 						if fantasmaDaBola then emCutscene[fantasmaDaBola] = nil end
 					end, d.dur)
+				contagem.Cutscene += 1
+			elseif ev.tipo == "VFX" and typeof(d.args) == "table" then
+				-- ⚠️ v112: efeito de Arma / Hissatsu de drible e carrinho, no fantasma
+				local f = (d.remoto == "ArmaVFX" and _G.ArmaVFXLocal) or (d.remoto == "HissatsuVFX" and _G.HissatsuVFXLocal)
+				if f then
+					local args = {}
+					for i = 1, tonumber(d.n) or 0 do args[i] = d.args[tostring(i)] end
+					f(fantasma, table.unpack(args, 1, tonumber(d.n) or 0))
+					contagem.VFX += 1
+				end
 			end
+			if ev.tipo == "Acao" then contagem.Acao += 1 end
 		end
 		-- ⚠️ v20: o yaw só é alinhado UMA vez, no primeiro trecho em que a
 		-- bola realmente se move — dali em diante o ângulo é do jogador.
@@ -979,6 +993,10 @@ local function playReplay(_scoringTeam, samples, eventos)
 		end
 
 		camera.CameraType = previousCameraType ~= Enum.CameraType.Scriptable and previousCameraType or Enum.CameraType.Custom
+		pcall(function()
+			Players.LocalPlayer:SetAttribute("ReplayUltimo", string.format("eventos=%d acoes=%d cutscenes=%d vfx=%d",
+				#listaEventos, contagem.Acao, contagem.Cutscene, contagem.VFX))
+		end)
 	end)
 
 	for _, ghost in ipairs(ghosts) do

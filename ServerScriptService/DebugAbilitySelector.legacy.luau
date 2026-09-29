@@ -271,6 +271,16 @@ Remotes.DebugConfigureTesting.OnServerEvent:Connect(function(player, kind, value
 			if ball.Parent then ball.Anchored = false end
 		end)
 
+	elseif kind == "TestarReplay" then
+		-- ⚠️ v112: mostra o replay dos últimos segundos NA HORA (sem precisar de
+		-- gol nem de 2 jogadores) — pra conferir Hissatsu/arma/animação no replay
+		local snapshot = _G.GetReplaySnapshot and _G.GetReplaySnapshot()
+		local eventos = _G.GetReplayEventos and _G.GetReplayEventos() or nil
+		if snapshot and #snapshot > 1 then
+			Remotes.GoalReplay:FireClient(player, player.Team and player.Team.Name or "", snapshot, eventos)
+			print(string.format("🛠 DebugAbilitySelector: replay de teste (%d amostras, %d eventos)", #snapshot, eventos and #eventos or 0))
+		end
+
 	elseif kind == "RespawnBall" then
 		-- ⚠️ NOVO: bola tava bugando/sumindo. Usa _G.ResetBallState (exposto
 		-- pelo BallController.legacy.lua) — é o MESMO caminho que o jogo já

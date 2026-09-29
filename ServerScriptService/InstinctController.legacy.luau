@@ -139,7 +139,7 @@ local function setAuraActive(player, def, active, duration)
 	-- Direto, que é Raro) saiu: cada Arma agora tem efeito próprio desenhado no
 	-- cliente (ArmasVFX.local.luau), avisado por aqui.
 	if Config.Remotes.ArmaVFX and player.Character then
-		Config.Remotes.ArmaVFX:FireAllClients(player.Character, def and def.Name, def and def.Rarity, active and true or false, duration)
+		Config.DispararVFX("ArmaVFX", player.Character, def and def.Name, def and def.Rarity, active and true or false, duration)
 	end
 	if true then return end -- (bolha antiga desligada — o resto fica só como referência)
 	local aura = getAura(player)

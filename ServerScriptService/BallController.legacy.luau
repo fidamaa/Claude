@@ -5907,7 +5907,7 @@ _G.PulseExecuteTackle = function(player, effect, def)
 				local origem = r0.Position
 				local VEL = 70
 				if Remotes.HissatsuVFX and player.Character then
-					Remotes.HissatsuVFX:FireAllClients(player.Character, def.Name, def.Element,
+					Config.DispararVFX("HissatsuVFX", player.Character, def.Name, def.Element,
 						{ Dir = direcao, Vel = VEL, Alcance = alcanceTotal })
 				end
 				local t0 = tick()
@@ -5932,7 +5932,7 @@ _G.PulseExecuteTackle = function(player, effect, def)
 					con:Disconnect()
 					local ponto = origem + direcao * andado
 					if Remotes.HissatsuVFX and player.Character then
-						Remotes.HissatsuVFX:FireAllClients(player.Character, def.Name .. "@muro", def.Element, { Posicao = ponto, Dir = direcao })
+						Config.DispararVFX("HissatsuVFX", player.Character, def.Name .. "@muro", def.Element, { Posicao = ponto, Dir = direcao })
 					end
 					local forca = effect.KnockbackForce or 55
 					for _, other in ipairs(Players:GetPlayers()) do
@@ -5958,7 +5958,7 @@ _G.PulseExecuteTackle = function(player, effect, def)
 				return
 			end
 			if Remotes.HissatsuVFX and player.Character then
-				Remotes.HissatsuVFX:FireAllClients(player.Character, def.Name, def.Element)
+				Config.DispararVFX("HissatsuVFX", player.Character, def.Name, def.Element)
 			end
 			task.delay(atraso, function()
 				if not player.Parent then return end
@@ -6008,7 +6008,7 @@ _G.PulseExecuteTackle = function(player, effect, def)
 		end -- (Salto/Projetil: a animação da técnica toca já no início, pelo VFX)
 		Remotes.SuppressShiftLockRotation:FireClient(player, duracao + atraso)
 		if Remotes.HissatsuVFX and player.Character then
-			Remotes.HissatsuVFX:FireAllClients(player.Character, def.Name .. "@inicio", def.Element, { Duracao = duracao, Dir = direcao })
+			Config.DispararVFX("HissatsuVFX", player.Character, def.Name .. "@inicio", def.Element, { Duracao = duracao, Dir = direcao })
 		end
 		return true
 	end
@@ -6456,7 +6456,7 @@ end)()
 
 	local function vfx(player, nome, extra, dur)
 		if Remotes.ArmaVFX and player.Character then
-			Remotes.ArmaVFX:FireAllClients(player.Character, nome, nil, true, dur or 1, extra)
+			Config.DispararVFX("ArmaVFX", player.Character, nome, nil, true, dur or 1, extra)
 		end
 	end
 

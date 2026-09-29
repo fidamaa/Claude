@@ -1086,6 +1086,7 @@ local function onGoalScored(scoringTeamName)
 		golDeOuroPendente = true
 		if Remotes.GoldenGoal then Remotes.GoldenGoal:FireAllClients(scoringTeamName) end
 		local snapshotOuro = _G.GetReplaySnapshot and _G.GetReplaySnapshot()
+		local eventosOuro = _G.GetReplayEventos and _G.GetReplayEventos() or nil -- ⚠️ v112: na hora do gol
 		if scorer then
 			playGoalCelebration(scorer)
 			if _G.NotifyFlowGoal then _G.NotifyFlowGoal(scorer) end
@@ -1094,7 +1095,7 @@ local function onGoalScored(scoringTeamName)
 			if scorer then stopGoalCelebration(scorer) end
 			if _G.SetDeadBallMode then _G.SetDeadBallMode(true) end
 			if snapshotOuro then
-				Remotes.GoalReplay:FireAllClients(scoringTeamName, snapshotOuro, _G.GetReplayEventos and _G.GetReplayEventos() or nil)
+				Remotes.GoalReplay:FireAllClients(scoringTeamName, snapshotOuro, eventosOuro)
 			end
 			task.delay((Config.GOAL_REPLAY_PLAYBACK_SECONDS or 6) + 0.5, function()
 				_G.EndMatchNow()
@@ -1113,6 +1114,10 @@ local function onGoalScored(scoringTeamName)
 	-- si (FireAllClients) é o que fica pra depois da comemoração, ver
 	-- abaixo — o snapshot capturado aqui não muda com o tempo.
 	local replaySnapshot = _G.GetReplaySnapshot and _G.GetReplaySnapshot()
+	-- ⚠️ v112: os EVENTOS (Hissatsu, arma, animações) também são pegos AGORA. Antes
+	-- eram lidos só depois da comemoração (4s) — e nesse tempo o histórico já
+	-- tinha apagado o começo da jogada.
+	local replayEventos = _G.GetReplayEventos and _G.GetReplayEventos() or nil
 
 	-- ⚠️ NOVO: comemoração do jogador que fez o gol, ANTES do replay
 	-- (pedido do usuário — ver playGoalCelebration acima). Só o replay e o
@@ -1132,7 +1137,7 @@ local function onGoalScored(scoringTeamName)
 		end
 
 		if replaySnapshot then
-			Remotes.GoalReplay:FireAllClients(scoringTeamName, replaySnapshot, _G.GetReplayEventos and _G.GetReplayEventos() or nil) -- ⚠️ v103: + eventos (animações, cutscenes)
+			Remotes.GoalReplay:FireAllClients(scoringTeamName, replaySnapshot, replayEventos) -- ⚠️ v103: + eventos · v112: capturados na hora do gol
 		end
 
 		-- depois de um gol, quem sofreu o gol é quem repõe a bola do centro

@@ -276,6 +276,12 @@ do
 	end
 end
 
+-- ⚠️ v112: replay dos últimos segundos na hora (conferir Hissatsu/arma no replay)
+do
+	local replayButton = botaoDebug(7, "Testar replay (últimos segundos)", Color3.fromRGB(60, 110, 150))
+	replayButton.MouseButton1Click:Connect(function() DebugConfigureTesting:FireServer("TestarReplay", true) end)
+end
+
 -- ===== REESPAWNAR BOLA (⚠️ NOVO) =====
 -- Pra quando a bola buga/some: manda o servidor reposicionar ela no
 -- centro do campo (ver kind "RespawnBall" em DebugAbilitySelector.legacy.lua).

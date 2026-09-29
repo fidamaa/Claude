@@ -2679,7 +2679,10 @@ Config.GOAL_MUSIC_FADE_SECONDS = 2 -- os últimos X segundos desses 8 desvanecem
 -- esse caminho gravado e move a câmera atrás dela por
 -- GOAL_REPLAY_PLAYBACK_SECONDS — puramente visual, não afeta o jogo real
 -- (a bola de verdade já foi reposicionada pro centro nesse momento).
-Config.GOAL_REPLAY_DURATION = 8 -- quantos segundos de histórico ficam guardados (a jogada toda até o gol)
+-- ⚠️ v112: 8 -> 12. Com 8 (+1 de folga), uma cutscene de Hissatsu que começou uns
+-- 5-6s antes do gol já tinha sido apagada da lista de eventos quando o replay saía
+-- ("só no primeiro gol aparece a Hissatsu").
+Config.GOAL_REPLAY_DURATION = 12 -- quantos segundos de histórico ficam guardados (a jogada toda até o gol)
 Config.GOAL_REPLAY_SAMPLE_INTERVAL = 0.05 -- a cada quanto tempo guarda um ponto (20 por segundo — suave sem pesar a rede)
 Config.GOAL_REPLAY_PLAYBACK_SECONDS = 6 -- quanto tempo o replay dura na tela (pode ser diferente do histórico guardado — toca os últimos N segundos antes do gol)
 
@@ -3077,5 +3080,28 @@ Config.CROWD_PANTS_ID = ""
 -- Só entra em ação se Config.CROWD_FILL_ENTIRE_AREA = false (ver acima) —
 -- por pedido do usuário, o padrão agora é preencher a área toda.
 Config.CROWD_MAX_SEATS_PER_AREA = 80
+
+-- ⚠️ v112 — PEDIDO: "no replay, só no primeiro gol aparece a Hissatsu, depois não
+-- aparece mais nenhuma, nem arma, nem algumas animações". Os efeitos de Arma
+-- (ArmaVFX) e de Hissatsu de drible/carrinho (HissatsuVFX) iam direto pros
+-- clientes e NUNCA eram gravados no replay. Todo disparo desses passa por aqui:
+-- manda pra todo mundo E grava o evento (o replay repete no fantasma). Só o
+-- servidor chama (o RegistrarEventoReplay mora no BallController).
+Config.DispararVFX = function(nomeRemoto, character, ...)
+	local remoto = Config.Remotes and Config.Remotes[nomeRemoto]
+	if not remoto then return end
+	remoto:FireAllClients(character, ...)
+	if _G.RegistrarEventoReplay and _G.IdDoAtorReplay then
+		local ator = _G.IdDoAtorReplay(character)
+		if ator then
+			-- argumentos com chave em texto: lista com buraco (nil no meio) não
+			-- atravessa o RemoteEvent inteira
+			local n = select("#", ...)
+			local args = {}
+			for i = 1, n do args[tostring(i)] = (select(i, ...)) end
+			_G.RegistrarEventoReplay("VFX", { ator = ator, remoto = nomeRemoto, args = args, n = n })
+		end
+	end
+end
 
 return Config
