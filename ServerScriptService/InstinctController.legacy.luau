@@ -361,9 +361,20 @@ end
 -- exatamente o comportamento antigo — todas as chamadas internas
 -- continuam iguais. Clamp em 100 e o "MeterUpdate" pro cliente também
 -- continuam idênticos.
+-- ⚠️ v113 — PEDIDO: "só 1 Flow por partida". Quem já usou não carrega mais
+-- (o medidor fica em 0 e o HUD mostra "usado"). Zera no começo da partida
+-- (_G.ResetarFlowsDaPartida, chamado pelo MatchController).
+local FlowsUsados = {}
+_G.ResetarFlowsDaPartida = function()
+	for player in pairs(FlowsUsados) do
+		if player.Parent then player:SetAttribute("FlowUsado", nil) end
+	end
+	table.clear(FlowsUsados)
+end
 local function addInstinctCharge(player, amount)
-	amount = tonumber(amount) or INSTINCT_CHARGE_PER_TRIGGER
+	amount = tonumber(amount) or (Config.FLOW_CHARGE_ARMA or INSTINCT_CHARGE_PER_TRIGGER)
 	if amount <= 0 then return end
+	if FlowsUsados[player] then return end
 	local current = InstinctCharge[player] or 0
 	if current >= 100 then return end
 	current = math.min(100, current + amount)
@@ -466,22 +477,13 @@ end
 
 -- Carga por TEMPO dos instintos "gerais" — um loop simples, independente
 -- do resto (não depende de nenhum trigger de ação acontecer).
-task.spawn(function()
-	while true do
-		task.wait(1)
-		for _, player in ipairs(Players:GetPlayers()) do
-			if not _G.IsInInstinctMode(player) then
-				-- ⚠️ v76: checa TODOS os slots equipados agora, não só um —
-				-- cada Instinto "geral" equipado contribui carga própria.
-				for _, name in ipairs(EquippedList[player] or {}) do
-					if INSTINCT_GENERAL[name] then
-						addInstinctCharge(player, INSTINCT_TIME_CHARGE_PER_SECOND)
-					end
-				end
-			end
-		end
-	end
-end)
+-- ⚠️ v113 — BUG: "o Flow enche por segundo com a bola; tem que ser por AÇÃO".
+-- Este laço dava carga TODO SEGUNDO pras Armas "gerais" equipadas — foi
+-- desligado. (A outra metade do bug: a Arma contínua que LIGA — ex.: a
+-- condição "com a bola", que liga/desliga a cada toque — dava carga cheia a
+-- cada vez; também saiu, ver "Avisa só na TRANSIÇÃO".) O Flow agora só vem de
+-- AÇÃO: passe dado/recebido, roubo, gol, Arma disparando numa jogada e ativa
+-- usada.
 
 -- Exposta pro PulseController: a chave de Effect "InstinctCharge" (0-100)
 -- de um Pulso soma direto no medidor de Instinct Mode do jogador — é o
@@ -560,7 +562,10 @@ Remotes.ActivateInstinctMode.OnServerEvent:Connect(function(player)
 	local charge = InstinctCharge[player] or 0
 	if charge < 100 then return end -- medidor não cheio — cliente já trava o botão, isso é defesa em profundidade
 	if _G.IsInInstinctMode(player) then return end -- já ativo
+	if FlowsUsados[player] then return end -- ⚠️ v113: 1 Flow por partida
 
+	FlowsUsados[player] = true
+	player:SetAttribute("FlowUsado", true)
 	InstinctCharge[player] = 0
 	InstinctModeState[player] = { ExpiresAt = tick() + INSTINCT_MODE_DURATION }
 	Remotes.InstinctModeFeedback:FireClient(player, "ModeActivated", INSTINCT_MODE_DURATION)
@@ -927,7 +932,7 @@ task.spawn(function()
 					estado[name] = isActive or nil
 					Remotes.InstinctFeedback:FireClient(player, isActive, name)
 					setAuraActive(player, def, isActive, nil)
-					if isActive then addInstinctCharge(player) end
+					-- (⚠️ v113: ligar uma Arma contínua não carrega mais o Flow)
 				end
 
 				-- ⚠️ v5: a ativa de um instinto contínuo é tentada enquanto a
@@ -1131,6 +1136,7 @@ Players.PlayerRemoving:Connect(function(player)
 	Impulso[player] = nil
 	InstinctCharge[player] = nil
 	InstinctModeState[player] = nil
+	FlowsUsados[player] = nil
 	-- ⚠️ v5: a aura vive dentro do Character, mas a referência fica aqui —
 	-- sem isso a tabela cresce pra sempre num servidor de longa duração.
 	local aura = auraByPlayer[player]

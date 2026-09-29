@@ -407,6 +407,10 @@ local function refreshInstinctModeLabel(meterPercent)
 		-- FLOW, igual ao Blue Lock."
 		instinctModeLabel.Text = rotulo .. " · ATIVO"
 		instinctModeLabel.TextColor3 = corFlow or Color3.fromRGB(120, 210, 255)
+	elseif Players.LocalPlayer:GetAttribute("FlowUsado") then
+		-- ⚠️ v113: 1 Flow por partida
+		instinctModeLabel.Text = rotulo .. " · USADO NESTA PARTIDA"
+		instinctModeLabel.TextColor3 = Color3.fromRGB(120, 125, 140)
 	else
 		instinctModeLabel.Text = (meterPercent or 0) >= 100 and (rotulo .. " · PRONTO") or (rotulo .. (" · %d%%"):format(meterPercent or 0))
 		instinctModeLabel.TextColor3 = (meterPercent or 0) >= 100
@@ -415,6 +419,9 @@ local function refreshInstinctModeLabel(meterPercent)
 end
 
 Players.LocalPlayer:GetAttributeChangedSignal("Cosm_Flow"):Connect(function()
+	refreshInstinctModeLabel(instinctModeBannerActive and 100 or ultimoPercentFlow)
+end)
+Players.LocalPlayer:GetAttributeChangedSignal("FlowUsado"):Connect(function()
 	refreshInstinctModeLabel(instinctModeBannerActive and 100 or ultimoPercentFlow)
 end)
 

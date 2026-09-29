@@ -1783,10 +1783,14 @@ Config.FOG_HIDDEN_TRANSPARENCY = 0.85
 --
 -- O medidor vai a 100. Com estes números: ~9 passes dados, ~7 recebidos,
 -- 5 desarmes, ou 2 gols. A mistura é o caminho normal.
-Config.FLOW_CHARGE_PASS_GIVEN = 11
-Config.FLOW_CHARGE_PASS_RECEIVED = 14
-Config.FLOW_CHARGE_STEAL = 20
-Config.FLOW_CHARGE_GOAL = 50
+-- ⚠️ v113 — PEDIDO: "deixa o Flow mais difícil" (e só 1 por partida): cargas
+-- ~metade do que eram (11/14/20/50). A carga por ARMA disparando é
+-- Config.FLOW_CHARGE_ARMA.
+Config.FLOW_CHARGE_PASS_GIVEN = 6
+Config.FLOW_CHARGE_PASS_RECEIVED = 8
+Config.FLOW_CHARGE_STEAL = 12
+Config.FLOW_CHARGE_GOAL = 35
+Config.FLOW_CHARGE_ARMA = 5 -- efeito de Arma disparando numa ação / ativa usada (era 10)
 
 -- Propriedades físicas da bola (Density/Friction/Elasticity) — sem isso
 -- a bola usa o padrão genérico do Roblox (que não foi pensado pra

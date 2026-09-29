@@ -236,6 +236,8 @@ Remotes.DebugConfigureTesting.OnServerEvent:Connect(function(player, kind, value
 
 	elseif kind == "EncherFlow" then
 		-- ⚠️ v110: enche o medidor do Flow na hora (testar as cenas)
+		-- (⚠️ v113: libera o "1 Flow por partida" pra poder testar de novo)
+		if _G.ResetarFlowsDaPartida then _G.ResetarFlowsDaPartida() end
 		if _G.AddInstinctCharge then _G.AddInstinctCharge(player, 100) end
 
 	elseif kind == "TestarGol" then

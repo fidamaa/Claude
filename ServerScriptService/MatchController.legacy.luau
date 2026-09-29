@@ -1608,6 +1608,8 @@ end
 
 local function startMatchTimer()
 	setupGoalDetection()
+	-- ⚠️ v113: cada jogador tem 1 Flow por partida — libera de novo aqui
+	if _G.ResetarFlowsDaPartida then _G.ResetarFlowsDaPartida() end
 
 	-- ⚠️ v49: mede a duração da prorrogação agora, em paralelo — leva alguns
 	-- segundos pro áudio carregar, e só vai ser usada depois de dois tempos
