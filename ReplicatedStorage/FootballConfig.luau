@@ -941,7 +941,8 @@ Config.GKBOT_CATCH_APPROACH_RADIUS = 6
 -- Raio (studs) da "defesa" do bot em cima da trajetória prevista da bola
 -- solta (chute/cruzamento vindo na direção dele). ⚠️ AUMENTADO (era 5,
 -- mesmo pedido de hitbox maior).
-Config.GKBOT_SHOT_REACT_RADIUS = 12 -- ⚠️ v105: era 7 — "faça o GK dar mais dives": reage a mais chutes
+-- ⚠️ v111 — PEDIDO: "aumente a distância dos dives do GK Bot, 50% maior — tanto pra cima, quanto pra diagonal, quanto pros lados"
+Config.GKBOT_SHOT_REACT_RADIUS = 18 -- ⚠️ v111: 12 -> 18 (+50%: tenta o dive de mais longe) -- ⚠️ v105: era 7 — "faça o GK dar mais dives": reage a mais chutes
 
 -- Só reage a bola solta se ela já estiver a essa distância (studs, no
 -- plano do chão) do bot — evita o bot reagir a um chute do outro lado do
@@ -1291,7 +1292,7 @@ Config.GKBOT_JUMP_MIN_BALL_HEIGHT = 2
 -- updateBotMovement — só que numa velocidade bem maior, GKBOT_CHASE_
 -- SPEED, e sem o clamp lateral normal); só o pulo vertical continua
 -- sendo um impulso direto (ver maybeJumpForBall em GKBotController.lua).
-Config.GKBOT_DIVE_UP_SPEED = 32      -- ⚠️ v6.3 AUMENTADO (era 23): "melhore um pouco mais o dive do bot, pra dificultar pros players"
+Config.GKBOT_DIVE_UP_SPEED = 48 -- ⚠️ v111: 32 -> 48 (+50%)      -- ⚠️ v6.3 AUMENTADO (era 23): "melhore um pouco mais o dive do bot, pra dificultar pros players"
 -- ⚠️ v5.9: NOVO — pedido: "ele ainda não está dando o dive diagonal,
 -- apenas o pulo". Componente HORIZONTAL somado ao impulso vertical do
 -- mergulho aéreo (GKBOT_DIVE_UP_SPEED), na direção do alvo — sem isso o
@@ -1304,7 +1305,7 @@ Config.GKBOT_DIVE_UP_SPEED = 32      -- ⚠️ v6.3 AUMENTADO (era 23): "melhore
 -- pouco a distância do dive".
 -- ⚠️ v6.3: AUMENTADO de novo (era 22) — pedido: "melhore um pouco mais o
 -- dive do bot, pra dificultar pros players".
-Config.GKBOT_DIVE_DIAGONAL_KICK = 36 -- ⚠️ v105: +~50% (era 25) — o mergulho do bot vai mais longe
+Config.GKBOT_DIVE_DIAGONAL_KICK = 54 -- ⚠️ v111: 36 -> 54 (+50%) -- ⚠️ v105: +~50% (era 25) — o mergulho do bot vai mais longe
 -- ⚠️ REDUZIDO pra 0.35 (era 0.5): "diminua um pouco o atraso do pulo".
 -- ⚠️ v5.8: AUMENTADO um pouco de novo (windup maior, mesmo pedido do
 -- GKBOT_SHOT_REACT_MAX_RANGE acima) — 0.35s às vezes acabava/resolvia
@@ -1320,7 +1321,7 @@ Config.GKBOT_TEMPO_REACAO = 0.17 -- ⚠️ v111: era 0.22 — "tenta fazer ele a
 Config.GKBOT_DIVE_SPEED = 44 -- ⚠️ v111: 38 -> 44 (mesmo pedido acima: chute no canto nunca era pego) -- ⚠️ v110: era 44 -- ⚠️ v110: era 52 ("o bot está muito rápido") -- ⚠️ v110: era 75 ("impossível de fazer gol, deixa ele um pouco mais fraco")
 -- ⚠️ v109: reage a chute que vai passar até esse tanto dele SE estiver indo pro gol
 -- dele (o raio pequeno de cima continua valendo pra bola que não vai no gol)
-Config.GKBOT_SHOT_REACT_RADIUS_NO_GOL = 15 -- ⚠️ v110: era 20 ("muito difícil de errar") -- ⚠️ v110: era 28
+Config.GKBOT_SHOT_REACT_RADIUS_NO_GOL = 22.5 -- ⚠️ v111: 15 -> 22.5 (+50%) -- ⚠️ v110: era 20 ("muito difícil de errar") -- ⚠️ v110: era 28
 
 -- ⚠️ v6.2: SUBSTITUI o antigo GKBOT_DIVE_MIN_LATERAL_DISTANCE (piso fixo,
 -- sem teto nenhum) — pedido: "ele precisa calcular se o dive vale a pena
@@ -1338,7 +1339,8 @@ Config.GKBOT_SHOT_REACT_RADIUS_NO_GOL = 15 -- ⚠️ v110: era 20 ("muito difíc
 -- o bot cobre mais chão E defende melhor quando chega no limite disso.
 -- ⚠️ v110 — PEDIDO: "o GK ainda está muito difícil de errar... chuto no canto e é
 -- muito difícil fazer gol". Alcance 37 -> 26: canto bem batido fica fora do mergulho.
-Config.GKBOT_DIVE_REACH = 26 -- ⚠️ v105: +50% junto do humano (era 25) — ⚠️ v35: era 34 (original 21) -- ⚠️ v22: era 21 — "melhora o dive dele pra caralho". Alcance real do mergulho.
+-- ⚠️ v111 — PEDIDO: "aumente a distância dos dives do GK Bot, 50% maior — tanto pra cima, quanto pra diagonal, quanto pros lados"
+Config.GKBOT_DIVE_REACH = 39 -- ⚠️ v111: 26 -> 39 (+50%: alcance do mergulho pros lados/diagonal) -- ⚠️ v105: +50% junto do humano (era 25) — ⚠️ v35: era 34 (original 21) -- ⚠️ v22: era 21 — "melhora o dive dele pra caralho". Alcance real do mergulho.
 
 -- ⚠️ v3.3: PREVISÃO DE TRAJETÓRIA (pedido: "ele não dá dive pra diagonal
 -- ... você já começa a calcular antes, igual o sistema de trajetória, ele
@@ -1532,7 +1534,12 @@ Config.GKBOT_LATERAL_GOAL_FRACTION = 0.65
 Config.GKBOT_CORPO_RAIO = 4
 Config.GKBOT_MAOS_EXTRA = 1.3
 -- altura máxima que o mergulho do bot sobe acima do chão (perto do travessão)
-Config.GKBOT_DIVE_ALTURA_MAX = 13
+Config.GKBOT_DIVE_ALTURA_MAX = 19.5 -- ⚠️ v111: 13 -> 19.5 (+50% pra cima)
+-- ⚠️ v111 — PEDIDO: "ele vai sempre tentar priorizar mais dar dives; só se a bola
+-- for realmente bem próximo dele ele não dá dive e anda normalmente até a bola".
+-- Bola passando a menos disso de lado = anda até ela; mais que isso = mergulha
+-- (antes o mínimo era a caixa de defesa garantida, 5.5).
+Config.GKBOT_DIVE_PERTO = 3.5
 Config.GKBOT_GUARANTEED_CATCH_BOX = Vector3.new(5.5, 7, 5.5) -- ⚠️ v110: de volta (v109 tinha subido pra 6.5, 7.5, 6.5) ("a bola passa direto nele") -- era 4, 5.5, 4
 
 -- Alcance de referência (studs) usado pra essa interpolação: a PROFUNDIDADE

@@ -1356,7 +1356,7 @@ local function maybeJumpForBall(teamName, bot, predictedPoint)
 	-- mergulhar, e QUALQUER coisa além dela até o limite do alcance vira
 	-- mergulho. Não sobra buraco entre os dois comportamentos.
 	local guaranteedBox = Config.GKBOT_GUARANTEED_CATCH_BOX
-	local diveWorthMin = math.min(guaranteedBox.X, guaranteedBox.Z)
+	local diveWorthMin = Config.GKBOT_DIVE_PERTO or math.min(guaranteedBox.X, guaranteedBox.Z) -- ⚠️ v111: prioriza o mergulho
 	local diveWorthMax = Config.GKBOT_DIVE_REACH
 	local worthDiving = lateralDistance >= diveWorthMin and lateralDistance <= diveWorthMax
 
@@ -2596,6 +2596,14 @@ local function reactToBall(teamName, bot, predictedPoint)
 		bot.DiveStateGen = _G.GetBallStateGeneration and _G.GetBallStateGeneration() or 0
 	else
 		resolveCatchOrClear(teamName, bot)
+		-- ⚠️ v111 — PEDIDO: "se a bola for realmente bem próximo dele, ele não dá
+		-- dive... vai andar normalmente até a bola". Antes ficava parado esperando;
+		-- agora anda até o ponto por onde ela vai passar.
+		if bot.State == "Idle" and bot.Root and typeof(predictedPoint) == "Vector3"
+			and not (_G.GetBallOwner and _G.GetBallOwner()) then
+			bot.ChaseTarget = Vector3.new(predictedPoint.X, bot.Root.Position.Y, predictedPoint.Z)
+			bot.ChaseUntil = tick() + (bot.TempoAteBola or 0.5) + 0.3
+		end
 	end
 end
 
