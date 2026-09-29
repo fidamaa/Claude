@@ -2478,4 +2478,115 @@ function FI.Camera(t, rootPos)
 end
 
 
+-- ============================================================
+-- 👾 FLOW DO BACHIRA — cena de ativação (⚠️ v113)
+-- ============================================================
+-- PEDIDO: "Bachira segurando a mão do monstro". Pelo vídeo ("Goodbye,
+-- Monster", visão geral a cada 2,5s): o vazio claro/enevoado (65-67s), a
+-- MÃO do monstro com garras se estendendo (77.5s), o menino andando com o
+-- monstro (85-90s), os olhos AMARELOS arregalados (100-105s).
+--   0.0-2.0  ele no vazio claro; o monstro (preto, olhos amarelos, sorriso
+--            de dentes, chifres) surge atrás, à esquerda;
+--   2.0-4.5  o monstro estende a mão com garras; ele segura (close nas mãos);
+--   4.5-7.5  os dois andam de mãos dadas;
+--   7.5-9.0  solta a mão, pose de drible; o mundo escurece, olhos amarelos;
+--   9.0-10.2 o monstro entra nele (fumaça preta e amarela);
+--   10.2-12  pose final com a aura amarela.
+-- O monstro é montado de peças nos efeitos (FlowBachira) e o braço direito
+-- dele vai até a mão esquerda do Bachira de verdade, quadro a quadro.
+local FB = {}
+Cutscenes.Flow_Bachira = FB
+FB.Motor = "V2"
+FB.Efeitos = "FlowBachira"
+FB.KickFoot = "Right"
+FB.Duration = 12
+FB.ImpactTime = 10.2 -- o monstro entra nele
+FB.ColarNoPe = false
+FB.TitleText = "FLOW · BACHIRA MEGURU"
+FB.Tema = {
+	Titulo = { rgb(255, 255, 230), rgb(255, 215, 70), rgb(160, 110, 10) },
+	Contorno = rgb(30, 20, 5), Flash = rgb(255, 235, 150),
+	Tint = rgb(255, 250, 235), Saturation = 0.1, Contrast = 0.15, Brightness = 0,
+}
+FB.Phases = {
+	Surge = { 0, 2 }, Mao = { 2, 4.5 }, Andam = { 4.5, 7.5 }, Drible = { 7.5, 9 },
+	Entra = { 9, FB.ImpactTime }, Final = { FB.ImpactTime, 12 },
+	Kick = { 9.8, FB.ImpactTime }, Impact = { FB.ImpactTime, FB.Duration },
+}
+local FB_ROOT = {
+	{ 0, V3(0, 0, 0) }, { 4.5, V3(0, 0, 0) }, { 7.5, V3(0, 0, -8) },
+	{ 8.0, V3(0, -0.4, -8.4) }, { 9.0, V3(0, -0.4, -8.6) }, { 10.2, V3(0, -0.2, -8.6) }, { 12, V3(0, -0.2, -8.6) },
+}
+function FB.RootPosition(t) return sample(FB_ROOT, t) end
+function FB.RootCFrame(t)
+	-- na pose de drible gira um pouco pro lado (o jeito dele de dançar com a bola)
+	local giro = 0
+	if t >= 7.5 and t < 9 then giro = math.sin((t - 7.5) * 6) * 18 end
+	return CFrame.new(FB.RootPosition(t)) * CFrame.Angles(0, rad(giro), 0)
+end
+function FB.BallPosition(_t, s) return s or V3(0, -2.3, -1.8) end
+function FB.BallVisible(t) return t < 0.05 end
+function FB.BallSpin() return 0 end
+FB.PontoMao = nil -- (usado pelos efeitos: onde as mãos se encontram)
+
+local FB_MAO = { LShoulder = { 25, 0, -62 } } -- braço esquerdo erguido pro monstro
+local FB_POSE = {
+	{ 0.00, {} },
+	-- olha pra cima, pro monstro atrás/à esquerda
+	{ 1.20, { Neck = { 22, -35, 0 }, RShoulder = { -5, 0, 10 }, LShoulder = { -5, 0, -10 } } },
+	{ 2.20, { Neck = { 18, -45, 0 }, RShoulder = { -5, 0, 10 }, LShoulder = { 0, 0, -30 } } },
+	{ 3.20, { Neck = { 15, -45, 0 }, RShoulder = { -5, 0, 10 }, LShoulder = FB_MAO.LShoulder } },
+	{ 4.50, { Neck = { 10, -30, 0 }, RShoulder = { -5, 0, 10 }, LShoulder = FB_MAO.LShoulder } },
+	-- (4.5-7.5: andando de mãos dadas, calculado abaixo)
+	-- drible: agachado, braços abertos, joelho pra fora
+	{ 7.80, { Root = { -20, 0, 0 }, Neck = { 18, 0, 0 }, RHip = { 40, 0, 20 }, LHip = { 30, 0, -12 },
+		RShoulder = { 10, 0, 70 }, LShoulder = { 10, 0, -70 } } },
+	{ 9.00, { Root = { -22, 0, 0 }, Neck = { 20, 0, 0 }, RHip = { 45, 0, 22 }, LHip = { 28, 0, -14 },
+		RShoulder = { 15, 0, 75 }, LShoulder = { 15, 0, -75 } } },
+	-- o monstro entra: joga a cabeça pra trás
+	{ 9.80, { Root = { 8, 0, 0 }, Neck = { 30, 0, 0 }, RHip = { 10, 0, 10 }, LHip = { 10, 0, -10 },
+		RShoulder = { 30, 0, 100 }, LShoulder = { 30, 0, -100 } } },
+	-- pose final: inclinado pra frente, braços abertos, joelho direito erguido (riso)
+	{ FB.ImpactTime, { Root = { -16, 0, 0 }, Neck = { 22, 0, 0 }, RHip = { 70, 0, 12 }, LHip = { -10, 0, 0 },
+		RShoulder = { 20, 0, 85 }, LShoulder = { 20, 0, -85 } } },
+	{ 12.00, { Root = { -18, 0, 0 }, Neck = { 24, 0, 0 }, RHip = { 75, 0, 12 }, LHip = { -12, 0, 0 },
+		RShoulder = { 22, 0, 88 }, LShoulder = { 22, 0, -88 } } },
+}
+function FB.Pose(t)
+	if t >= 4.5 and t < 7.5 then
+		-- andando (passada calma), braço esquerdo segurando a mão dele
+		local w = math.sin((t - 4.5) * math.pi * 2 * 1.3)
+		return {
+			Root = { -3, 0, 0 }, Neck = { 12, -25, 0 },
+			RHip = { 28 * w, 0, 0 }, LHip = { -28 * w, 0, 0 },
+			RShoulder = { -22 * w, 0, 8 }, LShoulder = FB_MAO.LShoulder,
+		}
+	end
+	return samplePose(FB_POSE, t)
+end
+
+function FB.Camera(t, rootPos)
+	if t < 2 then
+		-- aberta, de trás e baixa: ele pequeno e o monstro surgindo
+		local u = smooth(phase(t, 0, 2))
+		return V3(5, 0.2, 11):Lerp(V3(4, 0.6, 9.5), u), V3(-1.8, 3.2, 0), 55
+	elseif t < 4.5 then
+		-- close nas mãos se encontrando
+		local u = smooth(phase(t, 2, 4.5))
+		-- (mira no ponto das mãos, na altura da cintura dele)
+		return V3(-0.4, -0.1, -5.6):Lerp(V3(-0.9, 0.1, -4.6), u), V3(-2.3, 0.4, -0.3), 46
+	elseif t < 7.5 then
+		-- DE COSTAS: os dois indo embora de mãos dadas (a imagem clássica; de
+		-- lado o monstro ficava escondido atrás dele)
+		local u = smooth(phase(t, 4.5, 7.5))
+		return rootPos + V3(-1.2, 1.2, 10 - 2 * u), rootPos + V3(-1.9, 2.2, -2), 52
+	elseif t < 9 then
+		-- de frente e baixa: a pose de drible, o monstro enorme atrás
+		return rootPos + V3(1.8, -1.2, -6.5), rootPos + V3(-0.8, 1.6, 0), 58
+	end
+	local u = smooth(phase(t, 9, 12))
+	return rootPos + V3(2.2, -1.4, -5.2):Lerp(V3(1.3, -1, -3.9), u), rootPos + V3(0, 1, 0), 58
+end
+
+
 return Cutscenes

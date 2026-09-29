@@ -3721,4 +3721,208 @@ function E.FlowIsagi(ctx)
 end
 
 
+-- ============================================================
+-- 👾 FLOW DO BACHIRA (⚠️ v113) — ver a coreografia Flow_Bachira
+-- ============================================================
+-- O MONSTRO montado de peças: pernas, tronco, cabeça redonda com chifres,
+-- olhos amarelos, sorriso de dentes, braços compridos com garras. Preto com
+-- contorno amarelo. O braço direito dele sai do ombro e termina na mão
+-- esquerda do Bachira (mãos dadas de verdade, em qualquer avatar).
+function E.FlowBachira(ctx)
+	local pasta, spec = ctx.Pasta, ctx.Spec
+	local AMARELO, PRETO, CLARO = rgb(255, 215, 70), rgb(14, 11, 9), rgb(250, 245, 230)
+	local character = ctx.Character
+	local head = character:FindFirstChild("Head")
+	local maoBachira = character:FindFirstChild("LeftHand") or character:FindFirstChild("Left Arm")
+	local chao = ctx.ChaoY
+
+	-- o vazio: claro e enevoado, escurece no drible
+	local sala = salaEscura(pasta, "SalaFlowBachira", CLARO, ctx.Inicio * CFrame.new(0, 20, -5), 130, chao + 0.1 - 20)
+	sala.Transparency = 0
+	local brilho = parte(pasta, "BrilhoVazio")
+	brilho.Size = V3(40, 14, 40)
+	brilho.CFrame = ctx.Inicio * CFrame.new(0, 4, -5)
+	local faiscas = emissor(brilho, {
+		Cor = cores({ { 0, rgb(255, 250, 200) }, { 1, AMARELO } }), Tamanho = numeros({ { 0, 0.25 }, { 1, 0 } }),
+		Vida = { 1.5, 2.5 }, Vel = { 0.2, 0.8 }, Taxa = 40, Forma = Enum.ParticleEmitterShape.Box,
+		Estilo = Enum.ParticleEmitterShapeStyle.Volume,
+	})
+
+	-- ===== o monstro =====
+	local pecas = {}
+	local function peca(nome, props)
+		local p = parte(pasta, nome, props)
+		p.Material = props.Material or Enum.Material.SmoothPlastic
+		table.insert(pecas, p)
+		return p
+	end
+	local function cunha(nome, tam, cor)
+		local w = Instance.new("WedgePart")
+		w.Name = nome
+		w.Anchored, w.CanCollide, w.CanQuery, w.CanTouch, w.CastShadow = true, false, false, false, false
+		w.Material = Enum.Material.SmoothPlastic
+		w.Color = cor
+		w.Size = tam
+		w.Transparency = 1
+		w.Parent = pasta
+		table.insert(pecas, w)
+		return w
+	end
+	local M = {
+		Tronco = peca("MTronco", { Color = PRETO }), Cabeca = peca("MCabeca", { Shape = Enum.PartType.Ball, Color = PRETO }),
+		PernaD = peca("MPernaD", { Color = PRETO }), PernaE = peca("MPernaE", { Color = PRETO }),
+		BracoD = peca("MBracoD", { Color = PRETO }), BracoE = peca("MBracoE", { Color = PRETO }),
+		OlhoD = peca("MOlhoD", { Shape = Enum.PartType.Ball, Color = AMARELO, Material = Enum.Material.Neon }),
+		OlhoE = peca("MOlhoE", { Shape = Enum.PartType.Ball, Color = AMARELO, Material = Enum.Material.Neon }),
+		Chifres = {}, Dentes = {}, GarrasD = {}, GarrasE = {},
+	}
+	M.Tronco.Size = V3(3.4, 3.8, 1.8)
+	M.Cabeca.Size = V3(3, 3, 3)
+	M.PernaD.Size, M.PernaE.Size = V3(1.1, 3.4, 1.1), V3(1.1, 3.4, 1.1)
+	M.OlhoD.Size, M.OlhoE.Size = V3(0.7, 0.7, 0.7), V3(0.7, 0.7, 0.7)
+	for i = 1, 5 do M.Chifres[i] = cunha("MChifre" .. i, V3(0.5, 1.8 - math.abs(i - 3) * 0.3, 0.9), PRETO) end
+	for i = 1, 8 do M.Dentes[i] = cunha("MDente" .. i, V3(0.12, 0.38, 0.22), rgb(245, 245, 235)) end
+	for i = 1, 3 do
+		M.GarrasD[i] = cunha("MGarraD" .. i, V3(0.2, 0.9, 0.4), rgb(235, 235, 225))
+		M.GarrasE[i] = cunha("MGarraE" .. i, V3(0.2, 0.9, 0.4), rgb(235, 235, 225))
+	end
+	local contorno = Instance.new("Highlight")
+	contorno.FillTransparency = 1
+	contorno.OutlineColor = AMARELO
+	contorno.DepthMode = Enum.HighlightDepthMode.Occluded
+	contorno.Adornee = pasta -- (a pasta toda; só as peças do monstro ficam visíveis com contorno)
+	contorno.Parent = pasta
+	-- o contorno amarelo também pega o palco, então vai só no monstro: um modelo
+	local modeloM = Instance.new("Model")
+	modeloM.Name = "Monstro"
+	modeloM.Parent = pasta
+	for _, p in ipairs(pecas) do p.Parent = modeloM end
+	contorno.Adornee = modeloM
+
+	-- fumaça preta e amarela quando ele entra no Bachira
+	local fumacaFx = parte(pasta, "FumacaMonstro")
+	local fumaca = emissor(fumacaFx, {
+		Textura = TEX.Fumaca, Cor = cores({ { 0, rgb(30, 25, 15) }, { 0.6, rgb(90, 70, 20) }, { 1, AMARELO } }), Brilho = 0.2,
+		Tamanho = numeros({ { 0, 3 }, { 1, 7 } }), Transp = numeros({ { 0, 0.2 }, { 1, 1 } }), Vida = { 0.5, 0.9 },
+		Vel = { 3, 9 }, Drag = 2,
+	})
+
+	-- olhos amarelos e aura dele
+	local olhoB1 = esfera(pasta, "OlhoBachira1", AMARELO)
+	local olhoB2 = esfera(pasta, "OlhoBachira2", AMARELO)
+	local auras = {}
+	local function aura(pai, tam)
+		if not pai then return end
+		table.insert(auras, emissor(pai, {
+			Textura = TEX.Fogo, Cor = cores({ { 0, rgb(255, 250, 200) }, { 0.4, AMARELO }, { 1, rgb(60, 40, 10) } }), Brilho = 0.9,
+			Tamanho = numeros({ { 0, tam }, { 1, 0.3 } }), Transp = numeros({ { 0, 0.2 }, { 1, 1 } }), Vida = { 0.4, 0.7 },
+			Vel = { 2, 5 }, Spread = 30, Direcao = Enum.NormalId.Top,
+		}))
+	end
+	aura(character:FindFirstChild("Torso") or character:FindFirstChild("UpperTorso"), 2.6)
+	aura(head, 1.8)
+
+	local function visivelMonstro(a)
+		for _, p in ipairs(pecas) do p.Transparency = 1 - a end
+		contorno.OutlineTransparency = 1 - a
+	end
+
+	local ph = spec.Phases
+	local efeitos = {}
+	function efeitos.Quadro(t, _dt, s)
+		-- o vazio escurece no drible
+		local escuro = smooth(phase(t, 7.3, 8.0))
+		sala.Color = CLARO:Lerp(rgb(12, 10, 8), escuro)
+		faiscas.Enabled = t < 9.5
+
+		-- onde o monstro está: à esquerda dele, andando junto
+		local r = s.RootLocal
+		local surge = smooth(phase(t, 0.3, 1.6))
+		local entra = smooth(phase(t, ph.Entra[1], ph.Entra[2]))
+		local mLocal = V3(-3.8, 0, 1.2) + V3(0, 0, r.Z)
+		if t >= 7.5 then mLocal = V3(-2.6, 0, r.Z + 2.4) end -- atrás dele no drible
+		mLocal = mLocal:Lerp(r + V3(0, -1, 0), entra)
+		local escala = 1 - 0.75 * entra
+		local passo = (t >= 4.5 and t < 7.5) and math.sin((t - 4.5) * math.pi * 2 * 1.3) or 0
+		local base = ctx.Inicio * CFrame.new(mLocal.X, chao, mLocal.Z) * CFrame.Angles(0, t >= 7.5 and math.rad(-15) or 0, 0)
+		local quadril = base * CFrame.new(0, 3.3 * escala, 0)
+		local inclina = t < 2 and math.rad(-20 * surge) or (t < 4.5 and math.rad(-28) or math.rad(-12))
+		local tronco = quadril * CFrame.Angles(inclina, 0, 0) * CFrame.new(0, 1.9 * escala, 0)
+		M.Tronco.Size = V3(3.4, 3.8, 1.8) * escala
+		M.Tronco.CFrame = tronco
+		local cab = tronco * CFrame.new(0, 3.1 * escala, -0.3 * escala) * CFrame.Angles(math.rad(-15), math.rad(t < 4.5 and 25 or 10), 0)
+		M.Cabeca.Size = V3(3, 3, 3) * escala
+		M.Cabeca.CFrame = cab
+		M.OlhoD.Size, M.OlhoE.Size = V3(0.7, 0.7, 0.7) * escala, V3(0.7, 0.7, 0.7) * escala
+		M.OlhoD.CFrame = cab * CFrame.new(0.6 * escala, 0.25 * escala, -1.35 * escala)
+		M.OlhoE.CFrame = cab * CFrame.new(-0.6 * escala, 0.25 * escala, -1.35 * escala)
+		for i, c in ipairs(M.Chifres) do
+			local a = math.rad(-60 + (i - 1) * 30)
+			c.CFrame = cab * CFrame.new(math.sin(a) * 1.3 * escala, math.cos(a) * 1.3 * escala + 0.2, 0.2) * CFrame.Angles(0, 0, -a)
+		end
+		for i, d in ipairs(M.Dentes) do
+			local x = (i - 4.5) * 0.24
+			d.CFrame = cab * CFrame.new(x * escala, -0.55 * escala - math.abs(x) * 0.25, -1.28 * escala) * CFrame.Angles(math.rad(180), 0, 0)
+		end
+		for lado, perna in pairs({ [1] = M.PernaD, [-1] = M.PernaE }) do
+			perna.Size = V3(1.1, 3.4, 1.1) * escala
+			perna.CFrame = quadril * CFrame.new(0.9 * lado * escala, 0, 0) * CFrame.Angles(math.rad(28 * passo * lado), 0, 0) * CFrame.new(0, -1.65 * escala, 0)
+		end
+		-- braço direito: do ombro até a mão do Bachira (segurando), ou pendurado
+		local ombroD = (tronco * CFrame.new(1.9 * escala, 1.3 * escala, 0)).Position
+		local ombroE = (tronco * CFrame.new(-1.9 * escala, 1.3 * escala, 0)).Position
+		local segura = smooth(phase(t, 2.4, 3.3)) * (1 - smooth(phase(t, 7.4, 7.8)))
+		local livreD = (tronco * CFrame.new(2.2 * escala, -2.2 * escala, -0.6)).Position
+		local alvoD = livreD
+		if maoBachira and segura > 0 then
+			local maoPos = maoBachira.CFrame:PointToWorldSpace(V3(0, -maoBachira.Size.Y / 2, 0))
+			alvoD = livreD:Lerp(maoPos, segura)
+		end
+		if t >= 7.5 then alvoD = (tronco * CFrame.new(3.4 * escala, 1.8 * escala, -2.2)).Position end -- garras abertas no drible
+		local alvoE = (tronco * CFrame.new(-2.6 * escala, -2 * escala + math.sin(t * 2) * 0.3, -0.4)).Position
+		if t >= 7.5 then alvoE = (tronco * CFrame.new(-3.4 * escala, 1.8 * escala, -2.2)).Position end
+		local function braco(p, de, ate, garras)
+			local len = math.max((ate - de).Magnitude, 0.5)
+			p.Size = V3(0.8 * escala, 0.8 * escala, len)
+			local cf = CFrame.lookAt((de + ate) / 2, ate)
+			p.CFrame = cf
+			local ponta = CFrame.lookAt(ate, ate + cf.LookVector)
+			for i, g in ipairs(garras) do
+				g.CFrame = ponta * CFrame.new((i - 2) * 0.28, 0, -0.35) * CFrame.Angles(math.rad(-90), 0, 0)
+			end
+		end
+		braco(M.BracoD, ombroD, alvoD, M.GarrasD)
+		braco(M.BracoE, ombroE, alvoE, M.GarrasE)
+		visivelMonstro(surge * (1 - smooth(phase(t, ph.Entra[2] - 0.3, ph.Entra[2]))))
+
+		-- fumaça quando ele entra
+		fumacaFx.CFrame = ctx.Root.CFrame
+		fumaca.Enabled = t >= ph.Entra[1] and t < ph.Entra[2] + 0.3
+		fumaca.Rate = 70
+
+		-- olhos amarelos a partir do drible
+		if head then
+			local olhos = FlowCenaOlhos(head)
+			local a = smooth(phase(t, 7.6, 7.9))
+			olhoB1.Size, olhoB2.Size = Vector3.one * 0.3, Vector3.one * 0.3
+			olhoB1.CFrame = head.CFrame * CFrame.new(olhos[1])
+			olhoB2.CFrame = head.CFrame * CFrame.new(olhos[2])
+			olhoB1.Transparency = a > 0.02 and 0 or 1
+			olhoB2.Transparency = olhoB1.Transparency
+		end
+		for _, a in ipairs(auras) do
+			a.Enabled = t >= ph.Entra[2] - 0.2
+			a.Rate = 70
+		end
+	end
+	function efeitos.Impacto(_s)
+		ctx.Flash(AMARELO, 0.25, 0.4)
+		onda(pasta, ctx.Root.Position, Vector3.yAxis, AMARELO, 26, 0.45, 0.35)
+		anelVazado(pasta, ctx.Root.Position, ctx.Inicio.LookVector, rgb(255, 245, 190), 2, 18, 0.4, 0.25)
+		ctx.Tremer(0.6, 0.3)
+	end
+	return efeitos
+end
+
+
 return E
