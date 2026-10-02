@@ -84,18 +84,59 @@ local function emissor(pai, props)
 	return e
 end
 
+-- ⚠️ v114 — AURA DISCRETA. PEDIDO: "Aura: VFX discreto em volta do corpo, não um
+-- highlight." Antes a aura saía toda dos pés, concentrada num ponto; agora o mesmo
+-- estilo é espalhado pelo corpo (tronco, pernas e braços), com menos partículas,
+-- menores, mais transparentes e subindo devagar — presença sutil, sem pintar o
+-- personagem nem tapar o uniforme (nada de Highlight/ForceField).
+local PARTES_AURA = {
+	"UpperTorso", "LowerTorso", "RightLowerLeg", "LeftLowerLeg", "RightLowerArm", "LeftLowerArm", -- R15
+	"Torso", "Right Leg", "Left Leg", "Right Arm", "Left Arm", -- R6
+}
+
+local function espalhar(character, props)
+	local alvos = {}
+	for _, nome in ipairs(PARTES_AURA) do
+		local p = character:FindFirstChild(nome)
+		if p and p:IsA("BasePart") then table.insert(alvos, p) end
+	end
+	if #alvos == 0 then return end
+	local p = table.clone(props)
+	p.Rate = math.max(0.8, (p.Rate or 7) * 1.3 / #alvos)
+	if p.Size then
+		local ks = {}
+		for _, kp in ipairs(p.Size.Keypoints) do
+			table.insert(ks, NumberSequenceKeypoint.new(kp.Time, kp.Value * 0.55, kp.Envelope * 0.55))
+		end
+		p.Size = NumberSequence.new(ks)
+	end
+	if p.Transparency then
+		local ks = {}
+		for _, kp in ipairs(p.Transparency.Keypoints) do
+			table.insert(ks, NumberSequenceKeypoint.new(kp.Time, 0.4 + 0.6 * kp.Value))
+		end
+		p.Transparency = NumberSequence.new(ks)
+	end
+	if p.Speed then p.Speed = NumberRange.new(p.Speed.Min * 0.6, p.Speed.Max * 0.6) end
+	p.Shape = Enum.ParticleEmitterShape.Box
+	p.ShapeStyle = Enum.ParticleEmitterShapeStyle.Volume
+	p.SpreadAngle = Vector2.new(180, 180)
+	p.EmissionDirection = Enum.NormalId.Top
+	p.Acceleration = p.Acceleration or Vector3.new(0, 1.2, 0)
+	for _, alvo in ipairs(alvos) do emissor(alvo, p) end
+end
+
 local function montarAura(player)
 	local character = player.Character
 	local root = character and character:FindFirstChild("HumanoidRootPart")
 	if not root then return end
 	local velha = root:FindFirstChild("AuraCosmeticaAnexo")
 	if velha then velha:Destroy() end
+	for _, d in ipairs(character:GetDescendants()) do
+		if d:IsA("ParticleEmitter") and d.Name == "AuraCosmetica" then d:Destroy() end
+	end
 	local item = Cosmeticos.Equipado(player, "Aura")
 	if not item then return end
-	local anexo = Instance.new("Attachment")
-	anexo.Name = "AuraCosmeticaAnexo"
-	anexo.Position = Vector3.new(0, -1.2, 0)
-	anexo.Parent = root
 	local estilo = item.Estilo
 	local base = {
 		Texture = TEX_BRILHO, Color = ColorSequence.new(item.Cor), Rate = 7, Lifetime = NumberRange.new(0.8, 1.4),
@@ -122,7 +163,7 @@ local function montarAura(player)
 	elseif estilo == "Galaxia" then
 		base.Color = ColorSequence.new(Color3.fromRGB(160, 100, 255), Color3.fromRGB(60, 180, 255))
 		base.Rate = 9
-		emissor(anexo, {
+		espalhar(character, {
 			Texture = TEX_FUMACA, Color = ColorSequence.new(Color3.fromRGB(80, 40, 160)), Rate = 4, LightEmission = 0.5,
 			Lifetime = NumberRange.new(1, 1.6), Speed = NumberRange.new(0.5, 1),
 			Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(1, 2) }),
@@ -148,7 +189,7 @@ local function montarAura(player)
 		base.Speed = NumberRange.new(0.3, 0.8)
 		base.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0), NumberSequenceKeypoint.new(0.5, 0.45), NumberSequenceKeypoint.new(1, 0) })
 	end
-	emissor(anexo, base)
+	espalhar(character, base)
 end
 
 local function acompanhar(player)
