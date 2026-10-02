@@ -2002,8 +2002,22 @@ _G.TocarCenaFlow = function(player)
 	end
 	if _G.GrantPulseIframe then _G.GrantPulseIframe(player, duration + 0.3) end
 	local ballLocal = ball and startCFrame:PointToObjectSpace(ball.Position) or Vector3.new(0, -2.3, -1.8)
+	-- ⚠️ v119 — PEDIDO: "o Rin é um companheiro aleatório, não um fantasma". A cena
+	-- que pede (CompanheiroAleatorio) recebe um companheiro de time sorteado; sem
+	-- ninguém no time, o cliente usa a sombra.
+	local extras = nil
+	if spec.CompanheiroAleatorio then
+		local mates = {}
+		for _, other in ipairs(Players:GetPlayers()) do
+			if other ~= player and other.Team and other.Team == player.Team
+				and other.Character and other.Character:FindFirstChild("HumanoidRootPart") then
+				table.insert(mates, other)
+			end
+		end
+		if #mates > 0 then extras = { Companheiros = { mates[math.random(1, #mates)] } } end
+	end
 	Remotes.HissatsuCutscene:FireAllClients(item.Id, player, startCFrame, ballLocal, workspace:GetServerTimeNow(),
-		"FLOW · " .. string.upper(item.Personagem or ""), duration)
+		"FLOW · " .. string.upper(item.Personagem or ""), duration, extras)
 
 	task.delay(duration, function()
 		for _, r in ipairs(ancorados) do

@@ -490,7 +490,9 @@ end
 -- de energia. Os corpos reais deles somem durante a cena (estão no triângulo).
 local companheirosDaCutscene = nil -- lista de Players, só durante o início de uma cutscene
 
-local function criarCompanheiro(mateChar, cor, pasta)
+-- ⚠️ v119: `estilo` (opcional) = { Fill, Outline, OutlineTransp } — o Rin do Flow do Isagi
+-- é um companheiro de verdade sem o contorno roxo da Zona Morta
+local function criarCompanheiro(mateChar, cor, pasta, estilo)
 	local antes = mateChar.Archivable
 	mateChar.Archivable = true
 	local ok, copia = pcall(function() return mateChar:Clone() end)
@@ -513,9 +515,9 @@ local function criarCompanheiro(mateChar, cor, pasta)
 	end
 	local contorno = Instance.new("Highlight")
 	contorno.FillColor = cor
-	contorno.FillTransparency = 0.85
-	contorno.OutlineColor = Color3.fromRGB(200, 140, 255)
-	contorno.OutlineTransparency = 0.05
+	contorno.FillTransparency = estilo and estilo.Fill or 0.85
+	contorno.OutlineColor = estilo and estilo.Outline or Color3.fromRGB(200, 140, 255)
+	contorno.OutlineTransparency = estilo and estilo.OutlineTransp or 0.05
 	contorno.Parent = copia
 	copia.Parent = pasta
 	-- o corpo real some enquanto a cena roda (a cópia está no triângulo)
@@ -645,7 +647,7 @@ local function tocarCutsceneV2(spec, chutador, inicio, bolaLocal, horarioServido
 			local real = false
 			local modelo
 			if mateChar then
-				modelo = criarCompanheiro(mateChar, spec.Clones.Cor or Color3.fromRGB(120, 40, 200), pasta)
+				modelo = criarCompanheiro(mateChar, spec.Clones.Cor or Color3.fromRGB(120, 40, 200), pasta, spec.Clones.Contorno)
 				real = modelo ~= nil
 			end
 			modelo = modelo or criarSombra(character, spec.Clones.Cor or Color3.fromRGB(120, 40, 200), pasta)
@@ -897,7 +899,7 @@ local function tocarCutsceneV2(spec, chutador, inicio, bolaLocal, horarioServido
 		-- câmera
 		local camLocal, alvoLocal, fov = spec.Camera(t, rootLocal, bolaPosLocal)
 		local forca = 0
-		if t >= spec.ImpactTime then
+		if t >= spec.ImpactTime and not spec.SemTremidaImpacto then
 			forca = 0.7 * (1 - Cutscenes.Phase(t, spec.ImpactTime, spec.Duration))
 		end
 		if t < tremidaFim then
@@ -909,8 +911,20 @@ local function tocarCutsceneV2(spec, chutador, inicio, bolaLocal, horarioServido
 		end
 		if not replay then
 			camera.CameraType = Enum.CameraType.Scriptable
-			camera.CFrame = CFrame.lookAt(mundo(camLocal) + tremida, mundo(alvoLocal))
-			camera.FieldOfView = fov
+			-- ⚠️ v119: os efeitos podem mandar a câmera em coordenadas de MUNDO (closes que
+			-- seguem a cabeça/olho/mão de verdade de qualquer avatar — Flow do Isagi)
+			local camMundo, fovMundo = nil, nil
+			if efeitos and efeitos.CameraMundo then
+				local okCam, c1, f1 = pcall(efeitos.CameraMundo, t, mundo(camLocal), mundo(alvoLocal), fov)
+				if okCam and typeof(c1) == "CFrame" then camMundo, fovMundo = c1, f1 end
+			end
+			if camMundo then
+				camera.CFrame = camMundo + tremida
+				camera.FieldOfView = fovMundo or fov
+			else
+				camera.CFrame = CFrame.lookAt(mundo(camLocal) + tremida, mundo(alvoLocal))
+				camera.FieldOfView = fov
+			end
 		end
 	end
 
