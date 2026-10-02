@@ -345,6 +345,7 @@ Data.Pulses = {
 	-- ninguém consegue entrar no bloqueio nem disputar o rebote.
 	{
 		Name = "Impulso de Maré",
+		Image = "rbxassetid://131281290260913", -- ⚠️ v118: arte do artista (pacote "Imagens (4)")
 		Rarity = "Rare",
 		Element = "Natureza",
 		Description = "Impulso de Maré te faz saltar numa onda e bater no ar, empurrando pra trás qualquer marcador colado em você — usada com dois marcadores em cima, os dois voam e o rebote fica seu.",
@@ -645,6 +646,7 @@ Data.Pulses = {
 	-- vez de mudar você: quem te perseguir, perde.
 	{
 		Name = "Névoa",
+		Image = "rbxassetid://101239600042748", -- ⚠️ v118: arte do artista (pacote "Imagens (4)")
 		Rarity = "Epic",
 		Element = "Void",
 		Description = "Névoa deixa uma nuvem no chão por onde você passa — qualquer perseguidor que atravessar ela fica mais lento. Você não ganha velocidade, é o perseguidor que perde.",
@@ -753,6 +755,7 @@ Data.Pulses = {
 	-- quem estiver por perto, de mais longe que um drible normal.
 	{
 		Name = "Bola Ilusão",
+		Image = "rbxassetid://88339078899907", -- ⚠️ v118: arte do artista (pacote "Imagens (4)")
 		Rarity = "Rare",
 		Element = "Natureza",
 		Description = "Bola Ilusão cria duas CÓPIAS suas com bola que saem em direções sorteadas (frente e diagonais) — você é a terceira e anda livre. Em 1,5s as cópias somem numa nuvem.",
@@ -951,6 +954,7 @@ Data.Pulses = {
 	-- gelo que congela o chão e o adversário. VERBO: congelar no desarme.
 	{
 		Name = "Roubo Congelante",
+		Image = "rbxassetid://70693399835564", -- ⚠️ v118: arte do artista (pacote "Imagens (4)")
 		Rarity = "Epic",
 		Element = "Vento",
 		Description = "Roubo Congelante dá um carrinho que cobre o chão de gelo e CONGELA quem estiver perto — o atacante fica preso no lugar enquanto você sai com a bola.",
@@ -1043,6 +1047,7 @@ Data.Pulses = {
 
 	{
 		Name = "Muralha de Maré",
+		Image = "rbxassetid://73399688837774", -- ⚠️ v118: arte do artista (pacote "Imagens (4)")
 		Rarity = "Rare",
 		Element = "Natureza",
 		RoleRequired = "GK",
