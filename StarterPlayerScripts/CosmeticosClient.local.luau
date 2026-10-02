@@ -487,8 +487,21 @@ local function ligarFlowNoCorpo(player, item, duracao)
 	aura.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.5), NumberSequenceKeypoint.new(1, 0) })
 	aura.Parent = anexo
 	table.insert(coisas, anexo)
+	-- ⚠️ v119b — PEDIDO: "o efeito do Flow do quebra-cabeça ficou bacana, mas são VÁRIOS
+	-- quebra-cabeças, cada imagem uma peça diferente; e não é pra sair nas costas dele,
+	-- é em volta dele inteiro, sempre junto dele". Flow do Isagi: as 6 peças nascem no
+	-- volume do corpo inteiro, presas a ele (andam junto), crescem, giram e somem.
+	if tema.Motivo == "Pecas" then
+		local okEf, Ef = pcall(function() return require(ReplicatedStorage:WaitForChild("HissatsuEfeitos")) end)
+		if okEf and Ef and Ef.PecasEmVolta then
+			for _, e in ipairs(Ef.PecasEmVolta(character, tema.Cor, tema.Cor2, 1.4)) do table.insert(coisas, e) end
+		end
+	end
 	task.delay(duracao, function()
 		aura.Enabled = false
+		for _, c in ipairs(coisas) do
+			if c:IsA("ParticleEmitter") then c.Enabled = false end
+		end
 		task.wait(1)
 		for _, c in ipairs(coisas) do c:Destroy() end
 	end)

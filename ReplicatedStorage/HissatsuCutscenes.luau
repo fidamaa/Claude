@@ -2320,43 +2320,42 @@ Cutscenes.DefesaPorNome = {
 }
 
 -- ============================================================
--- 🧠 FLOW DO ISAGI — "O GÊNIO DA ADAPTABILIDADE" (⚠️ v119)
+-- 🧠 FLOW DO ISAGI — "O GÊNIO DA ADAPTABILIDADE" (⚠️ v119b)
 -- ============================================================
 -- PEDIDO: "replique o Flow do Isagi do vídeo (the genius of the adaptability):
 -- o Isagi se levanta da grama, vê o Rin correndo na frente, não aceita e entra
 -- no Flow pra se adaptar. O Rin é um companheiro aleatório (não fantasma).
--- Ambiente em volta, detalhe do rosto e dos olhos, qualidade máxima, COLORIDO.
--- A imagem do cérebro/olhos brilhando é o final" + "não precisa ser 21s: 10-12s"
--- + "cada detalhe, a animação mais fluida possível".
--- Pelo vídeo (21.8s, quadros a cada 0,1s) → aqui comprimido em 11.5s:
---   0.0-1.9  (A 0.0-1.5) de quatro na grama, cabeça baixa, neblina, luz entrando
---   1.9-3.3  (B 1.5-2.4) close do rosto na sombra do cabelo, suor pingando
---   3.3-5.5  (C 2.4-3.3) o PUNHO fechado apertando a grama, tremendo
---            (D 3.3-4.3) a mão abre, apoia e ele se LEVANTA (riscos)
---   5.6-8.8  (E 4.3-5.5) de pé, corpo escuro, OLHOS BRANCOS VAZIOS escorrendo,
---            fundo branco de riscos verticais, a câmera fecha no rosto
---   8.8-9.9  (F 5.5-6.2) zoom DENTRO do olho: a pupila vira uma MANDALA de
---            engrenagens que gira e estoura em branco
---  10.0-12.1 (G 6.2-7.4) mundo branco: o RIN (um companheiro de verdade) correndo
---            na frente, de costas; um REDEMOINHO escuro engole tudo
---  12.1-14.7 (H 7.4-8.6) a chuteira desce e PISA: o chão vira um QUEBRA-CABEÇA de
---            luz que racha e as peças voam
---  14.8-15.5 (I 8.6-8.8) preto
---  15.6-17.9 (J 8.8-9.9) braços cruzados em X na frente do rosto, aura escura,
---            olhar fixo; flashes do CÉREBRO acendendo
---  18.0-20.8 (K 9.9-11.5) EXPLODE EM COR (azul do Flow): abre os braços, o cérebro
---            brilha dentro da cabeça, olhos com o desenho do gênio; close final
---            nos olhos.
--- Interpolação Catmull-Rom (passa pelas poses sem parar em cada uma) + respiração
--- e tremor somados por cima. A câmera dos closes vem dos efeitos (FlowIsagi
--- .CameraMundo), que seguem a cabeça/mão/pé DE VERDADE de qualquer avatar.
+-- Ambiente em volta, detalhe do rosto e dos olhos, COLORIDO, 10-12s, cada
+-- detalhe, a animação mais fluida possível".
+-- ⚠️ v119b — REVISÃO ("o primeiro take tá certo, depois confunde tudo, a ordem
+-- tá trocada, só depois aparece o Rin, o olho não aparece direito"):
+--   • a história ficou LINEAR: caído → rosto → ele levanta a cabeça e VÊ O RIN
+--     correndo lá na frente (por cima do ombro dele) → levanta → olhos vazios →
+--     mandala no olho → pisa e o chão de quebra-cabeça racha → braços em X →
+--     o gênio, colorido;
+--   • saiu o close da mão no chão (no R6 não tem punho: parecia "segurando a mão");
+--   • os personagens são R6 (sem joelho/cotovelo): as poses foram recalculadas
+--     com braço e perna retos (braços em X e abertos pela conta do ombro).
+--   A  0.0-1.8  de quatro na grama, cabeça baixa, neblina (o take aprovado)
+--   B  1.8-2.9  close do rosto na sombra; suor; ele LEVANTA A CABEÇA
+--   C  2.9-4.4  por cima do ombro dele: o RIN (companheiro sorteado) correndo à frente
+--   D  4.4-5.5  ele se levanta (riscos de velocidade)
+--   E  5.5-6.6  palco branco, corpo escuro, OLHOS BRANCOS VAZIOS que escorrem
+--   F  6.6-7.2  zoom no olho: a MANDALA de engrenagens gira e estoura em branco
+--   G  7.2-8.5  escuro com o redemoinho no fundo: ele PISA, o chão vira um
+--               quebra-cabeça de luz que racha, peças voam EM VOLTA dele
+--   H  8.5-9.7  braços cruzados em X, aura escura e chamas azuis; o CÉREBRO pisca
+--   K  9.7-11.5 explode em COR: abre os braços, cérebro brilhando, olhos do gênio
+-- Interpolação Catmull-Rom (passa pelas poses sem parar) + respiração por cima.
+-- A câmera dos closes vem dos efeitos (FlowIsagi.CameraMundo), que seguem a
+-- cabeça/olho/pé DE VERDADE de qualquer avatar.
 local FI = {}
 Cutscenes.Flow_Isagi = FI
 FI.Motor = "V2"
 FI.Efeitos = "FlowIsagi"
 FI.KickFoot = "Right"
 FI.Duration = 11.5
-FI.ImpactTime = 9.9 -- a explosão de cor do Flow
+FI.ImpactTime = 9.7 -- a explosão de cor do Flow
 FI.ColarNoPe = false
 FI.SemTremidaImpacto = true -- o fim é close nos olhos: a tremida padrão do impacto sacudia a imagem
 FI.CompanheiroAleatorio = true -- o servidor sorteia um companheiro de time pra ser o Rin
@@ -2367,10 +2366,10 @@ FI.Tema = {
 	Tint = rgb(255, 255, 255), Saturation = 0, Contrast = 0.08, Brightness = 0,
 }
 FI.Phases = {
-	Caido = { 0, 1.5 }, Rosto = { 1.5, 2.4 }, Punho = { 2.4, 3.3 }, Levanta = { 3.3, 4.3 },
-	Vazio = { 4.3, 5.5 }, Olho = { 5.5, 6.2 }, Rin = { 6.2, 7.4 }, Pisa = { 7.4, 8.6 },
-	Preto = { 8.6, 8.8 }, Cruza = { 8.8, 9.9 }, Genio = { 9.9, 11.5 },
-	Kick = { 9.8, FI.ImpactTime }, Impact = { FI.ImpactTime, FI.Duration },
+	Caido = { 0, 1.8 }, Rosto = { 1.8, 2.9 }, VeRin = { 2.9, 4.4 }, Levanta = { 4.4, 5.5 },
+	Vazio = { 5.5, 6.6 }, Olho = { 6.6, 7.2 }, Pisa = { 7.2, 8.5 }, Preto = { 8.5, 8.65 },
+	Cruza = { 8.65, 9.7 }, Genio = { 9.7, 11.5 },
+	Kick = { 9.6, FI.ImpactTime }, Impact = { FI.ImpactTime, FI.Duration },
 }
 
 -- Catmull-Rom: passa por todos os quadros com velocidade contínua (sem o
@@ -2412,17 +2411,18 @@ local function samplePoseFluida(keys, t)
 end
 Cutscenes.SamplePoseFluida = samplePoseFluida
 
--- altura do quadril: ajoelhado (coxa na vertical) ≈ 1.45 acima do gramado
+-- altura do quadril (R6: o HRP é o centro do tronco)
+--   de quatro (aprovado): Chao + 1.45 · avanço com o joelho na frente: Chao + 2.3
 local function fiAltura(t)
 	local quatro = CAL.Chao + 1.45
 	return sampleFluido({
-		{ 0, quatro }, { 3.3, quatro }, { 3.7, quatro + 0.35 }, { 4.25, 0 }, { 7.75, 0 },
-		{ 8.0, -0.35 }, { 8.6, -0.2 }, { 8.8, -0.45 }, { 9.9, -0.5 }, { 10.25, -0.35 }, { 11.5, -0.4 },
+		{ 0, quatro }, { 4.4, quatro }, { 4.85, CAL.Chao + 2.3 }, { 5.3, 0 }, { 7.6, 0 },
+		{ 7.85, -0.2 }, { 8.5, -0.1 }, { 8.65, -0.15 }, { 9.7, -0.15 }, { 10.0, 0 }, { 11.5, 0 },
 	}, t)
 end
-local FI_Z = { { 0, 0 }, { 7.6, 0 }, { 8.0, -1.4 }, { 11.5, -1.4 } }
+local FI_Z = { { 0, 0 }, { 7.6, 0 }, { 7.85, -1.6 }, { 11.5, -1.6 } }
 function FI.RootPosition(t)
-	local respira = 0.05 * math.sin(t * (t < 4.3 and 5.5 or 3)) -- ofegante no chão
+	local respira = 0.05 * math.sin(t * (t < 4.4 and 5.5 or 3)) -- ofegante no chão
 	return V3(0, fiAltura(t) + respira, sampleFluido(FI_Z, t))
 end
 function FI.RootCFrame(t) return CFrame.new(FI.RootPosition(t)) end
@@ -2430,7 +2430,7 @@ function FI.BallPosition(_t, s) return s or V3(0, -2.3, -1.8) end
 function FI.BallVisible(t) return t < 0.05 end
 function FI.BallSpin() return 0 end
 
--- de quatro: tronco 65° pra frente, coxa e braço na vertical (somando o tronco)
+-- de quatro (o take aprovado): tronco 65° pra frente, coxa e braço retos
 local FI_QUATRO = {
 	Root = { -65, 0, 0 }, Neck = { -28, 0, 0 },
 	RHip = { 65, 0, 4 }, LHip = { 65, 0, -4 }, RKnee = { -88, 0, 0 }, LKnee = { -88, 0, 0 },
@@ -2442,55 +2442,53 @@ local function comMudanca(base, mud)
 	for k, v in pairs(mud) do p[k] = v end
 	return p
 end
+-- R6 (braço reto): direção do braço d = (sen rz, −cos rz·cos rx, −cos rz·sen rx)
+--   braços em X na frente do nariz: d ≈ (∓0.68, 0.35, −0.64) → rx ≈ 118, rz ≈ ∓43
+--   braços abertos pro alto:        rx −10, rz ±100
+local FI_X = { Root = { -8, 0, 0 }, Neck = { -12, 0, 0 }, RHip = { 0, 0, 10 }, LHip = { 0, 0, -10 },
+	RShoulder = { 116, 0, -43 }, LShoulder = { 122, 0, 43 } } -- (X na altura do nariz: os olhos encaram por cima)
+local FI_ABERTO = { Root = { 6, 0, 0 }, Neck = { 6, 0, 0 }, RHip = { 0, 0, 14 }, LHip = { 0, 0, -14 },
+	RShoulder = { -10, 0, 100 }, LShoulder = { -10, 0, -100 } }
 local FI_POSE = {
 	{ 0.00, FI_QUATRO },
-	{ 1.50, comMudanca(FI_QUATRO, { Neck = { -34, 0, 0 } }) },
-	-- punho apertando a grama (ombro desce, cotovelo trava)
-	{ 2.40, comMudanca(FI_QUATRO, { Neck = { -30, 0, 0 }, RShoulder = { 58, 0, 10 }, RElbow = { 22, 0, 0 } }) },
-	{ 3.30, comMudanca(FI_QUATRO, { Neck = { -20, 0, 0 }, RShoulder = { 56, 0, 10 }, RElbow = { 26, 0, 0 } }) },
-	-- empurra o chão: joelho direito à frente
-	{ 3.70, { Root = { -38, 0, 0 }, Neck = { 0, 0, 0 }, RHip = { 95, 0, 6 }, RKnee = { -95, 0, 0 },
-		LHip = { 25, 0, -4 }, LKnee = { -85, 0, 0 }, RShoulder = { 35, 0, 12 }, LShoulder = { 20, 0, -12 },
-		RElbow = { 30, 0, 0 }, LElbow = { 20, 0, 0 } } },
-	-- de pé, cabeça subindo
-	{ 4.25, { Root = { -8, 0, 0 }, Neck = { 6, 0, 0 }, RHip = { 8, 0, 3 }, LHip = { 2, 0, -3 }, RKnee = { -10, 0, 0 },
-		LKnee = { -6, 0, 0 }, RShoulder = { 4, 0, 9 }, LShoulder = { 4, 0, -9 }, RElbow = { 14, 0, 0 }, LElbow = { 14, 0, 0 } } },
-	-- olhos vazios: corpo mole, cabeça erguida pro alto (olhando o Rin lá na frente)
-	{ 4.90, { Root = { -6, 0, 0 }, Neck = { 18, 0, 0 }, RHip = { 4, 0, 4 }, LHip = { 4, 0, -4 }, RKnee = { -6, 0, 0 },
-		LKnee = { -6, 0, 0 }, RShoulder = { -4, 0, 10 }, LShoulder = { -4, 0, -10 }, RElbow = { 8, 0, 0 }, LElbow = { 8, 0, 0 } } },
-	{ 7.40, { Root = { -4, 0, 0 }, Neck = { 14, 0, 0 }, RHip = { 4, 0, 4 }, LHip = { 4, 0, -4 }, RKnee = { -6, 0, 0 },
-		LKnee = { -6, 0, 0 }, RShoulder = { -4, 0, 10 }, LShoulder = { -4, 0, -10 }, RElbow = { 8, 0, 0 }, LElbow = { 8, 0, 0 } } },
+	-- (no close a cabeça fica baixa olhando o chão um pouco à FRENTE — com -30 ela
+	-- passava da vertical e o rosto virava pras pernas, sem como filmar)
+	{ 1.80, comMudanca(FI_QUATRO, { Neck = { -14, 0, 0 } }) },
+	{ 2.45, comMudanca(FI_QUATRO, { Neck = { -12, 0, 0 } }) },
+	-- levanta a cabeça e olha pra frente (compensa o tronco tombado)
+	{ 2.90, comMudanca(FI_QUATRO, { Neck = { 42, 0, 0 } }) },
+	{ 4.40, comMudanca(FI_QUATRO, { Neck = { 46, 0, 0 }, RShoulder = { 60, 0, 8 } }) },
+	-- avança: perna direita à frente, a esquerda atrás, apoiando
+	{ 4.85, { Root = { -35, 0, 0 }, Neck = { 30, 0, 0 }, RHip = { 80, 0, 6 }, LHip = { -5, 0, -4 },
+		RShoulder = { 35, 0, 12 }, LShoulder = { 15, 0, -12 } } },
+	-- de pé
+	{ 5.30, { Root = { -6, 0, 0 }, Neck = { 10, 0, 0 }, RShoulder = { 4, 0, 9 }, LShoulder = { 4, 0, -9 } } },
+	-- olhos vazios: mole, cabeça erguida (o Rin lá na frente)
+	{ 5.90, { Root = { -4, 0, 0 }, Neck = { 16, 0, 0 }, RShoulder = { -4, 0, 8 }, LShoulder = { -4, 0, -8 }, RHip = { 0, 0, 4 }, LHip = { 0, 0, -4 } } },
+	{ 7.30, { Root = { -4, 0, 0 }, Neck = { 12, 0, 0 }, RShoulder = { -4, 0, 8 }, LShoulder = { -4, 0, -8 }, RHip = { 0, 0, 4 }, LHip = { 0, 0, -4 } } },
 	-- ergue o pé direito... e PISA
-	{ 7.75, { Root = { -10, 0, 0 }, Neck = { -6, 0, 0 }, RHip = { 75, 0, 4 }, RKnee = { -85, 0, 0 }, LHip = { -4, 0, -4 },
-		LKnee = { -8, 0, 0 }, RShoulder = { -20, 0, 14 }, LShoulder = { 25, 0, -14 }, RElbow = { 30, 0, 0 }, LElbow = { 30, 0, 0 } } },
-	{ 8.00, { Root = { -16, 0, 0 }, Neck = { -10, 0, 0 }, RHip = { 30, 0, 4 }, RKnee = { -18, 0, 0 }, LHip = { -10, 0, -4 },
-		LKnee = { -30, 0, 0 }, RShoulder = { -28, 0, 16 }, LShoulder = { 32, 0, -16 }, RElbow = { 35, 0, 0 }, LElbow = { 35, 0, 0 } } },
-	{ 8.60, { Root = { -12, 0, 0 }, Neck = { -6, 0, 0 }, RHip = { 26, 0, 4 }, RKnee = { -20, 0, 0 }, LHip = { -6, 0, -4 },
-		LKnee = { -26, 0, 0 }, RShoulder = { -10, 0, 14 }, LShoulder = { 10, 0, -14 }, RElbow = { 25, 0, 0 }, LElbow = { 25, 0, 0 } } },
-	-- braços cruzados em X na frente do rosto, base firme, cabeça baixa encarando
-	{ 8.90, { Root = { -14, 0, 0 }, Neck = { -12, 0, 0 }, RHip = { 22, 0, 12 }, LHip = { 22, 0, -12 }, RKnee = { -30, 0, 0 },
-		LKnee = { -30, 0, 0 }, RShoulder = { 78, 0, -32 }, LShoulder = { 82, 0, 32 }, RElbow = { 118, 0, 0 }, LElbow = { 112, 0, 0 } } },
-	{ 9.80, { Root = { -16, 0, 0 }, Neck = { -14, 0, 0 }, RHip = { 24, 0, 12 }, LHip = { 24, 0, -12 }, RKnee = { -34, 0, 0 },
-		LKnee = { -34, 0, 0 }, RShoulder = { 80, 0, -34 }, LShoulder = { 84, 0, 34 }, RElbow = { 122, 0, 0 }, LElbow = { 116, 0, 0 } } },
-	-- GÊNIO: abre os braços com tudo, peito pra frente
-	{ 10.20, { Root = { 6, 0, 0 }, Neck = { 6, 0, 0 }, RHip = { 14, 0, 18 }, LHip = { 14, 0, -18 }, RKnee = { -24, 0, 0 },
-		LKnee = { -24, 0, 0 }, RShoulder = { 28, 0, 104 }, LShoulder = { 28, 0, -104 }, RElbow = { 30, 0, 0 }, LElbow = { 30, 0, 0 } } },
-	{ 11.50, { Root = { -2, 0, 0 }, Neck = { -2, 0, 0 }, RHip = { 16, 0, 18 }, LHip = { 16, 0, -18 }, RKnee = { -26, 0, 0 },
-		LKnee = { -26, 0, 0 }, RShoulder = { 34, 0, 98 }, LShoulder = { 34, 0, -98 }, RElbow = { 40, 0, 0 }, LElbow = { 40, 0, 0 } } },
+	{ 7.60, { Root = { -5, 0, 0 }, Neck = { -6, 0, 0 }, RHip = { 70, 0, 4 }, LHip = { 0, 0, -4 },
+		RShoulder = { -20, 0, 14 }, LShoulder = { 25, 0, -14 } } },
+	{ 7.85, { Root = { -12, 0, 0 }, Neck = { -10, 0, 0 }, RHip = { 15, 0, 4 }, LHip = { -8, 0, -4 },
+		RShoulder = { -28, 0, 16 }, LShoulder = { 32, 0, -16 } } },
+	{ 8.50, { Root = { -10, 0, 0 }, Neck = { -6, 0, 0 }, RHip = { 12, 0, 4 }, LHip = { -6, 0, -4 },
+		RShoulder = { -10, 0, 14 }, LShoulder = { 10, 0, -14 } } },
+	-- braços cruzados em X na frente do rosto
+	{ 8.75, FI_X },
+	{ 9.60, comMudanca(FI_X, { Root = { -10, 0, 0 }, Neck = { -14, 0, 0 } }) },
+	-- GÊNIO: os braços sobem e abrem com tudo
+	{ 9.85, comMudanca(FI_ABERTO, { RShoulder = { 160, 0, 30 }, LShoulder = { 160, 0, -30 }, Root = { 8, 0, 0 } }) },
+	{ 10.10, FI_ABERTO },
+	{ 11.50, comMudanca(FI_ABERTO, { Root = { 2, 0, 0 }, Neck = { 0, 0, 0 }, RShoulder = { -4, 0, 96 }, LShoulder = { -4, 0, -96 } }) },
 }
 function FI.Pose(t)
 	local pose = samplePoseFluida(FI_POSE, t)
-	-- respiração (ofegante no chão, funda de pé) e tremor de raiva no punho
-	local f = t < 4.3 and 5.5 or 3
-	local amp = t < 4.3 and 2.2 or 1.2
+	-- respiração (ofegante no chão, funda de pé)
+	local f = t < 4.4 and 5.5 or 3
+	local amp = t < 4.4 and 2.2 or 1.2
 	pose.Root[1] += amp * math.sin(t * f)
 	pose.Neck[1] += amp * 0.6 * math.sin(t * f - 0.6)
-	if t >= 2.4 and t < 3.3 then
-		local tremor = 1.6 * math.sin(t * 47) + 1.1 * math.sin(t * 31)
-		pose.RShoulder[1] += tremor
-		pose.RElbow[1] += tremor * 0.7
-	end
-	if t >= 8.8 and t < 9.9 then -- braços cruzados tremendo de tensão
+	if t >= 8.75 and t < 9.7 then -- braços cruzados tremendo de tensão
 		local tremor = 0.9 * math.sin(t * 41)
 		pose.RShoulder[1] += tremor
 		pose.LShoulder[1] -= tremor
@@ -2499,12 +2497,10 @@ function FI.Pose(t)
 end
 
 -- O RIN: um companheiro de verdade (o servidor sorteia; sozinho vira uma sombra
--- verde-água) correndo lá na frente, de costas — no fundo da neblina enquanto
--- ele está caído e de perto no mundo branco.
+-- verde-água) correndo lá na frente, de costas, na neblina.
 local function fiRinPos(t)
-	-- (quadril na mesma altura do dele em pé: y = 0 no espaço da cena)
-	local u = phase(t, 6.2, 7.4)
-	return V3(1.6, 0, -5.5 - 30 * u ^ 1.15)
+	local u = phase(t, 2.9, 4.4)
+	return V3(1.8, 0, -9 - 26 * u ^ 1.1)
 end
 FI.Clones = {
 	Quantidade = 1,
@@ -2519,27 +2515,30 @@ FI.Clones = {
 	Pose = function(_i, t)
 		local w = math.sin(t * 3 * math.pi)
 		return {
-			Root = { -16, 0, 0 }, Neck = { 10, 0, 0 },
-			RHip = { 55 * w, 0, 0 }, LHip = { -55 * w, 0, 0 },
-			RKnee = { -20 - 55 * math.max(0, -w), 0, 0 }, LKnee = { -20 - 55 * math.max(0, w), 0, 0 },
-			RShoulder = { -48 * w, 0, 10 }, LShoulder = { 48 * w, 0, -10 },
-			RElbow = { 85, 0, 0 }, LElbow = { 85, 0, 0 },
+			Root = { -12, 0, 0 }, Neck = { 8, 0, 0 },
+			RHip = { 50 * w, 0, 0 }, LHip = { -50 * w, 0, 0 },
+			RShoulder = { -45 * w, 0, 8 }, LShoulder = { 45 * w, 0, -8 },
 		}
 	end,
 	Alpha = function(_i, t)
-		if t >= 6.15 and t < 7.45 then return smooth(phase(t, 6.15, 6.3)) * (1 - smooth(phase(t, 7.15, 7.4))) end
+		if t >= 2.85 and t < 4.45 then return smooth(phase(t, 2.85, 3.05)) * (1 - smooth(phase(t, 4.2, 4.4))) end
 		return 0
 	end,
 }
 
--- câmera BASE (só os planos abertos; os closes vêm de FlowIsagi.CameraMundo)
+-- câmera BASE (planos abertos; os closes vêm de FlowIsagi.CameraMundo)
 function FI.Camera(t, rootPos)
-	if t < 1.5 then
-		local u = smooth(phase(t, 0, 1.5))
+	if t < 1.8 then
+		-- o take aprovado
+		local u = smooth(phase(t, 0, 1.8))
 		return V3(4.6, CAL.Chao + 1.1, -5.6):Lerp(V3(3.8, CAL.Chao + 1.0, -4.7), u), rootPos + V3(0, -0.3, -0.6), 48
-	elseif t < 4.3 then
-		local u = smooth(phase(t, 3.3, 4.3))
-		return V3(0.8, CAL.Chao + 0.7, -6.4):Lerp(V3(0.5, CAL.Chao + 1.2, -5.6), u), rootPos + V3(0, 0.6, 0), 55
+	elseif t >= 2.9 and t < 4.4 then
+		-- por cima do ombro: ele no canto, o Rin correndo lá na frente
+		local u = smooth(phase(t, 2.9, 4.4))
+		return V3(1.9, CAL.Chao + 2.5, 3.8):Lerp(V3(1.6, CAL.Chao + 2.4, 2.7), u), V3(0.9, CAL.Chao + 2.7, -26), 52
+	elseif t >= 4.4 and t < 5.5 then
+		local u = smooth(phase(t, 4.4, 5.5))
+		return V3(0.8, CAL.Chao + 0.7, -6.4):Lerp(V3(0.5, CAL.Chao + 1.3, -5.4), u), rootPos + V3(0, 0.8, 0), 55
 	end
 	return V3(0, 1, -6), rootPos + V3(0, 1.4, 0), 45
 end
