@@ -569,6 +569,7 @@ Data.Pulses = {
 	-- ninguém. VERBO: potência pura.
 	{
 		Name = "Queda Celestial",
+		Image = "rbxassetid://131524104954112", -- ⚠️ v119: arte do artista (pacote "Imagens (5)")
 		Rarity = "Mythic",
 		Element = "Fogo",
 		Description = "Queda Celestial é a Mítica que você chuta SOZINHO: põe a mão no campo e tudo vira espaço, salta girando e chuta com o Sol aceso atrás — a bola sai num feixe roxo e azul de planetas e estrelas. Mais fraca que as Míticas de trio, mas não depende de ninguém.",
@@ -939,6 +940,7 @@ Data.Pulses = {
 	-- VERBO: cortar o caminho.
 	{
 		Name = "Corte Giratório",
+		Image = "rbxassetid://73467288213523", -- ⚠️ v119: arte do artista (pacote "Imagens (5)")
 		Rarity = "Rare",
 		Element = "Vento",
 		Description = "Corte Giratório manda uma meia-lua de energia azul pelo chão — dela sobe um muro que JOGA LONGE quem estiver na frente, e o carrinho alcança mais.",
@@ -1133,6 +1135,7 @@ Data.Pulses = {
 	-- segura (a outra comum, o Soco Explosivo, sempre rebate).
 	{
 		Name = "Bloco de Gelo",
+		Image = "rbxassetid://80550325329042", -- ⚠️ v119: arte do artista (pacote "Imagens (5)")
 		Rarity = "Common",
 		Element = "Vento",
 		RoleRequired = "GK",
@@ -2010,6 +2013,7 @@ Data.Instincts = {
 	},
 	{
 		Name = "Sexto Sentido",
+		Image = "rbxassetid://88107179753648", -- ⚠️ v119: arte do artista (pacote "Imagens (5)")
 		Posicao = "GK",
 		Rarity = "Mythic",
 		Cor = Color3.fromRGB(200, 160, 255),
