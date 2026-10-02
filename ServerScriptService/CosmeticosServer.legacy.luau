@@ -148,11 +148,18 @@ end
 -- MatchController espera esse tempo antes do replay.
 local EFEITO_BASE_SEG = 3.5
 local EFEITO_MULT = { Common = 2, Rare = 2.5, Epic = 3, Legendary = 4, Mythic = 5 }
+-- ⚠️ v119 — PEDIDO: "se demorar no máximo 20 segundos, pode colocar pra todos os
+-- efeitos durarem 2 segundos a mais, antes de começar o replay". Comum 9s · Raro
+-- 10.75s · Épico 12.5s · Lendário 16s · Mítico 19.5s (o efeito estica junto).
+local EFEITO_EXTRA_SEG = 2
+local function duracaoDoEfeito(item)
+	return EFEITO_BASE_SEG * (EFEITO_MULT[item.Raridade] or 2) + EFEITO_EXTRA_SEG
+end
 _G.UltimaDuracaoEfeitoGol = 0
 _G.DuracaoEfeitoGolDe = function(scorer)
 	local item = scorer and Cosmeticos.Equipado(scorer, "GoalEffect")
 	if not item then return 0 end
-	return EFEITO_BASE_SEG * (EFEITO_MULT[item.Raridade] or 2)
+	return duracaoDoEfeito(item)
 end
 _G.EfeitoDeGolCosmetico = function(scorer)
 	_G.UltimaDuracaoEfeitoGol = 0
@@ -160,8 +167,7 @@ _G.EfeitoDeGolCosmetico = function(scorer)
 	if not item then return 0 end
 	local pos = ball and ball.Position
 	if not pos then return 0 end
-	local mult = EFEITO_MULT[item.Raridade] or 2
-	local total = EFEITO_BASE_SEG * mult
+	local total = duracaoDoEfeito(item)
 	_G.UltimaDuracaoEfeitoGol = total
 	EfeitoDeGol:FireAllClients(item.Id, pos, scorer, total)
 	return total
