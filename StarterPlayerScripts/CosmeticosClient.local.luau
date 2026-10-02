@@ -191,6 +191,8 @@ local function montarAura(player)
 	for _, d in ipairs(character:GetDescendants()) do
 		if d:IsA("ParticleEmitter") and d.Name == "AuraCosmetica" then d:Destroy() end
 	end
+	-- ⚠️ v119: a Aura saiu dos cosméticos (Cosmeticos.CATEGORIAS) — Equipado devolve
+	-- nil e esta função só limpa a aura que tivesse sobrado.
 	local item = Cosmeticos.Equipado(player, "Aura")
 	if not item then return end
 	local cor = ColorSequence.new(item.Cor)

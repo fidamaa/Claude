@@ -499,16 +499,16 @@ local function atualizarPrevia()
 		if d:IsA("UIGradient") and d:GetAttribute("Gira") then gradientesGirando[d] = true end
 	end
 
-	local corChat = itemNaPrevia("ChatColor")
+	-- ⚠️ v119: "Cor no Chat" saiu dos cosméticos — o nome no chat usa a cor padrão
 	local tag = itemNaPrevia("Tag")
-	local prefixo = string.format('<font color="#%s">%s:</font>', hex(corChat and corChat.Cor or COR_TEXTO), nome)
+	local prefixo = string.format('<font color="#%s">%s:</font>', hex(COR_TEXTO), nome)
 	if tag then prefixo = string.format('<font color="#%s">[%s]</font> ', hex(tag.Cor), tag.Nome) .. prefixo end
 	linhaChat.Text = prefixo .. ' <font color="#EEF1F8">que golaço!</font>'
 
 	for _, c in ipairs(listaEquip:GetChildren()) do
 		if c:IsA("GuiObject") then c:Destroy() end
 	end
-	for i, slot in ipairs({ "Emote", "Aura", "GoalEffect", "Flow" }) do
+	for i, slot in ipairs({ "Emote", "GoalEffect", "Flow" }) do -- ⚠️ v119: sem Aura
 		local it = itemNaPrevia(slot)
 		local l = texto(listaEquip, { Size = UDim2.new(1, 0, 0, 18), RichText = true, LayoutOrder = i, Font = Enum.Font.GothamMedium, TextSize = 13,
 			TextColor3 = COR_TEXTO_MEDIO })
@@ -643,7 +643,8 @@ local function montarCasasRoda()
 	end
 end
 
-local SLOTS_ARMARIO = { "Frame", "Title", "Tag", "NameColor", "ChatColor", "Emote", "Aura", "GoalEffect" } -- ⚠️ v117: Comemoração virou Emote
+-- ⚠️ v119: Aura e Cor no Chat removidas ("mantenha só a cor do nome, a tag, a moldura, o título, os emotes" + efeito de gol)
+local SLOTS_ARMARIO = { "Frame", "Title", "Tag", "NameColor", "Emote", "GoalEffect" } -- ⚠️ v117: Comemoração virou Emote
 
 local function contarPossuidos(slot)
 	local n = 0

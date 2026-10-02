@@ -498,7 +498,13 @@ C.Flow = {
 -- mantidos, quem já comprou continua com o item) e os emotes cadastrados em
 -- EmotesCustom entram na mesma lista. Quem usa é uma RODA de 6 casas (tecla G): a
 -- casa 1 também é a comemoração tocada no gol.
-C.CATEGORIAS = { "Frame", "Title", "Tag", "NameColor", "ChatColor", "Emote", "Aura", "GoalEffect", "Flow" }
+-- ⚠️ v119 — PEDIDO: "remova completamente a aura... remova a cor no chat. Mantenha
+-- só a cor do nome, a tag, a moldura, o título, os emotes" (+ efeito de gol e Flow).
+-- As listas C.Aura / C.ChatColor continuam aqui só como registro, mas FORA das
+-- categorias: não entram na loja/armário, C.Item() não acha esses Ids e
+-- C.Equipado(player, "Aura"/"ChatColor") devolve nil (quem tinha equipado perde o
+-- efeito; nada quebra).
+C.CATEGORIAS = { "Frame", "Title", "Tag", "NameColor", "Emote", "GoalEffect", "Flow" }
 C.NOME_CATEGORIA = {
 	Frame = "Moldura", Title = "Título", Tag = "Tag", NameColor = "Cor do Nome", ChatColor = "Cor no Chat",
 	Emote = "Emotes", Aura = "Aura", GoalEffect = "Efeito de Gol", Flow = "Flow",
