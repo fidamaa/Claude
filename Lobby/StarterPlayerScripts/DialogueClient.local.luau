@@ -97,6 +97,8 @@ local ACTION_HANDLERS = {
 	OpenQuests = chamarGlobal("OpenQuests", "QuestClient"),
 	-- ⚠️ v68: a ficha do personagem abre pela fala do kogamalotigo
 	OpenCharacter = chamarGlobal("OpenCharacter", "CharacterClient"),
+	-- ⚠️ v115: painel de estatísticas do Bentes
+	OpenStats = chamarGlobal("OpenStats", "EstatisticasClient"),
 }
 
 -- ========================================
@@ -610,6 +612,8 @@ local function startDialogue(npcModel, dialogueId)
 	abertoEm = os.clock()
 	currentTree = tree
 	currentNpcModel = npcModel
+	-- ⚠️ v115: o NpcMarionete troca a animação do NPC enquanto ele fala
+	npcModel:SetAttribute("Falando", true)
 	savedCameraType = camera.CameraType
 	-- o prompt "Conversar" some enquanto a conversa estiver aberta (senão o
 	-- E que avança o texto reabriria a conversa)
@@ -647,6 +651,7 @@ closeDialogue = function(acao)
 	ProximityPromptService.Enabled = true
 
 	currentTree = nil
+	if currentNpcModel then currentNpcModel:SetAttribute("Falando", nil) end
 	currentNpcModel = nil
 	currentNodeId = nil
 

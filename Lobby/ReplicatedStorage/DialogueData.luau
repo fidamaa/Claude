@@ -168,4 +168,34 @@ DialogueData.Kogamalotigo = {
 	},
 }
 
+-- ⚠️ v115 — BENTES (Pepe Nep): o NPC de ESTATÍSTICAS, sentado no banco da praça.
+-- PEDIDO: "o Bentes/Pepe Nep no banco vira o NPC de estatísticas, com painel de
+-- estatísticas e marcador igual Eleven Store/missões/perfil/procurar partida".
+-- O boneco ganha a tag/DialogueId por script (NPCDialogueSetup), o painel é
+-- EstatisticasClient.local.luau e o marcador vem do MarcadoresLobby.
+DialogueData.Estatisticas = {
+	Start = "greeting",
+	Nodes = {
+		greeting = {
+			Speaker = "Bentes",
+			Text = "Ei, craque! Eu anoto tudo que acontece em campo — gols, passes, desarmes, defesas. Quer ver como anda a sua carreira?",
+			Choices = {
+				{ Text = "Mostra minhas estatísticas", Next = "openStats" },
+				{ Text = "Só passando", Next = "farewell" },
+			},
+		},
+		openStats = {
+			Speaker = "Bentes",
+			Text = "Tá aqui o caderno — pode fechar quando terminar.",
+			Action = "OpenStats",
+			Next = nil,
+		},
+		farewell = {
+			Speaker = "Bentes",
+			Text = "Beleza. Joga bastante que eu vou ter muito o que anotar!",
+			Next = nil,
+		},
+	},
+}
+
 return DialogueData

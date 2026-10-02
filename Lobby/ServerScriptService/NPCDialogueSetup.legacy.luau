@@ -51,12 +51,23 @@ local function setupNpc(npcModel)
 		prompt = Instance.new("ProximityPrompt")
 		prompt.Name = PROMPT_NAME
 		prompt.ActionText = DEFAULT_ACTION_TEXT
-		prompt.ObjectText = npcModel.Name
+		prompt.ObjectText = npcModel:GetAttribute("NomeNpc") or npcModel.Name
 		prompt.HoldDuration = DEFAULT_HOLD_DURATION
 		prompt.MaxActivationDistance = DEFAULT_MAX_DISTANCE
 		prompt.RequiresLineOfSight = false
 		prompt.Parent = anchorPart
 	end
+end
+
+-- ⚠️ v115 — PEDIDO: "o Bentes/Pepe Nep sentado no banco da praça vira o NPC de
+-- ESTATÍSTICAS". O boneco já existe no mapa (Bpepnep) mas sem tag: aqui ele
+-- ganha a tag, o DialogueId e o nome que aparece no prompt, por script — assim
+-- não depende de mexer no Studio.
+local estatistico = workspace:FindFirstChild("Bpepnep", true)
+if estatistico and estatistico:IsA("Model") then
+	estatistico:SetAttribute("DialogueId", "Estatisticas")
+	estatistico:SetAttribute("NomeNpc", "Bentes")
+	CollectionService:AddTag(estatistico, DIALOGUE_TAG)
 end
 
 for _, npcModel in ipairs(CollectionService:GetTagged(DIALOGUE_TAG)) do

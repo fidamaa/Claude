@@ -168,6 +168,10 @@ local function applyRewards(player, rewards)
 	if rewards.MatchResult == "win" and _G.AddPlayerWin then
 		_G.AddPlayerWin(player)
 	end
+	-- ⚠️ v115: soma a partida nas estatísticas de carreira (NPC Bentes)
+	if _G.AddCareerStats and type(rewards.Stats) == "table" then
+		_G.AddCareerStats(player, rewards.Stats)
+	end
 
 	-- ⚠️ NOVO: alimenta o progresso das missões diárias (QuestManager.
 	-- legacy.luau + QuestData.luau) com as estatísticas dessa partida —

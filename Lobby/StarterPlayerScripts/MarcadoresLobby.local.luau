@@ -33,6 +33,8 @@ local DESTINOS = {
 	{ Chave = "Loja",    Titulo = "ELEVEN STORE",     Sub = "loja",                      Cor = Color3.fromRGB(255, 200, 70), Letra = "E" },
 	{ Chave = "Missoes", Titulo = "MISSÕES",          Sub = "missões diárias",           Cor = Color3.fromRGB(76, 156, 255), Letra = "M" },
 	{ Chave = "Perfil",  Titulo = "PERFIL",           Sub = "seus slots e atributos",    Cor = Color3.fromRGB(170, 120, 255), Letra = "K" },
+	-- ⚠️ v115: NPC de estatísticas (Bentes, no banco da praça)
+	{ Chave = "Estatisticas", Titulo = "ESTATÍSTICAS", Sub = "sua carreira em campo", Cor = Color3.fromRGB(255, 120, 90), Letra = "S", TamTitulo = 17 },
 }
 local SOME_PERTO = 22 -- studs: já chegou, o marcador sai da frente (e não briga com o nome do NPC)
 
@@ -110,7 +112,7 @@ local function criar(destino, posicao)
 	titulo.Text = destino.Titulo
 	titulo.TextColor3 = TEXTO
 	titulo.Font = Enum.Font.GothamBlack
-	titulo.TextSize = 21
+	titulo.TextSize = destino.TamTitulo or 21
 	titulo.TextXAlignment = Enum.TextXAlignment.Left
 	titulo.TextTruncate = Enum.TextTruncate.AtEnd
 	titulo.Parent = grupo

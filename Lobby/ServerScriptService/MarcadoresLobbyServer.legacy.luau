@@ -31,6 +31,7 @@ local DESTINOS_NPC = {
 	ShopKeeper = "Loja",
 	QuestGiver = "Missoes",
 	Kogamalotigo = "Perfil",
+	Estatisticas = "Estatisticas", -- ⚠️ v115: Bentes (banco da praça)
 }
 
 local function topoDe(model)

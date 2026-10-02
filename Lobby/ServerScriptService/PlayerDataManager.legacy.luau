@@ -569,6 +569,18 @@ local function validatePlayerData(data)
 	if type(data.Wins) ~= "number" then
 		data.Wins = 0
 	end
+	-- ⚠️ v115 — CareerStats: estatísticas de CARREIRA (soma de todas as partidas),
+	-- mostradas pelo NPC de estatísticas (Bentes, no banco da praça). PEDIDO:
+	-- "o Bentes/Pepe Nep vira o NPC de estatísticas, com painel e marcador".
+	-- Dado antigo começa zerado (só Wins já existia).
+	if type(data.CareerStats) ~= "table" then
+		data.CareerStats = {}
+	end
+	for _, chave in ipairs({ "Goals", "Assists", "Tackles", "Dribbles", "Saves", "MVPs", "Matches" }) do
+		if type(data.CareerStats[chave]) ~= "number" then
+			data.CareerStats[chave] = 0
+		end
+	end
 	-- ⚠️ NOVO: Quests — missões oferecidas/escolhidas por esse jogador.
 	-- Guardado aqui (não num DataStore separado) pra viajar junto no mesmo
 	-- save. PeriodId: identifica o período de 12h atual (ver
@@ -699,6 +711,7 @@ local function createDefaultData()
 		UsedCodes = {},
 		RollCredits = 0,
 		Wins = 0,
+		CareerStats = { Goals = 0, Assists = 0, Tackles = 0, Dribbles = 0, Saves = 0, MVPs = 0, Matches = 0 },
 		Quests = { PeriodId = nil, Offered = {}, Active = {}, Progress = {}, Completed = {} },
 		OwnedCosmetics = {},
 		EquippedCosmetics = {},
@@ -992,6 +1005,33 @@ _G.AddPlayerWin = function(player)
 	return true
 end
 
+-- ⚠️ v115: soma as estatísticas de UMA partida na carreira (chamado pelo
+-- LobbyRewardsReceiver junto com o AddPlayerWin). `stats` é o Stats do Game:
+-- { Goals, Assists, Tackles, Dribbles, Saves, MVP, Won }.
+_G.AddCareerStats = function(player, stats)
+	local data = onlinePlayersData[player.UserId]
+	if not data or type(stats) ~= "table" then return false end
+	local c = data.CareerStats
+	if type(c) ~= "table" then
+		c = {}
+		data.CareerStats = c
+	end
+	local function soma(chave, valor)
+		if type(valor) == "number" and valor > 0 then
+			c[chave] = (c[chave] or 0) + math.floor(valor)
+		end
+	end
+	soma("Goals", stats.Goals)
+	soma("Assists", stats.Assists)
+	soma("Tackles", stats.Tackles)
+	soma("Dribbles", stats.Dribbles)
+	soma("Saves", stats.Saves)
+	if stats.MVP == true then soma("MVPs", 1) end
+	soma("Matches", 1)
+	_G.RequestSave(player)
+	return true
+end
+
 _G.RequestSave = function(player)
 	local userId = player.UserId
 	if pendingDebouncedSave[userId] then
@@ -1029,6 +1069,7 @@ end
 local setActiveSlotFunc = getOrCreateRemoteFunction("SetActiveSlot")
 local getSlotsOverviewFunc = getOrCreateRemoteFunction("GetSlotsOverview")
 local setSlotRoleFunc = getOrCreateRemoteFunction("SetSlotRole")
+local getCareerStatsFunc = getOrCreateRemoteFunction("GetCareerStats") -- ⚠️ v115: painel do Bentes
 
 setActiveSlotFunc.OnServerInvoke = function(player, slotIndex)
 	if type(slotIndex) ~= "number" or slotIndex < 1 or slotIndex > 5 then
@@ -1114,6 +1155,19 @@ setSlotRoleFunc.OnServerInvoke = function(player, slotIndex, newRole)
 	print(string.format("⚽ %s definiu a posição do slot %d como '%s'", player.Name, slotIndex, newRole))
 
 	return true, { SlotIndex = slotIndex, Role = newRole }
+end
+
+getCareerStatsFunc.OnServerInvoke = function(player)
+	local data = onlinePlayersData[player.UserId]
+	if not data then return nil end
+	local c = data.CareerStats or {}
+	return {
+		Goals = c.Goals or 0, Assists = c.Assists or 0, Tackles = c.Tackles or 0,
+		Dribbles = c.Dribbles or 0, Saves = c.Saves or 0, MVPs = c.MVPs or 0,
+		-- quem já tinha vitórias antes do contador de partidas não fica com "0 partidas":
+		-- o mínimo coerente é o número de vitórias
+		Matches = math.max(c.Matches or 0, data.Wins or 0), Wins = data.Wins or 0,
+	}
 end
 
 getSlotsOverviewFunc.OnServerInvoke = function(player)
