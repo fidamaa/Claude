@@ -164,6 +164,24 @@ local function espalhar(character, props)
 	for _, alvo in ipairs(alvos) do emissor(alvo, p) end
 end
 
+-- ⚠️ v114b — "Coloca uma aura em volta do personagem com o VFX da hora… discretinho."
+-- Além das partículas espalhadas, uma NÉVOA DE LUZ suave atrás do tronco: nuvens
+-- grandes e bem transparentes que nascem, crescem e somem sem se mexer — dá o
+-- contorno luminoso de aura sem ser highlight nem pintar o corpo.
+local function halo(character, estilo, cor)
+	local tronco = character:FindFirstChild("UpperTorso") or character:FindFirstChild("Torso")
+	if not tronco then return end
+	local sombra = estilo == "Sombra"
+	emissor(tronco, {
+		Texture = TEX_FUMACA, Color = cor, Rate = 2.4, Lifetime = NumberRange.new(1.6, 2.2),
+		Speed = NumberRange.new(0, 0.3), SpreadAngle = Vector2.new(180, 180),
+		Rotation = NumberRange.new(0, 360), RotSpeed = NumberRange.new(-20, 20),
+		LightEmission = sombra and 0 or 0.9, ZOffset = -1,
+		Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 3.4), NumberSequenceKeypoint.new(0.5, 5), NumberSequenceKeypoint.new(1, 4.2) }),
+		Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(0.3, sombra and 0.78 or 0.86), NumberSequenceKeypoint.new(1, 1) }),
+	})
+end
+
 local function montarAura(player)
 	local character = player.Character
 	local root = character and character:FindFirstChild("HumanoidRootPart")
@@ -229,6 +247,7 @@ local function montarAura(player)
 		base.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0), NumberSequenceKeypoint.new(0.5, 0.45), NumberSequenceKeypoint.new(1, 0) })
 	end
 	espalhar(character, base)
+	halo(character, estilo, base.Color)
 end
 
 -- ============================================================
