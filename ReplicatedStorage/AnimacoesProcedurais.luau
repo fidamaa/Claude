@@ -1574,8 +1574,9 @@ do
 		return require(script.Parent:WaitForChild("Cosmeticos", 5))
 	end)
 	if ok and Cosmeticos then
-		for _, cat in ipairs({ "Emote", "Celebration" }) do
+		for _, cat in ipairs({ "Emote" }) do -- ⚠️ v117: comemorações agora moram em "Emote"
 			for _, item in ipairs(Cosmeticos[cat]) do
+				if not item.Quadros then continue end -- emote cadastrado por AnimationId toca como animação normal
 				local quadros = {}
 				for i, q in ipairs(item.Quadros) do
 					quadros[i] = { q[1], next(q[2]) == nil and neutro() or q[2] }

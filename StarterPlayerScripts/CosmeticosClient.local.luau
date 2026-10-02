@@ -308,12 +308,57 @@ end)
 -- ============================================================
 -- EMOTE: tecla G / botão no celular
 -- ============================================================
+-- ⚠️ v117 — RODA DE EMOTES (6 casas, montada na Eleven Store): G abre/fecha, escolhe
+-- clicando ou com 1-6. A casa 1 também é a comemoração do gol.
+local EmoteWheel = require(ReplicatedStorage:WaitForChild("EmoteWheel"))
+local Roda = EmoteWheel.Criar({
+	Jogador = localPlayer, Cosmeticos = Cosmeticos,
+	AoEscolher = function(indice) TocarEmote:FireServer(indice) end,
+})
+
 UserInputService.InputBegan:Connect(function(input, processado)
 	if processado then return end
-	if input.KeyCode == Enum.KeyCode.G then
-		if Cosmeticos.Equipado(localPlayer, "Emote") then TocarEmote:FireServer() end
-	end
+	if input.KeyCode == Enum.KeyCode.G then Roda.Alternar() end
 end)
+
+-- emotes cadastrados por AnimationId (EmotesCustom): animação normal do Roblox. O
+-- AnimadorProcedural do Game para TODA AnimationTrack, então o corpo fica "pausado"
+-- pra ele enquanto o emote toca (mesma trava das cutscenes).
+local emoteCustomTocando = {} -- [character] = track
+local function pararEmoteCustom(character)
+	local track = emoteCustomTocando[character]
+	if not track then return end
+	emoteCustomTocando[character] = nil
+	pcall(function() track:Stop(0.15) end)
+	if _G.AnimadorPausado then _G.AnimadorPausado[character] = nil end
+end
+local function tocarEmoteCustom(character, id)
+	local item = Cosmeticos.Item(id)
+	if not item or not item.AnimacaoId or typeof(character) ~= "Instance" then return end
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	local animator = humanoid and humanoid:FindFirstChildOfClass("Animator")
+	if not animator then return end
+	pararEmoteCustom(character)
+	local anim = Instance.new("Animation")
+	anim.Name = "EmoteCustom"
+	anim.AnimationId = item.AnimacaoId
+	local ok, track = pcall(function() return animator:LoadAnimation(anim) end)
+	if not ok or not track then return end
+	track.Priority = Enum.AnimationPriority.Action4
+	track.Looped = item.Loop == true
+	emoteCustomTocando[character] = track
+	_G.AnimadorPausado = _G.AnimadorPausado or {}
+	_G.AnimadorPausado[character] = true
+	track:Play(0.15)
+	track.Stopped:Connect(function()
+		if emoteCustomTocando[character] == track then pararEmoteCustom(character) end
+	end)
+	task.delay(item.Duracao or 4, function()
+		if emoteCustomTocando[character] == track then pararEmoteCustom(character) end
+	end)
+end
+pastaRemotes:WaitForChild("EmoteAnimado").OnClientEvent:Connect(tocarEmoteCustom)
+pastaRemotes:WaitForChild("EmoteParar").OnClientEvent:Connect(pararEmoteCustom)
 
 if UserInputService.TouchEnabled then
 	local gui = Instance.new("ScreenGui")
@@ -342,11 +387,13 @@ if UserInputService.TouchEnabled then
 	s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 	s.Parent = b
 	local function atualizar()
-		b.Visible = Cosmeticos.Equipado(localPlayer, "Emote") ~= nil
+		b.Visible = Roda.TemAlgum()
 	end
 	atualizar()
-	localPlayer:GetAttributeChangedSignal("Cosm_Emote"):Connect(atualizar)
-	b.Activated:Connect(function() TocarEmote:FireServer() end)
+	for i = 1, Cosmeticos.RODA_TAMANHO do
+		localPlayer:GetAttributeChangedSignal("Cosm_EmoteSlot" .. i):Connect(atualizar)
+	end
+	b.Activated:Connect(function() Roda.Alternar() end)
 end
 
 -- ============================================================

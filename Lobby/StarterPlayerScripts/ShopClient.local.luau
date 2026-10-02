@@ -306,6 +306,15 @@ local possuidos = {}   -- [Id] = true
 local equipados = {}   -- [Slot] = Id
 local previaForcada = {} -- [Slot] = Id (passar o mouse num item mostra na prévia)
 local categoriaAberta = nil -- slot aberto no Armário (nil = grade das categorias)
+-- ⚠️ v117 — RODA DE EMOTES: ids por casa (false = vazia) e a casa escolhida pra receber o próximo emote
+local roda = {}
+local casaSelecionada = nil
+local function casaDaRoda(id)
+	for i = 1, (Cosmeticos.RODA_TAMANHO or 6) do
+		if roda[i] == id then return i end
+	end
+	return nil
+end
 
 local refreshShopData -- declarada lá embaixo
 
@@ -456,7 +465,7 @@ listaEquipLayout.Parent = listaEquip
 
 texto(colunaPrevia, { AnchorPoint = Vector2.new(0, 1), Position = UDim2.new(0, 12, 1, -10), Size = UDim2.new(1, -24, 0, 40), TextWrapped = true,
 	Font = Enum.Font.GothamMedium, TextSize = 12, TextColor3 = COR_TEXTO_MEDIO, TextYAlignment = Enum.TextYAlignment.Bottom,
-	Text = "Emote: tecla G (no Lobby e na partida). A comemoração toca quando você faz gol." })
+	Text = "Emotes: tecla G abre a roda de 6 casas (Lobby e partida) — monte a sua no Armário > Emotes. A casa 1 é a comemoração do gol." })
 
 local function hex(c)
 	return string.format("%02X%02X%02X", math.floor(c.R * 255 + 0.5), math.floor(c.G * 255 + 0.5), math.floor(c.B * 255 + 0.5))
@@ -499,12 +508,23 @@ local function atualizarPrevia()
 	for _, c in ipairs(listaEquip:GetChildren()) do
 		if c:IsA("GuiObject") then c:Destroy() end
 	end
-	for i, slot in ipairs({ "Emote", "Celebration", "Aura", "GoalEffect", "Flow" }) do
+	for i, slot in ipairs({ "Emote", "Aura", "GoalEffect", "Flow" }) do
 		local it = itemNaPrevia(slot)
 		local l = texto(listaEquip, { Size = UDim2.new(1, 0, 0, 18), RichText = true, LayoutOrder = i, Font = Enum.Font.GothamMedium, TextSize = 13,
 			TextColor3 = COR_TEXTO_MEDIO })
-		l.Text = string.format('<font color="#7DB9FF">%s</font>  %s', maiusculas(Cosmeticos.NOME_CATEGORIA[slot]),
-			it and it.Nome or '<font color="#788094">nenhum</font>')
+		if slot == "Emote" then
+			-- a roda: quantas casas estão preenchidas (a casa 1 toca no gol)
+			local n = 0
+			for c = 1, (Cosmeticos.RODA_TAMANHO or 6) do
+				if roda[c] then n += 1 end
+			end
+			local casa1 = Cosmeticos.Item(roda[1] or nil)
+			l.Text = string.format('<font color="#7DB9FF">%s</font>  %d/%d na roda%s', maiusculas(Cosmeticos.NOME_CATEGORIA[slot]), n,
+				Cosmeticos.RODA_TAMANHO or 6, casa1 and ('  ·  gol: ' .. casa1.Nome) or "")
+		else
+			l.Text = string.format('<font color="#7DB9FF">%s</font>  %s', maiusculas(Cosmeticos.NOME_CATEGORIA[slot]),
+				it and it.Nome or '<font color="#788094">nenhum</font>')
+		end
 	end
 end
 
@@ -562,7 +582,68 @@ local itensPad = Instance.new("UIPadding")
 itensPad.PaddingRight = UDim.new(0, 8)
 itensPad.Parent = rolagemItens
 
-local SLOTS_ARMARIO = { "Frame", "Title", "Tag", "NameColor", "ChatColor", "Emote", "Celebration", "Aura", "GoalEffect" }
+-- ⚠️ v117 — faixa da RODA DE EMOTES (aparece só em Armário > Emotes): 6 casas; clicar numa
+-- casa escolhe onde vai o próximo emote; o × tira o emote da casa.
+local faixaRoda = Instance.new("Frame")
+faixaRoda.Name = "FaixaRoda"
+faixaRoda.Size = UDim2.new(1, -8, 0, 92)
+faixaRoda.Position = UDim2.fromOffset(0, 42)
+faixaRoda.BackgroundColor3 = COR_CARTAO
+faixaRoda.BorderSizePixel = 0
+faixaRoda.Visible = false
+faixaRoda.Parent = telaItens
+cantos(faixaRoda, 10)
+contorno(faixaRoda, COR_BORDA, 1, 0.2)
+texto(faixaRoda, { Size = UDim2.new(1, -16, 0, 16), Position = UDim2.fromOffset(10, 6), Text = "SUA RODA DE EMOTES (tecla G) — clique numa casa e depois no emote que quer nela",
+	Font = Enum.Font.GothamBlack, TextSize = 11, TextColor3 = COR_LEGENDA })
+local casasRoda = {}
+local renderCategory -- declarada aqui porque a faixa da roda precisa dela (definida mais abaixo)
+local function montarCasasRoda()
+	for _, c in ipairs(casasRoda) do c.Frame:Destroy() end
+	casasRoda = {}
+	local total = Cosmeticos.RODA_TAMANHO or 6
+	for i = 1, total do
+		local it = Cosmeticos.Item(roda[i] or nil)
+		local selecionada = casaSelecionada == i
+		local f = Instance.new("TextButton")
+		f.Text = ""
+		f.AutoButtonColor = false
+		f.Size = UDim2.new(1 / total, -8, 0, 58)
+		f.Position = UDim2.new((i - 1) / total, 6, 0, 28)
+		f.BackgroundColor3 = selecionada and COR_CARTAO_ALT or COR_PAINEL
+		f.BorderSizePixel = 0
+		f.Parent = faixaRoda
+		cantos(f, 8)
+		contorno(f, selecionada and COR_ACENTO or (it and (RARIDADE[it.Raridade] or RARIDADE.Common).Cor or COR_BORDA), selecionada and 2 or 1, selecionada and 0 or 0.3)
+		texto(f, { Size = UDim2.fromOffset(18, 16), Position = UDim2.fromOffset(6, 4), Text = tostring(i), Font = Enum.Font.GothamBlack, TextSize = 12,
+			TextColor3 = selecionada and COR_ACENTO or COR_LEGENDA, TextXAlignment = Enum.TextXAlignment.Left })
+		if i == 1 then
+			texto(f, { AnchorPoint = Vector2.new(1, 0), Size = UDim2.fromOffset(34, 14), Position = UDim2.new(1, -6, 0, 4), Text = "GOL", Font = Enum.Font.GothamBlack,
+				TextSize = 10, TextColor3 = Color3.fromRGB(255, 200, 70), TextXAlignment = Enum.TextXAlignment.Right })
+		end
+		texto(f, { Size = UDim2.new(1, -12, 0, 32), Position = UDim2.fromOffset(6, 22), Text = it and it.Nome or "vazio", Font = Enum.Font.GothamBold,
+			TextSize = 12, TextWrapped = true, TextColor3 = it and COR_TEXTO or COR_TEXTO_FRACO, TextYAlignment = Enum.TextYAlignment.Top })
+		f.Activated:Connect(function()
+			casaSelecionada = (casaSelecionada == i) and nil or i
+			renderCategory()
+		end)
+		if it then
+			local x = botao(f, { AnchorPoint = Vector2.new(1, 1), Size = UDim2.fromOffset(18, 18), Position = UDim2.new(1, -4, 1, -4), BackgroundColor3 = COR_CARTAO_ALT,
+				Text = "×", TextColor3 = COR_TEXTO_MEDIO, TextSize = 14 })
+			cantos(x, 9)
+			x.Activated:Connect(function()
+				if isBusy then return end
+				isBusy = true
+				pcall(function() return EquipCosmetic:InvokeServer(it.Id, i) end)
+				isBusy = false
+				refreshShopData()
+			end)
+		end
+		table.insert(casasRoda, { Frame = f })
+	end
+end
+
+local SLOTS_ARMARIO = { "Frame", "Title", "Tag", "NameColor", "ChatColor", "Emote", "Aura", "GoalEffect" } -- ⚠️ v117: Comemoração virou Emote
 
 local function contarPossuidos(slot)
 	local n = 0
@@ -577,7 +658,8 @@ local function comprarOuEquipar(item)
 	isBusy = true
 	local ok, success, result
 	if possuidos[item.Id] then
-		ok, success, result = pcall(function() return EquipCosmetic:InvokeServer(item.Id) end)
+		ok, success, result = pcall(function() return EquipCosmetic:InvokeServer(item.Id, item.Slot == "Emote" and casaSelecionada or nil) end)
+		if ok and success and item.Slot == "Emote" then casaSelecionada = nil end
 	else
 		ok, success, result = pcall(function() return BuyCatalogItem:InvokeServer(item.Id) end)
 		if ok and success then notify("Comprado: " .. item.Nome) end
@@ -590,11 +672,11 @@ local function comprarOuEquipar(item)
 	end
 end
 
-local renderCategory -- declarada abaixo
 
 local function montarTile(item, ordem)
 	local rar = RARIDADE[item.Raridade] or RARIDADE.Common
-	local equipado = equipados[item.Slot] == item.Id
+	local casaNaRoda = item.Slot == "Emote" and casaDaRoda(item.Id) or nil
+	local equipado = (item.Slot == "Emote") and (casaNaRoda ~= nil) or (equipados[item.Slot] == item.Id)
 	local tem = possuidos[item.Id] == true
 	local tile = Instance.new("TextButton")
 	tile.Text = ""
@@ -620,14 +702,23 @@ local function montarTile(item, ordem)
 	local acao = botao(tile, { AnchorPoint = Vector2.new(0.5, 1), Size = UDim2.new(1, -16, 0, 28), Position = UDim2.new(0.5, 0, 1, -8), TextSize = 12 })
 	local corAcao
 	if equipado then
-		acao.Text = "EQUIPADO ✓"
+		local textoEquipado = casaNaRoda and ("NA RODA · CASA " .. casaNaRoda .. " ✓") or "EQUIPADO ✓"
+		acao.Text = textoEquipado
+		acao.TextSize = casaNaRoda and 11 or 12
 		corAcao = COR_CARTAO_ALT
 		acao.TextColor3 = COR_OK
 		contorno(acao, COR_OK, 1, 0.4)
-		acao.MouseEnter:Connect(function() if item.Slot ~= "Flow" then acao.Text = "DESEQUIPAR" end end)
-		acao.MouseLeave:Connect(function() acao.Text = "EQUIPADO ✓" end)
+		acao.MouseEnter:Connect(function()
+			if item.Slot == "Emote" then
+				acao.Text = (casaSelecionada and casaSelecionada ~= casaNaRoda) and ("MOVER PRA CASA " .. casaSelecionada) or "TIRAR DA RODA"
+			elseif item.Slot ~= "Flow" then
+				acao.Text = "DESEQUIPAR"
+			end
+		end)
+		acao.MouseLeave:Connect(function() acao.Text = textoEquipado end)
 	elseif tem then
-		acao.Text = "EQUIPAR"
+		acao.Text = item.Slot == "Emote" and (casaSelecionada and ("COLOCAR NA CASA " .. casaSelecionada) or "COLOCAR NA RODA") or "EQUIPAR"
+		if item.Slot == "Emote" then acao.TextSize = 11 end
 		corAcao = COR_ACENTO
 	else
 		acao.Text = dinheiro(Cosmeticos.Preco(item))
@@ -692,6 +783,12 @@ local function renderArmario()
 	if categoriaAberta then
 		gradeCategorias.Visible = false
 		telaItens.Visible = true
+		-- ⚠️ v117: em Emotes aparece a roda (6 casas) em cima da lista
+		local comRoda = categoriaAberta == "Emote"
+		faixaRoda.Visible = comRoda
+		rolagemItens.Position = UDim2.fromOffset(0, comRoda and 142 or 42)
+		rolagemItens.Size = UDim2.new(1, 0, 1, comRoda and -142 or -42)
+		if comRoda then montarCasasRoda() end
 		tituloTela.Text = maiusculas(Cosmeticos.NOME_CATEGORIA[categoriaAberta])
 		contagemTela.Text = string.format("VOCÊ TEM %d/%d", contarPossuidos(categoriaAberta), #Cosmeticos[categoriaAberta])
 		for i, item in ipairs(Cosmeticos[categoriaAberta]) do
@@ -701,6 +798,7 @@ local function renderArmario()
 	end
 	gradeCategorias.Visible = true
 	telaItens.Visible = false
+	faixaRoda.Visible = false
 	for i, slot in ipairs(SLOTS_ARMARIO) do
 		local item = Cosmeticos.Item(equipados[slot])
 		local card = Instance.new("TextButton")
@@ -1161,6 +1259,7 @@ refreshShopData = function()
 		shopData = data
 		possuidos = {}
 		equipados = {}
+		roda = data.EmoteWheel or {}
 		for _, item in ipairs(data.Items) do
 			if item.Owned then possuidos[item.Id] = true end
 			if item.Equipped and item.Slot then equipados[item.Slot] = item.Id end

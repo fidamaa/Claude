@@ -348,10 +348,56 @@ local function pararEmote(character)
 	for _, j in pairs(e.Juntas) do pcall(j.Zerar) end
 end
 
+-- ⚠️ v117 — emotes cadastrados por AnimationId (ver EmotesCustom.luau): animação normal
+-- do Roblox (no Animator do boneco, prioridade de ação); mexeu = para.
+local customTocando = {} -- [character] = { Track, Fim }
+local function pararCustom(character)
+	local c = customTocando[character]
+	if not c then return end
+	customTocando[character] = nil
+	pcall(function() c.Track:Stop(0.15) end)
+end
+local function tocarCustom(character, item)
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	local animator = humanoid and humanoid:FindFirstChildOfClass("Animator")
+	if not animator then return end
+	pararCustom(character)
+	pararEmote(character)
+	local anim = Instance.new("Animation")
+	anim.Name = "EmoteCustom"
+	anim.AnimationId = item.AnimacaoId
+	local ok, track = pcall(function() return animator:LoadAnimation(anim) end)
+	if not ok or not track then return end
+	track.Priority = Enum.AnimationPriority.Action4
+	track.Looped = item.Loop == true
+	customTocando[character] = { Track = track, Fim = os.clock() + (item.Duracao or 4), Inicio = os.clock() }
+	track:Play(0.15)
+	track.Stopped:Connect(function()
+		local c = customTocando[character]
+		if c and c.Track == track then customTocando[character] = nil end
+	end)
+end
+RunService.Heartbeat:Connect(function()
+	for character, c in pairs(customTocando) do
+		local humanoid = character.Parent and character:FindFirstChildOfClass("Humanoid")
+		local root = character:FindFirstChild("HumanoidRootPart")
+		local andando = root and Vector3.new(root.AssemblyLinearVelocity.X, 0, root.AssemblyLinearVelocity.Z).Magnitude > 3
+		if not humanoid or humanoid.Health <= 0 or os.clock() > c.Fim or (andando and os.clock() - c.Inicio > 0.25) then
+			pararCustom(character)
+		end
+	end
+end)
+
 local function tocarEmote(character, id)
 	local item = Cosmeticos.Item(id)
-	if not item or not item.Quadros then return end
+	if not item then return end
+	if item.AnimacaoId then
+		if character and character:IsA("Model") then tocarCustom(character, item) end
+		return
+	end
+	if not item.Quadros then return end
 	if not character or not character:FindFirstChildOfClass("Humanoid") then return end
+	pararCustom(character)
 	pararEmote(character)
 	local juntas, r15 = mapear(character)
 	if next(juntas) == nil then return end
@@ -405,13 +451,20 @@ _G.PreviewEmoteLobby = function(id)
 	if localPlayer.Character then tocarEmote(localPlayer.Character, id) end
 end
 
-local function pedirEmote()
-	if TocarEmoteLobby and Cosmeticos.Equipado(localPlayer, "Emote") then TocarEmoteLobby:FireServer() end
-end
+-- ⚠️ v117 — RODA DE EMOTES (6 casas, montada na Eleven Store): G abre/fecha, escolhe
+-- clicando ou com 1-6.
+local EmoteWheel = require(ReplicatedStorage:WaitForChild("EmoteWheel"))
+local Roda = EmoteWheel.Criar({
+	Jogador = localPlayer, Cosmeticos = Cosmeticos,
+	AoEscolher = function(indice)
+		if TocarEmoteLobby then TocarEmoteLobby:FireServer(indice) end
+	end,
+})
+_G.RodaDeEmotesLobby = Roda -- a loja fecha a roda ao abrir
 
 UserInputService.InputBegan:Connect(function(input, processado)
 	if processado then return end
-	if input.KeyCode == Enum.KeyCode.G then pedirEmote() end
+	if input.KeyCode == Enum.KeyCode.G then Roda.Alternar() end
 end)
 
 if UserInputService.TouchEnabled then
@@ -441,11 +494,13 @@ if UserInputService.TouchEnabled then
 	s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 	s.Parent = b
 	local function atualizar()
-		b.Visible = Cosmeticos.Equipado(localPlayer, "Emote") ~= nil
+		b.Visible = Roda.TemAlgum()
 	end
 	atualizar()
-	localPlayer:GetAttributeChangedSignal("Cosm_Emote"):Connect(atualizar)
-	b.Activated:Connect(pedirEmote)
+	for i = 1, Cosmeticos.RODA_TAMANHO do
+		localPlayer:GetAttributeChangedSignal("Cosm_EmoteSlot" .. i):Connect(atualizar)
+	end
+	b.Activated:Connect(function() Roda.Alternar() end)
 end
 
 print("✅ CosmeticosLobbyClient carregado (placa, aura, chat, emotes)")

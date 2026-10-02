@@ -47,6 +47,10 @@ local function remote(nome)
 	return r
 end
 local TocarEmote = remote("TocarEmote")
+-- ⚠️ v117: emotes cadastrados por AnimationId (ver EmotesCustom.luau) tocam como
+-- animação normal do Roblox, em todo cliente
+local EmoteAnimado = remote("EmoteAnimado")
+local EmoteParar = remote("EmoteParar")
 local FlowAtivado = remote("FlowAtivado")
 local EfeitoDeGol = remote("EfeitoDeGol")
 
@@ -77,18 +81,27 @@ end
 local function tocarAcaoCosmetica(player, item)
 	local character = player.Character
 	if not (character and _G.AnimarAcao) then return false end
-	_G.AnimarAcao(character, item.Id, item.Duracao)
-	local registro = { Id = item.Id, Fim = os.clock() + item.Duracao }
+	local registro = { Id = item.Id, Fim = os.clock() + (item.Duracao or 4) }
+	if item.AnimacaoId then
+		registro.Custom = true
+		EmoteAnimado:FireAllClients(character, item.Id)
+	else
+		_G.AnimarAcao(character, item.Id, item.Duracao)
+	end
 	emoteAtivo[player] = registro
 	return true
 end
 
-TocarEmote.OnServerEvent:Connect(function(player)
+-- ⚠️ v117 — RODA DE EMOTES: o cliente manda a CASA (1..6) escolhida; o emote vem do
+-- atributo da própria casa ("Cosm_EmoteSlot<i>", posto pela loja do Lobby).
+TocarEmote.OnServerEvent:Connect(function(player, indice)
 	if os.clock() - (ultimoEmote[player] or 0) < 1 then return end
+	indice = tonumber(indice)
+	if not indice or indice % 1 ~= 0 or indice < 1 or indice > Cosmeticos.RODA_TAMANHO then return end
 	ultimoEmote[player] = os.clock()
 	if _G.HissatsuCutsceneActive then return end
 	if donoDaBola() == player then return end
-	local item = Cosmeticos.Equipado(player, "Emote")
+	local item = Cosmeticos.CasaDaRoda(player, indice)
 	if not item then return end
 	local humanoid = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
 	if not humanoid or humanoid.Health <= 0 then return end
@@ -106,7 +119,11 @@ task.spawn(function()
 				emoteAtivo[player] = nil
 			elseif not reg.Comemoracao and (humanoid.MoveDirection.Magnitude > 0.1 or donoDaBola() == player) then
 				emoteAtivo[player] = nil
-				if _G.AnimarAcao then _G.AnimarAcao(character, "parar:" .. reg.Id) end
+				if reg.Custom then
+					EmoteParar:FireAllClients(character)
+				elseif _G.AnimarAcao then
+					_G.AnimarAcao(character, "parar:" .. reg.Id)
+				end
 			end
 		end
 	end
@@ -115,8 +132,10 @@ end)
 -- ============================================================
 -- GOL: comemoração + efeito
 -- ============================================================
+-- ⚠️ v117: Emotes e Comemorações viraram uma lista só; a comemoração do gol é o
+-- emote da CASA 1 da roda.
 _G.TocarComemoracaoCosmetica = function(scorer)
-	local item = scorer and Cosmeticos.Equipado(scorer, "Celebration")
+	local item = scorer and Cosmeticos.CasaDaRoda(scorer, 1)
 	if not item then return false end
 	if not tocarAcaoCosmetica(scorer, item) then return false end
 	emoteAtivo[scorer].Comemoracao = true

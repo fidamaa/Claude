@@ -493,13 +493,59 @@ C.Flow = {
 -- ============================================================
 -- CONSULTAS
 -- ============================================================
-C.CATEGORIAS = { "Frame", "Title", "Tag", "NameColor", "ChatColor", "Emote", "Celebration", "Aura", "GoalEffect", "Flow" }
+-- ⚠️ v117 — PEDIDO: "Unifique os Emotes e Comemorações". Agora é UMA categoria só
+-- ("Emote"): as 15 comemorações de gol viraram emotes comuns (os Ids "Cel_*" foram
+-- mantidos, quem já comprou continua com o item) e os emotes cadastrados em
+-- EmotesCustom entram na mesma lista. Quem usa é uma RODA de 6 casas (tecla G): a
+-- casa 1 também é a comemoração tocada no gol.
+C.CATEGORIAS = { "Frame", "Title", "Tag", "NameColor", "ChatColor", "Emote", "Aura", "GoalEffect", "Flow" }
 C.NOME_CATEGORIA = {
 	Frame = "Moldura", Title = "Título", Tag = "Tag", NameColor = "Cor do Nome", ChatColor = "Cor no Chat",
-	Emote = "Emote", Celebration = "Comemoração", Aura = "Aura", GoalEffect = "Efeito de Gol", Flow = "Flow",
+	Emote = "Emotes", Aura = "Aura", GoalEffect = "Efeito de Gol", Flow = "Flow",
 }
+C.RODA_TAMANHO = 6
 -- o Flow do Isagi é de graça (todo mundo começa com ele)
 C.GRATIS = { Flow_Isagi = true }
+
+-- comemorações de gol entram na lista única de emotes
+for _, it in ipairs(C.Celebration) do
+	it.Comemoracao = true
+	table.insert(C.Emote, it)
+end
+C.Celebration = nil
+
+-- emotes cadastrados à mão (ver EmotesCustom.luau: nome + id da animação)
+do
+	local ok, lista = pcall(function()
+		local m = script.Parent:FindFirstChild("EmotesCustom")
+		return m and require(m) or nil
+	end)
+	if ok and typeof(lista) == "table" then
+		local usados = {}
+		for _, e in ipairs(lista) do
+			if typeof(e) == "table" and typeof(e.Nome) == "string" and e.Nome ~= "" and e.AnimacaoId ~= nil then
+				local limpo = e.Nome:gsub("[^%w]", "")
+				local id = "EmoteCustom_" .. (limpo ~= "" and limpo or tostring(#C.Emote))
+				if usados[id] then
+					warn("[Cosmeticos] EmotesCustom: nome repetido '" .. e.Nome .. "' — ignorado")
+				else
+					usados[id] = true
+					local animId = tostring(e.AnimacaoId)
+					if animId:match("^%d+$") then animId = "rbxassetid://" .. animId end
+					table.insert(C.Emote, {
+						Id = id, Nome = e.Nome, Raridade = C.PRECO[e.Raridade] and e.Raridade or "Common",
+						Duracao = tonumber(e.Duracao) or 4, AnimacaoId = animId, Loop = e.Loop == true,
+						Custo = tonumber(e.Preco), Custom = true,
+						Descricao = e.Descricao or (e.Autor and ("Por " .. e.Autor)) or nil,
+					})
+					if e.Gratis == true then C.GRATIS[id] = true end
+				end
+			end
+		end
+	elseif not ok then
+		warn("[Cosmeticos] EmotesCustom com erro: " .. tostring(lista))
+	end
+end
 
 local porId = {}
 for _, cat in ipairs(C.CATEGORIAS) do
@@ -519,6 +565,10 @@ end
 function C.Atributo(slot) return "Cosm_" .. slot end
 function C.Equipado(player, slot)
 	return C.Item(player:GetAttribute(C.Atributo(slot)))
+end
+-- casa i (1..RODA_TAMANHO) da roda de emotes: guardada como "Cosm_EmoteSlot<i>"
+function C.CasaDaRoda(player, i)
+	return C.Item(player:GetAttribute("Cosm_EmoteSlot" .. i))
 end
 
 -- ============================================================
