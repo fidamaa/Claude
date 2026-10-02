@@ -32,6 +32,13 @@ local TEX = {
 	Fogo = "rbxasset://textures/particles/fire_main.dds",
 	Faisca = "rbxasset://textures/particles/sparkles_main.dds",
 	Fumaca = "rbxasset://textures/particles/smoke_main.dds",
+	-- ⚠️ v119 — PEDIDO: "usa os efeitos que você fez (gol) nas animações das
+	-- hissatsus, o que fizer sentido — a da neve coloca o floco de neve".
+	-- Texturas próprias (ver skill particulas-roblox).
+	Floco = "rbxassetid://92470203989347",  -- floco de neve de 6 braços
+	Bolha = "rbxassetid://128373337523591", -- bolha furta-cor
+	Estrela = "rbxassetid://124076223617744", -- estrela de 4 pontas
+	Nuvem = "rbxassetid://127024223594157", -- névoa/nebulosa (melhor que smoke_main)
 }
 E.TEX = TEX
 
@@ -882,8 +889,11 @@ function E.Mare(ctx)
 	function efeitos.Voo(ball, duracao)
 		efeitoDeVoo(ball, duracao, function(a, coisas)
 			emissor(a, { Cor = cores({ { 0, ESPUMA }, { 1, AGUA_CLARA } }), Tamanho = 0.35, Vida = { 0.3, 0.6 }, Vel = { 2, 6 }, Acel = V3(0, -25, 0), Taxa = 90 })
+			-- ⚠️ v119: bolhas d'água ficando pra trás da bola (textura de bolha)
+			emissor(a, { Textura = TEX.Bolha, Cor = rgb(255, 255, 255), Brilho = 0.4, Tamanho = numeros({ { 0, 0.3 }, { 1, 0.9 } }),
+				Transp = numeros({ { 0, 0.1 }, { 0.85, 0.25 }, { 1, 1 } }), Vida = { 0.6, 1.1 }, Vel = { 1, 3 }, Acel = V3(0, 4, 0), Taxa = 35, RotVel = 40 })
 			emissor(a, {
-				Textura = TEX.Fumaca, Cor = ESPUMA, Brilho = 0.3, Tamanho = numeros({ { 0, 1.2 }, { 1, 2.8 } }),
+				Textura = TEX.Nuvem, Cor = ESPUMA, Brilho = 0.3, Tamanho = numeros({ { 0, 1.2 }, { 1, 2.8 } }),
 				Transp = numeros({ { 0, 0.35 }, { 1, 1 } }), Vida = { 0.25, 0.5 }, Vel = { 0.5, 2 }, Taxa = 45,
 			})
 			luz(a, AGUA_CLARA, 14, 3)
@@ -963,7 +973,7 @@ function E.Gelo(ctx)
 	nevoa.Size = V3(44, 1, 44)
 	nevoa.CFrame = CFrame.new(mundo(V3(0, ctx.ChaoY + 0.4, -2)))
 	local nevoaEmissor = emissor(nevoa, {
-		Textura = TEX.Fumaca, Cor = rgb(220, 240, 255), Brilho = 0.2, Tamanho = numeros({ { 0, 2 }, { 1, 6 } }),
+		Textura = TEX.Nuvem, Cor = rgb(220, 240, 255), Brilho = 0.2, Tamanho = numeros({ { 0, 2 }, { 1, 6 } }),
 		Transp = numeros({ { 0, 1 }, { 0.3, 0.6 }, { 1, 1 } }), Vida = { 1.2, 2 }, Vel = { 0.5, 1.5 }, Spread = 40,
 		Forma = Enum.ParticleEmitterShape.Box, Estilo = Enum.ParticleEmitterShapeStyle.Volume, ZOffset = -1,
 	})
@@ -974,12 +984,13 @@ function E.Gelo(ctx)
 	ar.Size = V3(52, 16, 52)
 	ar.CFrame = CFrame.new(mundo(V3(0, 5, -2)))
 	local neve = emissor(ar, {
-		Cor = BRANCO, Tamanho = numeros({ { 0, 0.3 }, { 1, 0.18 } }), Vida = { 1.4, 2.4 }, Vel = { 0.3, 1 },
+		Textura = TEX.Floco, Brilho = 0.6, -- ⚠️ v119: floco de neve de verdade (era a faísca)
+		Cor = BRANCO, Tamanho = numeros({ { 0, 0.5 }, { 1, 0.35 } }), Vida = { 1.4, 2.4 }, Vel = { 0.3, 1 },
 		Acel = vento * 14 + V3(0, -4, 0), Drag = 0.6,
 		Forma = Enum.ParticleEmitterShape.Box, Estilo = Enum.ParticleEmitterShapeStyle.Volume, RotVel = 180,
 	})
 	local rajada = emissor(ar, {
-		Textura = TEX.Fumaca, Cor = rgb(235, 248, 255), Brilho = 0.25, Tamanho = numeros({ { 0, 3 }, { 1, 8 } }),
+		Textura = TEX.Nuvem, Cor = rgb(235, 248, 255), Brilho = 0.25, Tamanho = numeros({ { 0, 3 }, { 1, 8 } }),
 		Transp = numeros({ { 0, 1 }, { 0.25, 0.72 }, { 1, 1 } }), Vida = { 0.9, 1.5 }, Vel = { 0.5, 1 },
 		Acel = vento * 30, Drag = 0.4, Forma = Enum.ParticleEmitterShape.Box, Estilo = Enum.ParticleEmitterShapeStyle.Volume,
 		ZOffset = -1, Taxa = 0,
@@ -988,7 +999,7 @@ function E.Gelo(ctx)
 	-- perna direita: rastro gelado na puxada e no chute
 	local peFx = parte(pasta, "PeGelo")
 	local peRastro = rastroDuplo(peFx, 0.8, CIANO, BRANCO, 0.4)
-	local peNeve = emissor(peFx, { Cor = BRANCO, Tamanho = 0.3, Vida = { 0.3, 0.6 }, Vel = { 1, 3 } })
+	local peNeve = emissor(peFx, { Textura = TEX.Floco, Cor = BRANCO, Tamanho = 0.45, Vida = { 0.3, 0.6 }, Vel = { 1, 3 }, RotVel = 200 })
 
 	-- a bola congela (cristal em volta)
 	local casca = esfera(pasta, "CascaGelo", GELO, Enum.Material.Ice)
@@ -1011,7 +1022,7 @@ function E.Gelo(ctx)
 	local impacto = parte(pasta, "ImpactoGelo")
 	local estilhacos = emissor(impacto, { Cor = cores({ { 0, BRANCO }, { 1, CIANO } }), Tamanho = 0.55, Vida = { 0.35, 0.8 }, Vel = { 20, 42 }, Acel = V3(0, -25, 0), Drag = 1.5, RotVel = 400 })
 	local geada = emissor(impacto, {
-		Textura = TEX.Fumaca, Cor = rgb(220, 245, 255), Brilho = 0.35, Tamanho = numeros({ { 0, 2 }, { 1, 7 } }),
+		Textura = TEX.Nuvem, Cor = rgb(220, 245, 255), Brilho = 0.35, Tamanho = numeros({ { 0, 2 }, { 1, 7 } }),
 		Transp = numeros({ { 0, 0.3 }, { 1, 1 } }), Vida = { 0.4, 0.8 }, Vel = { 8, 16 }, Drag = 3,
 	})
 
@@ -1026,7 +1037,7 @@ function E.Gelo(ctx)
 	rolaFx.Size = V3(3, 0.6, 3)
 	rolaFx.CFrame = CFrame.new(mundo(V3(0, ctx.ChaoY + 0.6, -1)))
 	local nevoaRolando = emissor(rolaFx, {
-		Textura = TEX.Fumaca, Cor = rgb(240, 250, 255), Brilho = 0.3,
+		Textura = TEX.Nuvem, Cor = rgb(240, 250, 255), Brilho = 0.3,
 		Tamanho = numeros({ { 0, 2.5 }, { 0.5, 6 }, { 1, 9 } }), Transp = numeros({ { 0, 0.15 }, { 0.6, 0.5 }, { 1, 1 } }),
 		Vida = { 1.0, 1.5 }, Vel = { 20, 30 }, Drag = 1.3, Spread = 5, RotVel = 40,
 		Forma = Enum.ParticleEmitterShape.Cylinder, Estilo = Enum.ParticleEmitterShapeStyle.Surface,
@@ -1119,9 +1130,9 @@ function E.Gelo(ctx)
 	end
 	function efeitos.Voo(ball, duracao)
 		efeitoDeVoo(ball, duracao, function(a, coisas)
-			emissor(a, { Cor = cores({ { 0, BRANCO }, { 1, CIANO } }), Tamanho = 0.35, Vida = { 0.4, 0.8 }, Vel = { 1, 4 }, Taxa = 80, RotVel = 300 })
+			emissor(a, { Textura = TEX.Floco, Cor = cores({ { 0, BRANCO }, { 1, CIANO } }), Tamanho = 0.55, Vida = { 0.4, 0.8 }, Vel = { 1, 4 }, Taxa = 80, RotVel = 300 })
 			emissor(a, {
-				Textura = TEX.Fumaca, Cor = rgb(225, 245, 255), Brilho = 0.3, Tamanho = numeros({ { 0, 1.4 }, { 1, 3.2 } }),
+				Textura = TEX.Nuvem, Cor = rgb(225, 245, 255), Brilho = 0.3, Tamanho = numeros({ { 0, 1.4 }, { 1, 3.2 } }),
 				Transp = numeros({ { 0, 0.35 }, { 1, 1 } }), Vida = { 0.3, 0.6 }, Vel = { 0.5, 1.5 }, Taxa = 45,
 			})
 			luz(a, CIANO, 14, 3)
@@ -1425,13 +1436,14 @@ function E.Galaxia(ctx)
 	estrelasPeca.Size = V3(180, 120, 180)
 	estrelasPeca.CFrame = CFrame.new(centroEspaco)
 	local estrelas = emissor(estrelasPeca, {
+		Textura = TEX.Estrela, -- ⚠️ v119: estrela de 4 pontas (era a faísca)
 		Cor = cores({ { 0, BRANCO }, { 0.5, rgb(200, 220, 255) }, { 1, rgb(255, 230, 200) } }),
 		Tamanho = numeros({ { 0, 0.9 }, { 0.5, 1.3 }, { 1, 0.9 } }), Transp = numeros({ { 0, 1 }, { 0.1, 0 }, { 0.9, 0 }, { 1, 1 } }),
 		Vida = { 3, 3 }, Vel = { 0, 0 }, Forma = Enum.ParticleEmitterShape.Box, Estilo = Enum.ParticleEmitterShapeStyle.Volume,
 		RotVel = 30, Travado = true, ZOffset = -2,
 	})
 	local nebulosa = emissor(estrelasPeca, {
-		Textura = TEX.Fumaca, Cor = cores({ { 0, rgb(120, 60, 255) }, { 0.5, rgb(40, 150, 255) }, { 1, rgb(255, 80, 200) } }),
+		Textura = TEX.Nuvem, Cor = cores({ { 0, rgb(120, 60, 255) }, { 0.5, rgb(40, 150, 255) }, { 1, rgb(255, 80, 200) } }), -- ⚠️ v119: nebulosa macia
 		Brilho = 0.6, Tamanho = numeros({ { 0, 25 }, { 1, 40 } }), Transp = numeros({ { 0, 1 }, { 0.3, 0.7 }, { 0.7, 0.7 }, { 1, 1 } }),
 		Vida = { 3, 3 }, Vel = { 0, 0.5 }, Forma = Enum.ParticleEmitterShape.Box, Estilo = Enum.ParticleEmitterShapeStyle.Volume,
 		Travado = true, ZOffset = -3, RotVel = 10,
@@ -2096,7 +2108,8 @@ local function conePortal(pastaAlvo, ball)
 			Desvio = V3(math.random() * 2 - 1, math.random() * 2 - 1, 0) }
 	end
 	local estrelas = emissor(cauda, {
-		Cor = cores({ { 0, rgb(255, 255, 255) }, { 1, rgb(200, 220, 255) } }), Tamanho = numeros({ { 0, 0.35 }, { 1, 0 } }),
+		Textura = TEX.Estrela, -- ⚠️ v119: estrelinhas de 4 pontas dentro do portal
+		Cor = cores({ { 0, rgb(255, 255, 255) }, { 1, rgb(200, 220, 255) } }), Tamanho = numeros({ { 0, 0.7 }, { 1, 0 } }),
 		Vida = { 0.3, 0.6 }, Vel = { 0, 2 }, Forma = Enum.ParticleEmitterShape.Box, Estilo = Enum.ParticleEmitterShapeStyle.Volume, Taxa = 90,
 	})
 	local brilhoEstrela = emissor(aBola, {
@@ -2163,6 +2176,7 @@ function E.QuedaCelestial(ctx)
 	estrelasPeca.Size = V3(150, 100, 150)
 	estrelasPeca.CFrame = CFrame.new(centro)
 	local estrelas = emissor(estrelasPeca, {
+		Textura = TEX.Estrela, -- ⚠️ v119
 		Cor = cores({ { 0, BRANCO }, { 0.5, rgb(200, 220, 255) }, { 1, rgb(230, 200, 255) } }),
 		Tamanho = numeros({ { 0, 0.9 }, { 0.5, 1.3 }, { 1, 0.9 } }), Transp = numeros({ { 0, 1 }, { 0.1, 0 }, { 0.9, 0 }, { 1, 1 } }),
 		Vida = { 2.5, 2.5 }, Vel = { 0, 0 }, Forma = Enum.ParticleEmitterShape.Box, Estilo = Enum.ParticleEmitterShapeStyle.Volume,
