@@ -426,6 +426,7 @@ Data.Pulses = {
 	-- esse jogo é (ver AlliesScale em PulseController).
 	{
 		Name = "Zona Morta",
+		Image = "rbxassetid://136721652126433", -- ⚠️ v119: arte do artista (pacote "Imagens (6)")
 		Rarity = "Legendary",
 		Element = "Void",
 		Description = "Zona Morta precisa de TRÊS: você e 2 companheiros perto. Os três fazem o QTE ao mesmo tempo — se alguém errar, ela falha; se todos acertarem, sai com muita força, e cada perfeito dos companheiros deixa ainda mais forte.",
@@ -794,6 +795,7 @@ Data.Pulses = {
 	-- VERBO: sumir e reaparecer longe — o drible que mais ganha campo.
 	{
 		Name = "Dobra Veloz",
+		Image = "rbxassetid://102922302094210", -- ⚠️ v119: arte do artista (pacote "Imagens (6)")
 		Rarity = "Legendary",
 		Element = "Void",
 		Description = "Dobra Veloz te teleporta em zigue-zague bem mais longe que qualquer drible, intocável durante a dobra, e ainda sai correndo mais rápido por alguns segundos.",
@@ -1346,6 +1348,7 @@ Data.Instincts = {
 	-- ========== Rare (4) ==========
 	{
 		Name = "Chute Direto",
+		Image = "rbxassetid://100043233729637", -- ⚠️ v119: arte do artista (pacote "Imagens (6)")
 		Posicao = "FW", -- ⚠️ v110: posição da Arma (2 por raridade em cada posição)
 		Rarity = "Rare",
 		Cor = Color3.fromRGB(59, 111, 224),
@@ -1765,6 +1768,7 @@ Data.Instincts = {
 	-- Itoshi Sae: o passe perfeito, com CURVA, que deixa o atacante na cara do gol.
 	{
 		Name = "Passe do Prodígio",
+		Image = "rbxassetid://122091031213332", -- ⚠️ v119: arte do artista (pacote "Imagens (6)")
 		Posicao = "MF",
 		Rarity = "Legendary",
 		Cor = Color3.fromRGB(230, 90, 120),
