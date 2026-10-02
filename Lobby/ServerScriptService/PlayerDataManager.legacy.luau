@@ -789,11 +789,22 @@ end
 -- ========================================
 -- Salvar Dados com Retry e Exponential Backoff
 -- ========================================
+-- ⚠️ v118 — PROTEÇÃO CONTRA PERDA DE DADOS. Quando o DataStore falha ao CARREGAR
+-- (ex.: "Access forbidden"/HTTP 403, queda do Roblox), o jogo entra com dados
+-- padrão temporários pra pessoa não ficar travada. Esses dados NUNCA podem ser
+-- salvos: o primeiro save gravaria um personagem nível 1 com $1000 por cima do
+-- save verdadeiro. Antes isso acontecia (autosave/saída).
+local dadosTemporarios = {} -- [userId] = true
+
 local function savePlayerData(player, isShutdown)
 	local userId = player.UserId
 
 	if not onlinePlayersData[userId] then
 		warn("⚠️ Tentando salvar dados inexistentes para", player.Name)
+		return false
+	end
+	if dadosTemporarios[userId] then
+		warn("🛡️ Não salvando dados TEMPORÁRIOS de " .. player.Name .. " (o carregamento falhou — o save real fica intacto)")
 		return false
 	end
 
@@ -921,7 +932,8 @@ local function loadPlayerData(player)
 	if not dataLoaded then
 		warn(string.format("❌ FALHA CRÍTICA: Não foi possível carregar dados válidos para %s", player.Name))
 		onlinePlayersData[userId] = createDefaultData()
-		warn(string.format("🆘 Usando dados padrão temporários para %s", player.Name))
+		dadosTemporarios[userId] = true -- ⚠️ v118: nunca salvar por cima do save real
+		warn(string.format("🆘 Usando dados padrão temporários para %s (NÃO serão salvos)", player.Name))
 	end
 
 	-- Validação final
@@ -1212,6 +1224,7 @@ Players.PlayerRemoving:Connect(function(player)
 	print(string.format("👋 %s saindo. Salvando dados...", player.Name))
 	savePlayerData(player)
 	onlinePlayersData[player.UserId] = nil
+	dadosTemporarios[player.UserId] = nil
 end)
 
 -- ========================================
