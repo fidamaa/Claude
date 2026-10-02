@@ -3620,7 +3620,11 @@ Remotes.KickBall.OnServerEvent:Connect(function(player, chargedForce, targetPoin
 		local distance = (ball.Position - root.Position).Magnitude
 		local bolaLivre = owner == nil and not ballFrozenForGuardQTE and not pulseStraightFlightActive
 		local bolaFraca = ball.AssemblyLinearVelocity.Magnitude <= (Config.PRIMEIRO_TOQUE_VEL_MAX or 80)
-		if not bolaLivre or not bolaFraca or distance > Config.VOLLEY_RANGE then
+		-- ⚠️ v119 — PEDIDO: "aumenta a hitbox em 1.5x pra dar voleio". Só a bola NO AR
+		-- (voleio) ganha o alcance maior; o toque de primeira rasteiro fica igual.
+		local ehVoleio = noAr == true and ballHeightAboveGround >= Config.VOLLEY_MIN_BALL_HEIGHT
+		local alcanceToque = Config.VOLLEY_RANGE * (ehVoleio and (Config.VOLLEY_HITBOX_MULT or 1.5) or 1)
+		if not bolaLivre or not bolaFraca or distance > alcanceToque then
 			-- ⚠️ v85 — PEDIDO: "se eu chutar sem a bola, a animação de chutar
 			-- não sai... a animação de chute precisa sair mesmo sem a bola".
 			-- Antes o handler só saía daqui — o preparo (perna levantada) era
@@ -4076,6 +4080,9 @@ local function resolveStealAttempt(player, targetOwner)
 		return
 	end
 
+	-- ⚠️ v119: guarda do Passo Furtivo — o desarme vira contra-ataque
+	if _G.ContraGuardaFurtiva and _G.ContraGuardaFurtiva(targetOwner, player) then return end
+
 	local activeMove = dribbleMoves[targetOwner]
 	if activeMove and tick() < activeMove.expiresAt then
 		stunPlayer(player, Config.TACKLE_STUN_ON_FAILED_TIMING)
@@ -4166,6 +4173,7 @@ local function applyPulseDashHit(player, target, dash)
 	-- chegada, em dash.aoChegar.
 	if dash.efeitoFixo then
 		if owner == target and not GKAreaUtil.IsEffectiveGK(target) then
+			if _G.ContraGuardaFurtiva and _G.ContraGuardaFurtiva(target, player) then return end -- ⚠️ v119
 			local activeMove = dribbleMoves[target]
 			local escapou = (activeMove and tick() < activeMove.expiresAt) or (_G.HasPulseIframe and _G.HasPulseIframe(target))
 			if not escapou then
@@ -4206,6 +4214,9 @@ local function applyPulseDashHit(player, target, dash)
 	-- JÁ aconteceu (não é um whiff) quando essa função é chamada. Reaplica
 	-- só as checagens de CONTRAPLAY de verdade (finta ativa / iframe de
 	-- Pulso no alvo), sem a re-checagem de distância nem o stun de "errou".
+	if owner == target and _G.ContraGuardaFurtiva and _G.ContraGuardaFurtiva(target, player) then
+		return -- ⚠️ v119: guarda do Passo Furtivo
+	end
 	if owner == target then
 		local activeMove = dribbleMoves[target]
 		if activeMove and tick() < activeMove.expiresAt then
@@ -6603,6 +6614,47 @@ end)()
 		local tg = math.tan(math.rad(20)) * math.clamp(curva, 0.2, 3.5)
 		local rapidez = horizontal.Magnitude
 		local tempoAteAlvo = distancia / rapidez
+		-- ⚠️ v119 — PEDIDO: "o chute do Rin chuta e vai pro lado — é a mesma coisa de
+		-- chutar mirando pro lado. O certo é começar na minha RETA e fazer uma CURVA,
+		-- igual o do Sae; acerta do lado, não exatamente onde mirou (vai pra esquerda
+		-- ou pra direita, se você estiver indo pra direita)". Chute a gol (Rin): sai
+		-- reto na mira e o desvio cresce aos poucos — y(x) = D·k·(x/D)^2.4 — chegando
+		-- ao lado do ponto mirado. O lado é pra onde você está andando (A/D); parado,
+		-- o lado livre. O PASSE do Sae continua com a curva de antes (abre e volta).
+		if chuteAGol then
+			local hum2 = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
+			local mov2 = hum2 and hum2.MoveDirection or Vector3.zero
+			if mov2.Magnitude > 0.2 and math.abs(mov2:Dot(direita)) > 0.25 then
+				lado = mov2:Dot(direita) >= 0 and 1 or -1
+			end
+			local desvioFinal = distancia * math.clamp(0.05 * curva, 0.03, 0.2)
+			curveGeneration += 1
+			local minhaCurvaGol = curveGeneration
+			local origem = ball.Position
+			local decorridoGol = 0
+			local conexaoGol
+			conexaoGol = RunService.Heartbeat:Connect(function(dt)
+				decorridoGol += dt
+				if minhaCurvaGol ~= curveGeneration or owner ~= nil or decorridoGol > tempoAteAlvo * 3
+					or ball.AssemblyLinearVelocity.Magnitude < 6 then
+					conexaoGol:Disconnect()
+					return
+				end
+				local v = ball.AssemblyLinearVelocity
+				local rel = Vector3.new(ball.Position.X - origem.X, 0, ball.Position.Z - origem.Z)
+				local x = math.max(rel:Dot(frente), 0)
+				local vx = math.max(Vector3.new(v.X, 0, v.Z):Dot(frente), 1)
+				local u = x / distancia
+				-- depois do alvo segue na mesma inclinação (a curva não "desfaz")
+				local uc = math.min(u, 1)
+				local y = rel:Dot(direita) * lado
+				local yDesejado = desvioFinal * (uc ^ 2.4) + (u > 1 and (u - 1) * desvioFinal * 2.4 or 0)
+				local inclinacao = (desvioFinal / distancia) * 2.4 * (uc ^ 1.4)
+				local vLateral = vx * inclinacao + (yDesejado - y) * 6
+				ball.AssemblyLinearVelocity = frente * vx + direita * (lado * vLateral) + Vector3.new(0, v.Y, 0)
+			end)
+			return lado
+		end
 		local aberto = frente * rapidez + direita * (lado * rapidez * tg)
 		ball.AssemblyLinearVelocity = aberto + Vector3.new(0, ball.AssemblyLinearVelocity.Y, 0)
 		-- ⚠️ v111 (teste): a curva era uma força por TEMPO calculada com a
@@ -6870,38 +6922,6 @@ end)()
 	end
 
 	-- =====================================================================
-	-- CHAPÉU: a bola sobe por cima de quem está na frente e cai adiante; você
-	-- arranca pra buscar do outro lado (entrou no lugar do Pulmão de Aço)
-	-- =====================================================================
-	_G.ArmaAtiva_Chapeu = function(player, effect)
-		if owner ~= player then return false, "precisa estar com a bola" end
-		if isStunned(player) then return false, "atordoado" end
-		local _, root = getCharacterParts(player)
-		if not root then return false end
-		local frente = direcaoDaMira(player, root)
-		local dist = alcanceLivre(root.Position, frente, effect.Distancia or 16)
-		if dist < 6 then return false, "sem espaço na frente" end
-		local chao = root.Position.Y - 2.5
-		local alvo = Vector3.new(root.Position.X, chao + 1, root.Position.Z) + frente * dist
-		-- parábola alta: sobe `Altura` studs acima de onde a bola está
-		local g = workspace.Gravity * Config.BALL_GRAVITY_MULTIPLIER
-		lancarBola(player, root, alvo, 40)
-		local p0 = ball.Position
-		local subir = math.max(1, (effect.Altura or 9))
-		local vy = math.sqrt(2 * g * subir)
-		local tSobe = vy / g
-		local tDesce = math.sqrt(math.max(0.01, 2 * (subir + p0.Y - alvo.Y) / g))
-		local tempo = tSobe + tDesce
-		local plano = Vector3.new(alvo.X - p0.X, 0, alvo.Z - p0.Z)
-		ball.AssemblyLinearVelocity = plano / tempo + Vector3.new(0, vy, 0)
-		selfPickupLockUntil[player] = tick() + math.min(0.5, tempo * 0.5) -- não pega de volta no ar logo na saída
-		playAnimation(player, Config.ANIMATIONS.Kick, nil, 0.4, true)
-		if _G.ArmaImpulsoVelocidade then _G.ArmaImpulsoVelocidade(player, effect.SpeedMult or 1.3, effect.Duracao or 1) end
-		vfx(player, "Chapéu@chapeu", { De = p0, Para = alvo, Tempo = tempo }, tempo)
-		return true
-	end
-
-	-- =====================================================================
 	-- PASSE DO PRODÍGIO (Sae) → PASSE CURVO: aperta a tecla e a bola vai
 	-- CURVANDO até o ponto mirado — se tiver companheiro perto da mira, até o
 	-- pé dele — contornando quem estiver no meio. Quem recebe chuta mais forte.
@@ -7035,32 +7055,292 @@ end)()
 	end
 
 	-- =====================================================================
-	-- SAÍDA RÁPIDA (goleiro) → SAÍDA DO GOL: dispara na direção da bola e,
-	-- se ela estiver solta ao alcance no fim, agarra
+	-- ⚠️ v119 — ARMAS DE DEFESA UNIFICADAS + COUNTERS + SAÍDA TELEGUIADA + CHAPÉU
+	-- PEDIDO: "três armas de defesa (desarme instantâneo, avançar na bola, avançar
+	-- no defensor) podem ser uma só: avança no cara e tira a bola automaticamente,
+	-- tipo um segundo carrinho, distância maior, teleguiado, o cara pode driblar"
+	-- + "faz umas duas armas de counter" + "a Saída de área é inútil" + "o chapéu
+	-- precisa ser mais complexo". Função própria (limite de locais do arquivo).
 	-- =====================================================================
-	_G.ArmaAtiva_SaidaDoGol = function(player, effect)
-		if isStunned(player) then return false, "atordoado" end
-		if owner == player then return false, "você já está com a bola" end
-		local _, root = getCharacterParts(player)
-		if not root then return false end
-		local falta = Vector3.new(ball.Position.X - root.Position.X, 0, ball.Position.Z - root.Position.Z)
-		local maximo = effect.Distancia or 24
-		if falta.Magnitude > (effect.Raio or 45) then return false, "a bola está longe demais" end
-		local dir = plano(falta, plano(root.CFrame.LookVector, Vector3.new(0, 0, -1)))
-		local dist = alcanceLivre(root.Position, dir, math.min(maximo, math.max(0, falta.Magnitude - 1.5)))
-		local tempo = effect.Tempo or 0.35
-		sendDisplacement(player, dir * dist, tempo)
-		avisarAcao(player.Character, "CorridaHissatsu", tempo)
-		vfx(player, "Saída Rápida@saida", { Dir = dir }, tempo)
-		task.delay(tempo + 0.02, function()
-			if owner or not player.Parent then return end
-			local _, r = getCharacterParts(player)
-			if r and (ball.Position - r.Position).Magnitude <= (effect.RaioAgarrar or 7) and ball.Position.Y < r.Position.Y + 5 then
-				ball.AssemblyLinearVelocity = Vector3.zero
-				setOwner(player)
-				pushToucher(player)
+	;(function()
+		-- persegue um alvo que se mexe (posição devolvida por alvoPos a cada passo)
+		-- com deslocamentos curtos; encostou -> AoEncostar(root)
+		local function perseguir(player, alvoPos, opts)
+			local t0 = tick()
+			local passoT = 0.05
+			task.spawn(function()
+				while player.Parent do
+					local _, r = getCharacterParts(player)
+					if not r or isStunned(player) then break end
+					local alvo = alvoPos()
+					if not alvo then break end
+					local falta = Vector3.new(alvo.X - r.Position.X, 0, alvo.Z - r.Position.Z)
+					if falta.Magnitude <= opts.Raio then
+						opts.AoEncostar(r)
+						return
+					end
+					if tick() - t0 > opts.TempoMax then break end
+					local dir = falta.Unit
+					local passo = math.min(falta.Magnitude, opts.Velocidade * passoT * 1.15)
+					local livre = alcanceLivre(r.Position, dir, passo)
+					if livre < 0.2 then break end
+					sendDisplacement(player, dir * livre, passoT)
+					task.wait(passoT)
+				end
+				if opts.AoAcabar then opts.AoAcabar() end
+			end)
+		end
+
+		local function roubar(de, para, stun)
+			releaseOwner()
+			ball.CanCollide = true
+			tackleSound:Play()
+			setOwner(para)
+			if stun and stun > 0 then
+				stunPlayer(de, stun)
+				avisarAcao(de.Character, "SofreuCarrinho", stun)
 			end
-		end)
-		return true
-	end
+			if _G.RegisterTackle then _G.RegisterTackle(para, de) end
+		end
+
+		-- DESARME RELÂMPAGO → BOTE TELEGUIADO (a arma unificada)
+		_G.ArmaAtiva_BoteTeleguiado = function(player, effect)
+			if isStunned(player) then return false, "atordoado" end
+			if owner == player then return false, "só sem a bola" end
+			local raio = effect.Raio or 40
+			local alvo = adversarioComBola(player, raio)
+			if not alvo then return false, string.format("nenhum adversário com a bola a até %d studs", raio) end
+			local tMax = effect.TempoMax or 0.9
+			avisarAcao(player.Character, "Investida", tMax)
+			vfx(player, "Desarme Relâmpago@bote", { Alvo = alvo.Character, Tempo = tMax }, tMax)
+			Remotes.SuppressShiftLockRotation:FireClient(player, tMax)
+			perseguir(player, function()
+				if owner ~= alvo then return nil end
+				local _, d = getCharacterParts(alvo)
+				return d and d.Position
+			end, {
+				Velocidade = effect.Velocidade or 85, TempoMax = tMax, Raio = effect.RaioRoubo or 4.5,
+				-- mesmas regras do carrinho: drible na hora certa / iframe = quem cai é
+				-- você; goleiro na área não perde; guarda furtiva vira contra-ataque
+				AoEncostar = function() resolveStealAttempt(player, alvo) end,
+			})
+			return true
+		end
+
+		-- LEITURA DE PASSE → ZONA DO AIKU (counter de área, só no terço de defesa)
+		_G.ArmaAtiva_ZonaAiku = function(player, effect)
+			if isStunned(player) then return false, "atordoado" end
+			local _, root = getCharacterParts(player)
+			if not root or not player.Character then return false end
+			local gol = player.Team and ownGoalOf(player.Team.Name)
+			local maxGol = effect.MaxDistanciaGol or 290
+			if not gol or Vector3.new(gol.Position.X - root.Position.X, 0, gol.Position.Z - root.Position.Z).Magnitude > maxGol then
+				return false, "só no seu terço de defesa"
+			end
+			local raio, dur = effect.Raio or 14, effect.Duracao or 4
+			local fim = tick() + dur
+			player.Character:SetAttribute("ZonaAikuAte", workspace:GetServerTimeNow() + dur)
+			player.Character:SetAttribute("ZonaAikuRaio", raio)
+			vfx(player, "Leitura de Passe@zona", { Raio = raio, Duracao = dur }, dur)
+			task.spawn(function()
+				while tick() < fim and player.Parent do
+					task.wait(0.05)
+					if isStunned(player) then break end
+					local dono = owner
+					if dono and dono ~= player and areOpponents(player, dono) and not GKAreaUtil.IsEffectiveGK(dono)
+						and not (_G.HasPulseIframe and _G.HasPulseIframe(dono)) then
+						local _, meu = getCharacterParts(player)
+						local _, dele = getCharacterParts(dono)
+						if meu and dele and (meu.Position - dele.Position).Magnitude <= raio then
+							roubar(dono, player, 0.9)
+							vfx(player, "Leitura de Passe@roubo", { Alvo = dono.Character }, 0.8)
+							break
+						end
+					end
+				end
+				if player.Character then player.Character:SetAttribute("ZonaAikuAte", nil) end
+			end)
+			return true
+		end
+
+		-- PASSO FURTIVO: sem a bola = SUMIR (como antes); com a bola = GUARDA
+		-- (counter do carrinho)
+		local guardaFurtiva = {} -- [player] = { Ate, Effect }
+		_G.ArmaAtiva_SumirOuGuarda = function(player, effect)
+			if owner ~= player then return _G.ArmaAtiva_Sumir(player, effect) end
+			if isStunned(player) then return false, "atordoado" end
+			local janela = effect.Janela or 1.6
+			guardaFurtiva[player] = { Ate = tick() + janela, Effect = effect }
+			if _G.GrantPulseIframe then _G.GrantPulseIframe(player, janela) end
+			vfx(player, "Passo Furtivo@guarda", { Tempo = janela }, janela)
+			return true
+		end
+		-- chamado na resolução de TODO desarme (carrinho, bote, investida): se o
+		-- alvo está em guarda, o desarme vira contra-ataque e devolve true
+		_G.ContraGuardaFurtiva = function(alvo, atacante)
+			local g = guardaFurtiva[alvo]
+			if not g then return false end
+			guardaFurtiva[alvo] = nil
+			if tick() > g.Ate or owner ~= alvo then return false end
+			local _, ra = getCharacterParts(alvo)
+			local _, rt = getCharacterParts(atacante)
+			if ra and rt then
+				local vindo = plano(ra.Position - rt.Position, plano(ra.CFrame.LookVector, Vector3.new(0, 0, -1)))
+				local lado = vindo:Cross(Vector3.yAxis).Unit * ((math.random() < 0.5) and 1 or -1)
+				local passo = lado * (g.Effect.Desvio or 7) + vindo * 3
+				local livre = alcanceLivre(ra.Position, passo.Unit, passo.Magnitude)
+				playDribbleAnimation(alvo, lado:Dot(ra.CFrame.RightVector) > 0 and "Right" or "Left", 0.3)
+				sendDisplacement(alvo, passo.Unit * livre, 0.22)
+			end
+			stunPlayer(atacante, g.Effect.Stun or 1.6)
+			ragdollPlayer(atacante, 1)
+			if _G.GrantPulseIframe then _G.GrantPulseIframe(alvo, 0.5) end
+			vfx(alvo, "Passo Furtivo@contra", { Alvo = atacante.Character }, 0.8)
+			return true
+		end
+
+		-- ANTECIPAÇÃO FANTASMA → GUARDA CONTRA O DRIBLE (counter)
+		_G.ArmaAtiva_AntecipaDrible = function(player, effect)
+			if isStunned(player) then return false, "atordoado" end
+			local raio = effect.Raio or 18
+			local alvo = adversarioComBola(player, raio)
+			if not alvo then return false, string.format("nenhum adversário com a bola a até %d studs", raio) end
+			local inicio = tick()
+			local janela = effect.Janela or 2.5
+			local fim = inicio + janela
+			vfx(player, "Antecipação Fantasma@guarda", { Alvo = alvo.Character, Tempo = janela }, janela)
+			task.spawn(function()
+				while tick() < fim and player.Parent do
+					task.wait(0.03)
+					if isStunned(player) or owner ~= alvo then return end
+					local ultimo = dribbleMoveCooldowns[alvo]
+					if ultimo and ultimo > inicio then
+						task.wait(0.28) -- o fim do drible dele
+						if owner ~= alvo or isStunned(player) or GKAreaUtil.IsEffectiveGK(alvo) then return end
+						local _, meu = getCharacterParts(player)
+						local _, dele = getCharacterParts(alvo)
+						if not meu or not dele then return end
+						local frente = plano(dele.AssemblyLinearVelocity, nil) or plano(dele.CFrame.LookVector, Vector3.new(0, 0, -1))
+						local ponto = dele.Position + frente * 2.5
+						local falta = Vector3.new(ponto.X - meu.Position.X, 0, ponto.Z - meu.Position.Z)
+						if falta.Magnitude > raio + 14 then return end
+						vfx(player, "Antecipação Fantasma@passo", { De = meu.Position, Para = ponto }, 0.6)
+						sendDisplacement(player, falta, 0.12)
+						task.wait(0.12)
+						if owner ~= alvo then return end
+						roubar(alvo, player, 1.1) -- leu o drible: passa por cima do iframe dele
+						return
+					end
+				end
+			end)
+			return true
+		end
+
+		-- SAÍDA RÁPIDA (goleiro) → SAÍDA TELEGUIADA
+		_G.ArmaAtiva_SaidaDoGol = function(player, effect)
+			if isStunned(player) then return false, "atordoado" end
+			if owner == player then return false, "você já está com a bola" end
+			local _, root = getCharacterParts(player)
+			if not root then return false end
+			local raio = effect.Raio or 42
+			if Vector3.new(ball.Position.X - root.Position.X, 0, ball.Position.Z - root.Position.Z).Magnitude > raio then
+				return false, "a bola está longe demais"
+			end
+			if owner and not areOpponents(player, owner) then return false, "a bola está com o seu time" end
+			local tMax = effect.TempoMax or 0.85
+			avisarAcao(player.Character, "CorridaHissatsu", tMax)
+			vfx(player, "Saída Rápida@saida", { Dir = plano(ball.Position - root.Position, plano(root.CFrame.LookVector, Vector3.new(0, 0, -1))) }, tMax)
+			Remotes.SuppressShiftLockRotation:FireClient(player, tMax)
+			perseguir(player, function()
+				if owner and not areOpponents(player, owner) then return nil end
+				if owner then
+					local _, d = getCharacterParts(owner)
+					return d and d.Position
+				end
+				return ball.Position
+			end, {
+				Velocidade = effect.Velocidade or 80, TempoMax = tMax, Raio = effect.RaioAgarrar or 6,
+				AoEncostar = function(r)
+					if owner == nil then
+						if ball.Position.Y < r.Position.Y + 6 then
+							ball.AssemblyLinearVelocity = Vector3.zero
+							ball.CanCollide = true
+							setOwner(player)
+							pushToucher(player)
+						end
+					elseif areOpponents(player, owner) and not (_G.HasPulseIframe and _G.HasPulseIframe(owner)) then
+						roubar(owner, player, 0)
+					end
+				end,
+			})
+			return true
+		end
+
+		-- CHAPÉU: só com marcador NA FRENTE; a bola passa por cima dele, você
+		-- contorna pelo lado e pega do outro lado; ele fica atordoado
+		_G.ArmaAtiva_Chapeu = function(player, effect)
+			if owner ~= player then return false, "precisa estar com a bola" end
+			if isStunned(player) then return false, "atordoado" end
+			local _, root = getCharacterParts(player)
+			if not root then return false end
+			local frente = direcaoDaMira(player, root)
+			local alvo, rAlvo, menor = nil, nil, effect.RaioMarcador or 14
+			for _, plr in ipairs(Players:GetPlayers()) do
+				if plr ~= player and areOpponents(player, plr) then
+					local _, r = getCharacterParts(plr)
+					if r then
+						local rel = Vector3.new(r.Position.X - root.Position.X, 0, r.Position.Z - root.Position.Z)
+						local d = rel.Magnitude
+						if d > 1 and d <= menor and rel.Unit:Dot(frente) > 0.55 then alvo, rAlvo, menor = plr, r, d end
+					end
+				end
+			end
+			if not alvo then return false, "precisa de um marcador na sua frente" end
+			local dirAlvo = Vector3.new(rAlvo.Position.X - root.Position.X, 0, rAlvo.Position.Z - root.Position.Z).Unit
+			local livre = alcanceLivre(root.Position, dirAlvo, menor + (effect.Alem or 8))
+			if livre < menor + 3 then return false, "sem espaço atrás do marcador" end
+			local chao = root.Position.Y - 3
+			local alvoBola = Vector3.new(root.Position.X, chao + 1, root.Position.Z) + dirAlvo * livre
+			local g = workspace.Gravity * Config.BALL_GRAVITY_MULTIPLIER
+			lancarBola(player, root, alvoBola, 40)
+			local p0 = ball.Position
+			-- sobe o bastante pra passar por cima da CABEÇA dele
+			local subir = math.max(effect.Altura or 9, (rAlvo.Position.Y + 4) - p0.Y)
+			local vy = math.sqrt(2 * g * subir)
+			local tempo = vy / g + math.sqrt(math.max(0.01, 2 * (subir + p0.Y - alvoBola.Y) / g))
+			local planoV = Vector3.new(alvoBola.X - p0.X, 0, alvoBola.Z - p0.Z)
+			ball.AssemblyLinearVelocity = planoV / tempo + Vector3.new(0, vy, 0)
+			curveGeneration += 1
+			selfPickupLockUntil[player] = tick() + tempo * 0.75
+			stunPlayer(alvo, effect.Stun or 1.6)
+			avisarAcao(alvo.Character, "Tonto", effect.Stun or 1.6)
+			if _G.GrantPulseIframe then _G.GrantPulseIframe(player, tempo + 0.3) end
+			playAnimation(player, Config.ANIMATIONS.Kick, nil, 0.45, true, nil, nil, "Chapeu")
+			-- contorna: primeiro passa pelo LADO dele, depois vai onde a bola cai
+			local direita = dirAlvo:Cross(Vector3.yAxis).Unit
+			local lado = (math.random() < 0.5) and 1 or -1
+			local meio = rAlvo.Position + direita * (lado * 3.5)
+			local ida = Vector3.new(meio.X - root.Position.X, 0, meio.Z - root.Position.Z)
+			task.delay(0.12, function()
+				if not player.Parent then return end
+				sendDisplacement(player, ida, tempo * 0.45)
+				task.delay(tempo * 0.45, function()
+					local _, r = getCharacterParts(player)
+					if not r then return end
+					sendDisplacement(player, Vector3.new(alvoBola.X - r.Position.X, 0, alvoBola.Z - r.Position.Z), tempo * 0.4)
+				end)
+			end)
+			task.delay(tempo + 0.05, function()
+				if owner then return end
+				local _, r = getCharacterParts(player)
+				if r and (ball.Position - r.Position).Magnitude <= 9 then
+					ball.AssemblyLinearVelocity = Vector3.zero
+					setOwner(player)
+					pushToucher(player)
+				end
+			end)
+			vfx(player, "Chapéu@chapeu", { De = p0, Para = alvoBola, Tempo = tempo, Alvo = alvo.Character }, tempo)
+			return true
+		end
+	end)()
 end)()

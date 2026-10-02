@@ -479,8 +479,11 @@ ATIVAS["Tabela@volta"] = function(character, extra)
 	if extra and typeof(extra.Ponto) == "Vector3" then anel(extra.Ponto, Vector3.yAxis, ciano, 1.5, 6, 0.6, 0.4) end
 	rastroNaBola(ciano, 1, 0.8)
 end
+local tontura -- ⚠️ v119: definida mais abaixo (junto das armas novas)
 ATIVAS["Chapéu@chapeu"] = function(character, extra)
 	local verde = Color3.fromRGB(120, 230, 150)
+	-- ⚠️ v119: quem levou o chapéu fica tonto (estrelinhas)
+	if extra and extra.Alvo and tontura then task.spawn(tontura, extra.Alvo, 1.6) end
 	local root = character:FindFirstChild("HumanoidRootPart")
 	if root then anel(root.Position - Vector3.new(0, 2.8, 0), Vector3.yAxis, verde, 2, 7, 0.35, 0.4) end
 	rastroNaBola(verde, 1, (extra and extra.Tempo) or 0.9)
@@ -538,6 +541,132 @@ ATIVAS["Saída Rápida@saida"] = function(character, extra)
 	local dir = extra and typeof(extra.Dir) == "Vector3" and extra.Dir or root.CFrame.LookVector
 	linhasDeVelocidade(root, dir, cor, 12)
 	anel(root.Position - Vector3.new(0, 2.8, 0), Vector3.yAxis, cor, 2, 9, 0.35, 0.35)
+end
+
+-- ===== ⚠️ v119 — ARMAS UNIFICADAS / COUNTERS =====
+-- BOTE TELEGUIADO (Desarme Relâmpago): imagens residuais amarelas e riscos de raio
+-- pelo caminho enquanto persegue o portador
+ATIVAS["Desarme Relâmpago@bote"] = function(character, extra)
+	local root = character:FindFirstChild("HumanoidRootPart")
+	if not root then return end
+	local cor = Color3.fromRGB(255, 230, 90)
+	anel(root.Position - Vector3.new(0, 2.8, 0), Vector3.yAxis, cor, 2, 10, 0.35, 0.35)
+	flash(root.Position, Color3.new(1, 1, 1), 1.4, 0.15)
+	local fim = os.clock() + ((extra and extra.Tempo) or 0.9)
+	local ultimo = 0
+	local con
+	con = RunService.RenderStepped:Connect(function()
+		if os.clock() > fim or not root.Parent then con:Disconnect() return end
+		if os.clock() - ultimo > 0.06 then
+			ultimo = os.clock()
+			local v = root.AssemblyLinearVelocity
+			local dir = Vector3.new(v.X, 0, v.Z)
+			dir = dir.Magnitude > 1 and dir.Unit or root.CFrame.LookVector
+			sombra(root.Position, dir, cor, 0.3, 0.55)
+			risco(root.Position + Vector3.new(math.random() - 0.5, math.random() * 2 - 1, math.random() - 0.5), dir, cor, 4, 0.2)
+		end
+	end)
+end
+-- ZONA DO AIKU (Leitura de Passe): bolha de energia em volta dele + disco no chão
+ATIVAS["Leitura de Passe@zona"] = function(character, extra)
+	local root = character:FindFirstChild("HumanoidRootPart")
+	if not root then return end
+	local raio = (extra and extra.Raio) or 14
+	local dur = (extra and extra.Duracao) or 4
+	local cor = Color3.fromRGB(90, 200, 230)
+	local bolha = parte(Vector3.one * 0.5, root.CFrame, cor, 0.55, Enum.Material.ForceField)
+	bolha.Shape = Enum.PartType.Ball
+	local chao = parte(Vector3.new(0.15, 1, 1), CFrame.new(root.Position - Vector3.new(0, 2.85, 0)) * CFrame.Angles(0, 0, math.rad(90)), cor, 0.6, Enum.Material.ForceField)
+	chao.Shape = Enum.PartType.Cylinder
+	TweenService:Create(bolha, TweenInfo.new(0.35, Enum.EasingStyle.Back), { Size = Vector3.one * raio * 2 }):Play()
+	TweenService:Create(chao, TweenInfo.new(0.35), { Size = Vector3.new(0.15, raio * 2, raio * 2) }):Play()
+	anel(root.Position - Vector3.new(0, 2.8, 0), Vector3.yAxis, cor, 2, raio * 2, 0.4, 0.3)
+	local t0 = os.clock()
+	local con
+	con = RunService.RenderStepped:Connect(function()
+		local agora = os.clock()
+		local ativo = agora < t0 + dur and root.Parent and (agora - t0 < 0.4 or character:GetAttribute("ZonaAikuAte") ~= nil)
+		if not ativo then
+			con:Disconnect()
+			TweenService:Create(bolha, TweenInfo.new(0.25), { Transparency = 1 }):Play()
+			TweenService:Create(chao, TweenInfo.new(0.25), { Transparency = 1 }):Play()
+			Debris:AddItem(bolha, 0.3)
+			Debris:AddItem(chao, 0.3)
+			return
+		end
+		bolha.CFrame = CFrame.new(root.Position) * CFrame.Angles(0, agora * 0.8, 0)
+		chao.CFrame = CFrame.new(root.Position - Vector3.new(0, 2.85, 0)) * CFrame.Angles(0, 0, math.rad(90))
+	end)
+end
+ATIVAS["Leitura de Passe@roubo"] = function(character, extra)
+	local cor = Color3.fromRGB(90, 200, 230)
+	local alvo = extra and extra.Alvo
+	local r = typeof(alvo) == "Instance" and alvo:FindFirstChild("HumanoidRootPart")
+	local root = character:FindFirstChild("HumanoidRootPart")
+	if r then
+		flash(r.Position, Color3.new(1, 1, 1), 1.5, 0.2)
+		faiscas(r.Position, cor, 24, 16)
+	end
+	if root then anel(root.Position - Vector3.new(0, 2.8, 0), Vector3.yAxis, cor, 2, 12, 0.4, 0.3) end
+end
+-- GUARDA FURTIVA (Passo Furtivo com a bola): contorno roxo pulsando enquanto dura
+ATIVAS["Passo Furtivo@guarda"] = function(character, extra)
+	local roxo = Color3.fromRGB(99, 102, 241)
+	local h = Instance.new("Highlight")
+	h.FillColor = roxo
+	h.FillTransparency = 0.72
+	h.OutlineColor = Color3.fromRGB(205, 205, 255)
+	h.OutlineTransparency = 0.1
+	h.DepthMode = Enum.HighlightDepthMode.Occluded
+	h.Parent = character
+	Debris:AddItem(h, (extra and extra.Tempo) or 1.6)
+	local root = character:FindFirstChild("HumanoidRootPart")
+	if root then anel(root.Position - Vector3.new(0, 2.8, 0), Vector3.yAxis, roxo, 7, 2, 0.35, 0.3) end
+end
+ATIVAS["Passo Furtivo@contra"] = function(character, extra)
+	local roxo = Color3.fromRGB(99, 102, 241)
+	local root = character:FindFirstChild("HumanoidRootPart")
+	if not root then return end
+	sombra(root.Position, root.CFrame.LookVector, roxo, 0.6, 0.35)
+	flash(root.Position, Color3.fromRGB(220, 220, 255), 1.4, 0.2)
+	faiscas(root.Position, roxo, 20, 12)
+	local alvo = extra and extra.Alvo
+	local r = typeof(alvo) == "Instance" and alvo:FindFirstChild("HumanoidRootPart")
+	if r then anel(r.Position - Vector3.new(0, 2.8, 0), Vector3.yAxis, roxo, 1, 8, 0.4, 0.3) end
+end
+-- ANTECIPAÇÃO (counter do drible): brilho no olho e um anel que fecha em volta
+-- do portador marcado enquanto a guarda dura
+ATIVAS["Antecipação Fantasma@guarda"] = function(character, extra)
+	local roxo = Color3.fromRGB(160, 110, 230)
+	local head = character:FindFirstChild("Head")
+	if head then flash(head.Position + head.CFrame.LookVector * 0.6, roxo, 1, 0.25) end
+	local alvo = extra and extra.Alvo
+	local r = typeof(alvo) == "Instance" and alvo:FindFirstChild("HumanoidRootPart")
+	if r then anel(r.Position - Vector3.new(0, 2.8, 0), Vector3.yAxis, roxo, 7, 3, (extra and extra.Tempo) or 2.5, 0.2) end
+end
+-- estrelinhas de tontura girando na cabeça de quem levou o chapéu
+tontura = function(alvo, dur)
+	local head = typeof(alvo) == "Instance" and alvo:FindFirstChild("Head")
+	if not head then return end
+	local estrelas = {}
+	for i = 1, 3 do
+		local e = parte(Vector3.one * 0.35, head.CFrame, Color3.fromRGB(255, 235, 120), 0.05)
+		e.Shape = Enum.PartType.Ball
+		estrelas[i] = e
+	end
+	local fim = os.clock() + dur
+	local con
+	con = RunService.RenderStepped:Connect(function()
+		if os.clock() > fim or not head.Parent then
+			con:Disconnect()
+			for _, e in ipairs(estrelas) do e:Destroy() end
+			return
+		end
+		for i, e in ipairs(estrelas) do
+			local a = os.clock() * 5 + i * (math.pi * 2 / 3)
+			e.CFrame = CFrame.new(head.Position + Vector3.new(math.cos(a) * 0.9, 0.9 + 0.12 * math.sin(a * 2), math.sin(a) * 0.9))
+		end
+	end)
 end
 
 -- SUMIR (Passo Furtivo): pra quem é ADVERSÁRIO de quem sumiu, o corpo fica
@@ -728,25 +857,51 @@ FX_ARMA["Ego do Rei"] = function(character)
 	local root = character:FindFirstChild("HumanoidRootPart")
 	local cabeca = character:FindFirstChild("Head") or root
 	if not cabeca then return end
-	local base = cabeca.Position + Vector3.new(0, 2.2, 0)
-	local pecas = {}
-	local aro = parte(Vector3.new(0.35, 2.2, 2.2), CFrame.new(base) * CFrame.Angles(0, 0, math.rad(90)), ouro, 0.05)
-	aro.Shape = Enum.PartType.Cylinder
-	table.insert(pecas, aro)
-	for i = 0, 4 do
-		local a = i / 5 * math.pi * 2
-		local off = Vector3.new(math.cos(a) * 1.0, 0.65, math.sin(a) * 1.0)
-		table.insert(pecas, parte(Vector3.new(0.4, 1.2, 0.4), CFrame.new(base + off), i % 2 == 0 and ouro or roxo, 0.05))
-		local joia = parte(Vector3.new(0.34, 0.34, 0.34), CFrame.new(base + off + Vector3.new(0, 0.8, 0)), roxo, 0)
-		joia.Shape = Enum.PartType.Ball
-		table.insert(pecas, joia)
-	end
-	for _, p in ipairs(pecas) do
-		TweenService:Create(p, TweenInfo.new(1.2, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
-			CFrame = p.CFrame + Vector3.new(0, 1.8, 0), Transparency = 1,
-		}):Play()
-		Debris:AddItem(p, 1.3)
-	end
+	-- ⚠️ v119 — PEDIDO: "a coroa do Ego do Rei tá muito feia, melhora". Era feita de
+	-- blocos e cilindros; agora é a COROA DESENHADA (sprite dourado com joias roxas
+	-- e brilho) que DESCE, encaixa na cabeça com um clarão, fica um instante e sobe
+	-- sumindo — a coroação do rei antes do chute.
+	local base = cabeca.Position + Vector3.new(0, 1.4, 0)
+	local anc = Instance.new("Attachment")
+	anc.Position = Vector3.new(0, cabeca.Size.Y * 0.5 + 0.6, 0)
+	anc.Parent = cabeca
+	local bb = Instance.new("BillboardGui")
+	bb.Size = UDim2.fromScale(2.8, 2.2)
+	bb.LightInfluence = 0
+	bb.StudsOffset = Vector3.new(0, 2.2, 0)
+	bb.ClipsDescendants = false
+	bb.Parent = anc
+	local halo = Instance.new("ImageLabel")
+	halo.BackgroundTransparency = 1
+	halo.AnchorPoint = Vector2.new(0.5, 0.5)
+	halo.Position = UDim2.fromScale(0.5, 0.55)
+	halo.Size = UDim2.fromScale(2, 2.4)
+	halo.Image = "rbxassetid://116102662517740"
+	halo.ImageColor3 = roxo
+	halo.ImageTransparency = 1
+	halo.Parent = bb
+	local coroa = Instance.new("ImageLabel")
+	coroa.BackgroundTransparency = 1
+	coroa.Size = UDim2.fromScale(1, 1)
+	coroa.Image = "rbxassetid://98779256563620"
+	coroa.ImageTransparency = 1
+	coroa.ZIndex = 2
+	coroa.Parent = bb
+	TweenService:Create(bb, TweenInfo.new(0.4, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { StudsOffset = Vector3.new(0, 0.2, 0) }):Play()
+	TweenService:Create(coroa, TweenInfo.new(0.25), { ImageTransparency = 0 }):Play()
+	TweenService:Create(halo, TweenInfo.new(0.4), { ImageTransparency = 0.35 }):Play()
+	task.delay(0.4, function()
+		if not anc.Parent then return end
+		flash(anc.WorldPosition + Vector3.new(0, 0.3, 0), ouro, 1.8, 0.25)
+		faiscas(anc.WorldPosition + Vector3.new(0, 0.3, 0), ouro, 22, 10)
+	end)
+	task.delay(1.5, function()
+		if not anc.Parent then return end
+		TweenService:Create(bb, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.In), { StudsOffset = Vector3.new(0, 1.6, 0) }):Play()
+		TweenService:Create(coroa, TweenInfo.new(0.5), { ImageTransparency = 1 }):Play()
+		TweenService:Create(halo, TweenInfo.new(0.4), { ImageTransparency = 1 }):Play()
+	end)
+	Debris:AddItem(anc, 2.1)
 	flash(base, ouro, 1.6, 0.3)
 	if root then
 		aneisNoChao(root, roxo, ouro)

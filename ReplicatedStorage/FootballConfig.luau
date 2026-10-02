@@ -1682,6 +1682,7 @@ Config.PASS_FORCE = 55
 -- ===== VOLEIO (chute sem posse prévia, bola no ar) =====
 Config.VOLLEY_MIN_BALL_HEIGHT = 3   -- igual à cabeçada: altura mínima da bola acima do chão
 Config.VOLLEY_RANGE = 6             -- alcance pra alcançar a bola no ar
+Config.VOLLEY_HITBOX_MULT = 1.5     -- ⚠️ v119: "aumenta a hitbox em 1.5x pra dar voleio" (bola no ar = 9 studs)
 Config.VOLLEY_FORCE_MULTIPLIER = 1.25 -- voleio bem cronometrado sai mais forte que um chute normal
 
 -- ===== CABEÇADA =====

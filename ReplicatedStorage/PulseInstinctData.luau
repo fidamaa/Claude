@@ -1505,7 +1505,10 @@ Data.Instincts = {
 		Posicao = "MF", -- ⚠️ v110: posição da Arma (2 por raridade em cada posição)
 		Rarity = "Epic",
 		Cor = Color3.fromRGB(99, 102, 241),
-		Description = "Passo Furtivo: sem a bola, a tecla da Arma te faz SUMIR da vista dos adversários por 3,5s. E sempre que ninguém está te olhando (inclusive sumido), você ganha +25% de velocidade e +5 de alcance pra receber.",
+		-- ⚠️ v119 — PEDIDO: "um counter: o cara vai dar carrinho em você, você faz
+		-- alguma coisa — um drible". COM a bola a tecla agora é a GUARDA: quem tentar
+		-- te desarmar nesse tempo erra, você some num passo pro lado e ele cai.
+		Description = "Passo Furtivo: sem a bola, a tecla da Arma te faz SUMIR da vista dos adversários por 3,5s. COM a bola, é a GUARDA FURTIVA: por 1,6s, quem der carrinho ou tentar te desarmar erra — você some num passo pro lado e ele fica atordoado. E sempre que ninguém está te olhando, +25% de velocidade e +5 de alcance pra receber.",
 		Passiva = "Sem a posse da bola e com NENHUM adversário olhando na sua direção: +25% de velocidade e +5 de alcance de recepção.",
 		Trigger = "Instant",
 		Condition = { RequireUnseen = true, RequireNoPossession = true },
@@ -1513,12 +1516,12 @@ Data.Instincts = {
 		-- ⚠️ v111: tecla = SUMIR (Stealth, Blue Lock) — some da vista dos
 		-- adversários por 3,5s (quase transparente e sem nome pra eles) e, como
 		-- ninguém te vê, o bônus acima liga junto.
-		Ativa = "Tecla da Arma, sem a bola: some da vista dos adversários por 3,5s (quase invisível e sem nome pra eles) — e o bônus de velocidade liga junto.",
+		Ativa = "Tecla da Arma: sem a bola, some da vista dos adversários por 3,5s; COM a bola, guarda de 1,6s — carrinho/desarme em você erra e quem tentou cai.",
 		Tecla = "R",
 		AtivaSoNaTecla = true,
-		AtivaCondition = { RequireNoPossession = true },
-		AtivaAction = "Sumir",
-		AtivaEffect = { Duracao = 3.5 },
+		AtivaCondition = {},
+		AtivaAction = "SumirOuGuarda",
+		AtivaEffect = { Duracao = 3.5, Janela = 1.6, Desvio = 7, Stun = 1.6 },
 		AtivaCooldown = 16,
 	},
 
@@ -1743,14 +1746,17 @@ Data.Instincts = {
 		Posicao = "MF",
 		Rarity = "Rare",
 		Cor = Color3.fromRGB(120, 230, 150),
-		Description = "Chapéu: com a bola, aperte a tecla da Arma e você dá um chapéu — a bola sobe por cima de quem está na sua frente e cai 16 studs adiante, e você arranca 30% mais rápido pra pegar ela do outro lado.",
-		Ativa = "Tecla da Arma, com a bola: chapéu — a bola passa por cima do marcador e cai 16 studs à frente; você arranca 30% mais rápido por 1s pra buscar.",
+		-- ⚠️ v119 — PEDIDO: "o chapéu precisa ser mais complexo: só pode ser usado
+		-- se tiver o jogador na sua frente; a bola passa por cima do cara, você dá um
+		-- drible nele e pega a bola do outro lado, e ele fica stunado; animação própria".
+		Description = "Chapéu: só com um marcador NA SUA FRENTE (até 14 studs). A tecla da Arma levanta a bola por cima da cabeça dele, você passa pelo lado dele e pega a bola do outro lado — e ele fica atordoado, sem entender nada.",
+		Ativa = "Tecla da Arma, com a bola e um marcador na frente: a bola passa por cima dele, você contorna e pega do outro lado; ele fica atordoado 1,6s.",
 		Trigger = "Botao",
 		Tecla = "R",
 		Condition = { RequirePossession = true },
 		Effect = {},
 		AtivaAction = "Chapeu",
-		AtivaEffect = { Distancia = 16, Altura = 9, SpeedMult = 1.3, Duracao = 1 },
+		AtivaEffect = { RaioMarcador = 14, Alem = 8, Altura = 9, Stun = 1.6 },
 		AtivaCooldown = 8,
 	},
 	-- Itoshi Sae: o passe perfeito, com CURVA, que deixa o atacante na cara do gol.
@@ -1817,19 +1823,22 @@ Data.Instincts = {
 		Posicao = "DF",
 		Rarity = "Rare",
 		Cor = Color3.fromRGB(90, 200, 230),
-		Description = "Leitura de Passe (Aiku Oliver): com um passe ou chute no ar, a tecla da Arma te faz disparar pro ponto por onde a bola vai passar (até 38 studs) e dominar. E no seu campo, sem a bola, seu alcance pra dominar cresce +5.",
+		-- ⚠️ v119 — PEDIDO: "um counter: você bota uma ÁREA em volta de você, aperta
+		-- um botão, e se o cara passar nessa área você pega a bola automaticamente;
+		-- só pode ativar dentro da linha de defesa — pode ser a área do Aiku".
+		Description = "Leitura de Passe (Aiku Oliver): no seu terço de defesa, a tecla da Arma abre a ZONA DO AIKU — uma bolha de 14 studs em volta de você por 4s; o adversário que entrar nela com a bola perde a bola pra você na hora. E no seu campo, sem a bola, seu alcance pra dominar cresce +5.",
 		Passiva = "No próprio campo, sem a bola: +5 de alcance de recepção (interceptar fica muito mais fácil).",
 		Trigger = "Instant",
 		Condition = { DefendingHalf = true, RequireNoPossession = true },
 		Effect = { PickupRadiusAdd = 5 },
 		-- ⚠️ v111: tecla = INTERCEPTAR (Aiku) — dispara pro ponto do passe
-		Ativa = "Tecla da Arma, com a bola solta em movimento: você dispara pro ponto por onde ela vai passar (até 38 studs) e domina.",
+		Ativa = "Tecla da Arma, no seu terço de defesa: Zona do Aiku — bolha de 14 studs por 4s; quem entrar com a bola perde pra você.",
 		Tecla = "R",
 		AtivaSoNaTecla = true,
 		AtivaCondition = { RequireNoPossession = true },
-		AtivaAction = "Interceptar",
-		AtivaEffect = { Raio = 38, VelocidadeDash = 70, RaioDominio = 7 },
-		AtivaCooldown = 10,
+		AtivaAction = "ZonaAiku",
+		AtivaEffect = { Raio = 14, Duracao = 4, MaxDistanciaGol = 290 },
+		AtivaCooldown = 18,
 	},
 	-- Kiyora Jin / defesa em dupla: quando dois vêm, você fecha os dois.
 	{
@@ -1849,18 +1858,21 @@ Data.Instincts = {
 		Posicao = "DF",
 		Rarity = "Epic",
 		Cor = Color3.fromRGB(160, 110, 230),
-		Description = "Antecipação Fantasma (Aiku Oliver): a tecla da Arma te faz sumir e reaparecer NA FRENTE do adversário com a bola (a até 28 studs), fechando o caminho. E no seu campo, com ele a até 18 studs, você fica 20% mais rápido.",
+		-- ⚠️ v119: era "avança no defensor" (entrou no Desarme Relâmpago); virou o
+		-- COUNTER DO DRIBLE (PEDIDO: "o cara faz um drible... você prepara alguma
+		-- coisa e rouba a bola").
+		Description = "Antecipação Fantasma (Aiku Oliver): com o adversário da bola a até 18 studs, a tecla da Arma te deixa EM GUARDA por 2,5s — se ele driblar nesse tempo, você já sabia: some e reaparece no fim do drible roubando a bola. E no seu campo, com ele a até 18 studs, você fica 20% mais rápido.",
 		Passiva = "No próprio campo, adversário com a bola a até 18 studs: +20% de velocidade.",
 		Trigger = "Instant",
 		Condition = { CarrierMaxDistance = 18, DefendingHalf = true },
 		Effect = { SpeedMult = 1.2 },
 		-- ⚠️ v111: tecla = PASSO FANTASMA — some e reaparece na frente dele
-		Ativa = "Tecla da Arma: some e reaparece NA FRENTE do adversário com a bola (a até 28 studs), fechando o caminho dele.",
+		Ativa = "Tecla da Arma, com o adversário da bola a até 18 studs: guarda de 2,5s — se ele driblar, você reaparece no fim do drible e rouba.",
 		Tecla = "R",
 		AtivaSoNaTecla = true,
-		AtivaCondition = { CarrierMaxDistance = 28 },
-		AtivaAction = "PassoFantasma",
-		AtivaEffect = { Raio = 28, Distancia = 4.5, Tempo = 0.14 },
+		AtivaCondition = { CarrierMaxDistance = 18 },
+		AtivaAction = "AntecipaDrible",
+		AtivaEffect = { Raio = 18, Janela = 2.5 },
 		AtivaCooldown = 12,
 	},
 	-- O último defensor (a corrida de recuperação quando não sobra ninguém).
@@ -1881,14 +1893,19 @@ Data.Instincts = {
 		Posicao = "DF",
 		Rarity = "Legendary",
 		Cor = Color3.fromRGB(255, 230, 90),
-		Description = "Desarme Relâmpago (Karasu Tabito): com o adversário da bola a até 16 studs, R rouba a bola dele NA HORA, de mais longe que um carrinho normal.",
-		Ativa = "Adversário com a bola a até 16 studs: R rouba a bola na hora (alcance maior que o carrinho).",
+		-- ⚠️ v119 — PEDIDO: "três armas de defesa podem ser uma só: o desarme
+		-- instantâneo, a que avança na bola e a que avança no defensor — uma arma que
+		-- você avança no cara e tira a bola automaticamente, tipo um segundo
+		-- carrinho, com distância maior e TELEGUIADO; o cara pode driblar". Aqui é
+		-- essa arma; Leitura de Passe e Antecipação Fantasma viraram COUNTERS.
+		Description = "Desarme Relâmpago (Karasu Tabito): com o adversário da bola a até 40 studs, R te lança num BOTE TELEGUIADO — você persegue ele e, ao encostar, rouba a bola sozinho. Ele só escapa driblando na hora certa (aí quem cai é você).",
+		Ativa = "Adversário com a bola a até 40 studs: R = bote teleguiado que persegue e rouba a bola no contato (um drible na hora certa escapa).",
 		Trigger = "Botao",
 		Tecla = "R",
-		Condition = { CarrierMaxDistance = 16 },
+		Condition = { CarrierMaxDistance = 40 },
 		Effect = {},
-		AtivaAction = "Tackle",
-		AtivaEffect = { TackleRangeAdd = 6 },
+		AtivaAction = "BoteTeleguiado",
+		AtivaEffect = { Raio = 40, Velocidade = 85, TempoMax = 0.9, RaioRoubo = 4.5 },
 		AtivaCooldown = 14,
 	},
 	-- Don Lorenzo: a defesa "zumbi" que nunca desiste.
@@ -1925,18 +1942,21 @@ Data.Instincts = {
 		Rarity = "Common",
 		Cor = Color3.fromRGB(255, 190, 90),
 		RoleRequired = "GK",
-		Description = "Saída Rápida (só goleiro): na sua área, a tecla da Arma é a SAÍDA DO GOL — você dispara até 24 studs na direção da bola e agarra se ela estiver solta. E na área você se move 15% mais rápido.",
+		-- ⚠️ v119 — PEDIDO: "Saída de área é praticamente inútil: aperto o botão e
+		-- não dá nada". Agora é uma saída TELEGUIADA: persegue a bola (ou o atacante
+		-- que está com ela) e agarra/toma no contato.
+		Description = "Saída Rápida (só goleiro): na sua área, a tecla da Arma é uma SAÍDA TELEGUIADA — você persegue a bola até 42 studs e, ao chegar, AGARRA (bola solta) ou TOMA do atacante que estiver com ela. E na área você se move 15% mais rápido.",
 		Passiva = "Dentro da própria área: +15% de velocidade.",
 		Trigger = "Instant",
 		Condition = { RequireOwnArea = true },
 		Effect = { SpeedMult = 1.15 },
 		-- ⚠️ v111: tecla = SAÍDA DO GOL — dispara na direção da bola e agarra
-		Ativa = "Tecla da Arma, na sua área: dispara até 24 studs na direção da bola e, se ela estiver solta ao alcance, agarra.",
+		Ativa = "Tecla da Arma, na sua área: saída teleguiada até 42 studs — agarra a bola solta ou toma do atacante no contato.",
 		Tecla = "R",
 		AtivaSoNaTecla = true,
 		AtivaCondition = { RequireOwnArea = true },
 		AtivaAction = "SaidaDoGol",
-		AtivaEffect = { Distancia = 24, Raio = 45, Tempo = 0.35, RaioAgarrar = 7 },
+		AtivaEffect = { Raio = 42, Velocidade = 80, TempoMax = 0.85, RaioAgarrar = 6 },
 		AtivaCooldown = 8,
 	},
 	{

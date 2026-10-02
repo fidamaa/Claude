@@ -1566,6 +1566,26 @@ Anim.Acoes.Achatado = { Duracao = 0.9, EntradaSeg = 0.02, SaidaSeg = 0.2, Quadro
 	return { { 0.00, neutro() }, { 0.06, ACHATADO }, { 0.72, ACHATADO }, { 0.90, neutro() } }
 end }
 
+-- ⚠️ v119 — CHAPÉU (Arma): "o chapéu precisa de animação própria". A lambreta:
+-- a perna direita vai pra TRÁS, o calcanhar levanta a bola por cima da cabeça
+-- do marcador (perna sobe pra frente), braços abertos de equilíbrio.
+Anim.Acoes.Chapeu = { Duracao = 0.45, EntradaSeg = 0.03, SaidaSeg = 0.12, Quadros = function()
+	return {
+		{ 0.00, neutro() },
+		{ 0.12, { Root = V(-10, 0, 0), Neck = V(-12, 0, 0), RHip = V(-40, 0, 6), LHip = V(8, 0, -4),
+			RShoulder = V(-15, 0, 40), LShoulder = V(15, 0, -40) } },
+		{ 0.24, { Root = V(8, 0, 0), Neck = V(18, 0, 0), RHip = V(60, 0, 4), LHip = V(-6, 0, -4),
+			RShoulder = V(10, 0, 55), LShoulder = V(-10, 0, -55) } },
+		{ 0.45, neutro() },
+	}
+end }
+-- Marcador que levou o chapéu: TONTO — cambaleia olhando pra cima, sem entender.
+local TONTO_A = { Root = V(4, 0, 8), Neck = V(22, 12, 10), RShoulder = V(5, 0, 25), LShoulder = V(5, 0, -18), RHip = V(0, 0, 6), LHip = V(0, 0, -2) }
+local TONTO_B = { Root = V(4, 0, -8), Neck = V(22, -12, -10), RShoulder = V(5, 0, 18), LShoulder = V(5, 0, -25), RHip = V(0, 0, 2), LHip = V(0, 0, -6) }
+Anim.Acoes.Tonto = { Duracao = 1.6, EntradaSeg = 0.08, SaidaSeg = 0.2, Loop = { 0.0, 0.8 }, Quadros = function()
+	return { { 0.00, TONTO_A }, { 0.40, TONTO_B }, { 0.80, TONTO_A }, { 1.60, TONTO_A } }
+end }
+
 -- ⚠️ v110 — EMOTES e COMEMORAÇÕES da Loja (15 de cada): as poses moram no
 -- módulo Cosmeticos (compartilhado com o Lobby); aqui viram ações comuns do
 -- animador, com o Id do item como nome (ex.: "Emote_Dance", "Cel_Siu").
