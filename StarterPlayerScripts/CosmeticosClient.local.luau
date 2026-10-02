@@ -583,6 +583,181 @@ ESTILOS_GOL.BuracoNegro = function(pos, cor)
 	end)
 end
 
+-- ⚠️ v113 — SUPERNOVA GIGANTE ANIMADA (PEDIDO: "Supernova gigante animada").
+-- Dura `total` segundos (5x o normal = ~17s) em 4 atos:
+--   1. CARGA (0-22%): uma estrela que cresce pulsando, partículas sugadas pra dentro,
+--      anéis se fechando, o céu escurece um pouco
+--   2. COLAPSO + EXPLOSÃO (22-30%): a estrela some num ponto e ESTOURA — flash de tela
+--      cheia, esfera que vai de 10 a 130 studs trocando de cor (branco, amarelo,
+--      laranja, magenta, azul), ondas de choque em 3 planos, 28 raios
+--   3. NEBULOSA (30-85%): cascas translúcidas expandindo, planetas/rochas orbitando,
+--      chuva de estrelas, pulsos a cada 2s, remanescente pulsando
+--   4. FIM (85-100%): tudo esvanece
+ESTILOS_GOL.SupernovaGigante = function(pos, cor, total)
+	total = total or 17
+	local centro = pos + Vector3.new(0, 24, 0)
+	local t0 = os.clock()
+	local escurecer = Instance.new("ColorCorrectionEffect")
+	escurecer.Parent = Lighting
+	local nucleo = neonPart(Vector3.new(1, 1, 1), CFrame.new(centro), Color3.fromRGB(255, 250, 225), Enum.PartType.Ball)
+	local halo = neonPart(Vector3.new(1, 1, 1), CFrame.new(centro), cor, Enum.PartType.Ball)
+	halo.Transparency = 0.6
+	local casca = neonPart(Vector3.new(1, 1, 1), CFrame.new(centro), cor, Enum.PartType.Ball)
+	casca.Material = Enum.Material.ForceField
+	casca.Transparency = 1
+	local luzCentro = Instance.new("PointLight")
+	luzCentro.Range = 0
+	luzCentro.Brightness = 6
+	luzCentro.Color = cor
+	luzCentro.Parent = nucleo
+	-- planetas em órbita
+	local planetas = {}
+	for i = 1, 6 do
+		local pl = neonPart(Vector3.one * (2 + i * 0.7), CFrame.new(centro), Color3.fromHSV((i * 0.17) % 1, 0.55, 1), Enum.PartType.Ball)
+		pl.Material = Enum.Material.SmoothPlastic
+		pl.Transparency = 1
+		planetas[i] = { Parte = pl, Raio = 18 + i * 7, Vel = (i % 2 == 0 and 1 or -1) * (0.5 + i * 0.07), Fase = i * 1.3, Incl = (i * 0.35) % 1.2 }
+	end
+	-- anéis de órbita
+	local aneis = {}
+	for i = 1, 3 do
+		local an = neonPart(Vector3.new(0.25, 1, 1), CFrame.new(centro), cor, Enum.PartType.Cylinder)
+		an.Transparency = 1
+		aneis[i] = an
+	end
+	-- emissores: sugados (carga) e estrelas (nebulosa)
+	local pe = ancora(centro, total + 2)
+	pe.Size = Vector3.new(60, 60, 60)
+	local sugar = Instance.new("ParticleEmitter")
+	sugar.Texture = TEX_BRILHO
+	sugar.Color = ColorSequence.new(cor, Color3.new(1, 1, 1))
+	sugar.LightEmission = 1
+	sugar.Rate = 0
+	sugar.Lifetime = NumberRange.new(0.8, 1.1)
+	sugar.Speed = NumberRange.new(-30, -26)
+	sugar.Shape = Enum.ParticleEmitterShape.Sphere
+	sugar.ShapeStyle = Enum.ParticleEmitterShapeStyle.Surface
+	sugar.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.9), NumberSequenceKeypoint.new(1, 0.1) })
+	sugar.Parent = pe
+	local chuva = Instance.new("ParticleEmitter")
+	chuva.Texture = TEX_BRILHO
+	chuva.Color = ColorSequence.new({ ColorSequenceKeypoint.new(0, Color3.new(1, 1, 1)), ColorSequenceKeypoint.new(0.5, cor), ColorSequenceKeypoint.new(1, Color3.fromRGB(190, 120, 255)) })
+	chuva.LightEmission = 1
+	chuva.Rate = 0
+	chuva.Lifetime = NumberRange.new(2.5, 4)
+	chuva.Speed = NumberRange.new(2, 8)
+	chuva.SpreadAngle = Vector2.new(180, 180)
+	chuva.Acceleration = Vector3.new(0, -4, 0)
+	chuva.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.7), NumberSequenceKeypoint.new(1, 0) })
+	chuva.Shape = Enum.ParticleEmitterShape.Sphere
+	chuva.Parent = pe
+	local PALETA = { Color3.fromRGB(255, 252, 235), Color3.fromRGB(255, 225, 120), Color3.fromRGB(255, 150, 60), Color3.fromRGB(255, 80, 190), Color3.fromRGB(110, 150, 255) }
+	local explodiu, ultimoPulso = false, 0
+	local conexao
+	local function limpar()
+		if conexao then conexao:Disconnect() end
+		for _, p in ipairs({ nucleo, halo, casca }) do p:Destroy() end
+		for _, pl in ipairs(planetas) do pl.Parte:Destroy() end
+		for _, an in ipairs(aneis) do an:Destroy() end
+		escurecer:Destroy()
+	end
+	conexao = RunService.Heartbeat:Connect(function()
+		local t = os.clock() - t0
+		local u = t / total
+		if u >= 1 then limpar() return end
+		-- ATO 1: carga
+		if u < 0.22 then
+			local k = u / 0.22
+			local pulso = 1 + 0.12 * math.sin(t * (6 + 22 * k))
+			nucleo.Size = Vector3.one * (4 + 22 * k * k) * pulso
+			halo.Size = nucleo.Size * 1.7
+			halo.Transparency = 0.55 + 0.3 * (1 - k)
+			luzCentro.Range = 20 + 80 * k
+			escurecer.Brightness = -0.25 * k
+			escurecer.Saturation = 0.2 * k
+			sugar.Rate = 40 + 160 * k
+			-- anéis se fechando
+			for i, an in ipairs(aneis) do
+				local f = ((k * 2.2 + i / 3) % 1)
+				local d = 70 * (1 - f) + 4
+				an.Size = Vector3.new(0.25, d, d)
+				an.CFrame = CFrame.new(centro) * CFrame.Angles(math.rad(i * 60), t * 2, math.rad(90))
+				an.Transparency = 0.2 + 0.7 * f
+			end
+		elseif not explodiu then
+			explodiu = true
+			sugar.Rate = 0
+			for _, an in ipairs(aneis) do an.Transparency = 1 end
+			flashTela(Color3.new(1, 1, 1), 1.2, 1.2)
+			-- 3 ondas de choque em planos diferentes + anéis grandes
+			for i = 1, 3 do
+				task.delay(i * 0.12, function()
+					local an = neonPart(Vector3.new(1.2, 1, 1), CFrame.new(centro) * CFrame.Angles(math.rad(i * 55), math.rad(i * 30), math.rad(90)), PALETA[i + 1], Enum.PartType.Cylinder)
+					an.Transparency = 0.1
+					tween(an, 2.2, { Size = Vector3.new(1.2, 220, 220), Transparency = 1 })
+					Debris:AddItem(an, 2.4)
+				end)
+			end
+			onda(centro, cor, 90, 1.6, 2)
+			-- 28 raios
+			for i = 1, 28 do
+				local a1, a2 = (i / 28) * math.pi * 2, math.sin(i * 1.9) * 1.1
+				local dir = Vector3.new(math.cos(a1) * math.cos(a2), math.sin(a2), math.sin(a1) * math.cos(a2))
+				local ray = neonPart(Vector3.new(0.9, 0.9, 6), CFrame.lookAt(centro, centro + dir), PALETA[(i % 5) + 1])
+				tween(ray, 1.3, { Size = Vector3.new(0.2, 0.2, 130), CFrame = CFrame.lookAt(centro + dir * 62, centro + dir * 63), Transparency = 1 })
+				Debris:AddItem(ray, 1.4)
+			end
+			explosao(centro, { Color = ColorSequence.new(PALETA[2], PALETA[4]), Speed = NumberRange.new(40, 90), Lifetime = NumberRange.new(1.4, 2.4),
+				SpreadAngle = Vector2.new(180, 180), Drag = 1.5,
+				Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 2.2), NumberSequenceKeypoint.new(1, 0) }) }, 260, 4)
+		end
+		-- ATO 2/3: a esfera da explosão cresce e troca de cor
+		if u >= 0.22 and u < 0.85 then
+			local k = (u - 0.22) / 0.63
+			local crescimento = math.min((u - 0.22) / 0.08, 1) -- estoura em ~1.4s
+			local tam = 6 + 124 * (crescimento ^ 0.6)
+			nucleo.Size = Vector3.one * math.max(tam * (1 - 0.7 * k), 1)
+			nucleo.Transparency = 0.15 + 0.7 * k
+			nucleo.Color = PALETA[1]:Lerp(PALETA[2], math.clamp(k * 3, 0, 1))
+			halo.Size = Vector3.one * tam
+			halo.Transparency = 0.4 + 0.5 * k
+			halo.Color = PALETA[2]:Lerp(PALETA[3], math.clamp(k * 3, 0, 1)):Lerp(PALETA[4], math.clamp(k * 3 - 1, 0, 1)):Lerp(PALETA[5], math.clamp(k * 3 - 2, 0, 1))
+			casca.Size = Vector3.one * tam * 1.12
+			casca.Transparency = 0.35 + 0.65 * k
+			casca.Color = halo.Color
+			luzCentro.Range = 120 * (1 - k * 0.6)
+			luzCentro.Color = halo.Color
+			escurecer.Brightness = -0.25 + 0.25 * math.min(k * 4, 1)
+			chuva.Rate = 70 * (1 - k * 0.5)
+			-- planetas orbitam
+			local aparece = math.clamp((u - 0.3) / 0.08, 0, 1) * (1 - math.clamp((u - 0.8) / 0.05, 0, 1))
+			for _, pl in ipairs(planetas) do
+				local ang = pl.Fase + t * pl.Vel
+				pl.Parte.CFrame = CFrame.new(centro) * CFrame.Angles(pl.Incl, 0, 0) * CFrame.new(math.cos(ang) * pl.Raio, 0, math.sin(ang) * pl.Raio)
+				pl.Parte.Transparency = 1 - aparece
+			end
+			-- pulsos secundários a cada 2s
+			if t - ultimoPulso >= 2 then
+				ultimoPulso = t
+				local pc = PALETA[2 + math.floor(t / 2) % 4]
+				onda(centro, pc, 70 + (math.floor(t) % 3) * 15, 1.2, 1.4)
+				explosao(centro, { Color = ColorSequence.new(pc), Speed = NumberRange.new(14, 30), Lifetime = NumberRange.new(1, 1.6),
+					SpreadAngle = Vector2.new(180, 180), Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 1.2), NumberSequenceKeypoint.new(1, 0) }) }, 50, 2)
+			end
+		elseif u >= 0.85 then
+			local k = (u - 0.85) / 0.15
+			nucleo.Transparency = 0.85 + 0.15 * k
+			halo.Transparency = 0.9 + 0.1 * k
+			casca.Transparency = 1
+			chuva.Rate = 0
+			for _, pl in ipairs(planetas) do pl.Parte.Transparency = k end
+			luzCentro.Range = 40 * (1 - k)
+			escurecer.Brightness = 0
+		end
+	end)
+	task.delay(total + 0.5, limpar)
+end
+
 ESTILOS_GOL.Supernova = function(pos, cor)
 	local centro = pos + Vector3.new(0, 6, 0)
 	local esfera = neonPart(Vector3.new(1, 1, 1), CFrame.new(centro), Color3.fromRGB(255, 250, 220), Enum.PartType.Ball)
@@ -603,13 +778,34 @@ ESTILOS_GOL.Supernova = function(pos, cor)
 	end)
 end
 
-EfeitoDeGol.OnClientEvent:Connect(function(id, pos, _autor)
+-- ⚠️ v113 — intervalo (s) entre repetições de cada estilo curto, pra preencher a
+-- duração total (2x-5x). A Supernova tem versão própria que dura o tempo todo.
+local INTERVALO_REPETE = {
+	Fogos = 2.2, Confete = 1.5, Flash = 2.2, Estrelas = 2.2, Fogo = 1.4, Raio = 2.0, Petalas = 1.5, Bolhas = 1.6,
+	Neve = 2.2, Moedas = 1.8, Coracoes = 2.4, Onda = 1.4, Aurora = 4.6, BuracoNegro = 3.4,
+}
+
+EfeitoDeGol.OnClientEvent:Connect(function(id, pos, _autor, total)
 	local item = Cosmeticos.Item(id)
 	if not item or typeof(pos) ~= "Vector3" then return end
-	local f = ESTILOS_GOL[item.Estilo]
-	if f then
-		local ok, erro = pcall(f, pos, item.Cor)
+	total = tonumber(total) or 3.5
+	local function rodar(nome, p)
+		local f = ESTILOS_GOL[nome]
+		if not f then return end
+		local ok, erro = pcall(f, p, item.Cor, total)
 		if not ok then warn("[Cosmeticos] efeito de gol " .. id .. ": " .. tostring(erro)) end
+	end
+	if item.Estilo == "Supernova" then
+		rodar("SupernovaGigante", pos)
+		return
+	end
+	local intervalo = INTERVALO_REPETE[item.Estilo] or 2
+	local rodadas = math.max(1, math.floor(total / intervalo))
+	for i = 0, rodadas - 1 do
+		task.delay(i * intervalo, function()
+			local desloc = i == 0 and Vector3.zero or Vector3.new(math.random(-9, 9), 0, math.random(-6, 6))
+			rodar(item.Estilo, pos + desloc)
+		end)
 	end
 end)
 

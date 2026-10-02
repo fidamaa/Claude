@@ -123,12 +123,29 @@ _G.TocarComemoracaoCosmetica = function(scorer)
 	return true
 end
 
-_G.EfeitoDeGolCosmetico = function(scorer)
+-- ⚠️ v113 — PEDIDO: "efeitos de gol com o dobro da duração, os mais raros até 5x;
+-- o replay só depois que o efeito terminar". Base ~3.5s (o tamanho dos efeitos
+-- antigos) x o multiplicador da raridade. Devolve os segundos totais; o
+-- MatchController espera esse tempo antes do replay.
+local EFEITO_BASE_SEG = 3.5
+local EFEITO_MULT = { Common = 2, Rare = 2.5, Epic = 3, Legendary = 4, Mythic = 5 }
+_G.UltimaDuracaoEfeitoGol = 0
+_G.DuracaoEfeitoGolDe = function(scorer)
 	local item = scorer and Cosmeticos.Equipado(scorer, "GoalEffect")
-	if not item then return end
+	if not item then return 0 end
+	return EFEITO_BASE_SEG * (EFEITO_MULT[item.Raridade] or 2)
+end
+_G.EfeitoDeGolCosmetico = function(scorer)
+	_G.UltimaDuracaoEfeitoGol = 0
+	local item = scorer and Cosmeticos.Equipado(scorer, "GoalEffect")
+	if not item then return 0 end
 	local pos = ball and ball.Position
-	if not pos then return end
-	EfeitoDeGol:FireAllClients(item.Id, pos, scorer)
+	if not pos then return 0 end
+	local mult = EFEITO_MULT[item.Raridade] or 2
+	local total = EFEITO_BASE_SEG * mult
+	_G.UltimaDuracaoEfeitoGol = total
+	EfeitoDeGol:FireAllClients(item.Id, pos, scorer, total)
+	return total
 end
 
 -- ============================================================

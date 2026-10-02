@@ -1077,7 +1077,18 @@ local function onGoalScored(scoringTeamName)
 	-- todo mesmo). Despausa sozinho um pouco depois do replay acabar na
 	-- tela de todo mundo (ver task.delay mais abaixo).
 	matchPaused = true
-	local replayTotalSeconds = Config.GOAL_CELEBRATION_SECONDS + (Config.GOAL_REPLAY_PLAYBACK_SECONDS or 6) + 1
+	-- ⚠️ v113: o efeito de gol equipado pode durar bem mais que a comemoração
+	-- (até 5x). playGoalCelebration (mais abaixo) preenche _G.UltimaDuracaoEfeitoGol
+	-- na hora; o replay espera o MAIOR dos dois. Aqui já uso a duração do efeito
+	-- que ESTE gol vai tocar (o efeito do autor equipado).
+	local efeitoGolSeg = 0
+	do
+		local autor = scorer
+		local item = autor and _G.DuracaoEfeitoGolDe and _G.DuracaoEfeitoGolDe(autor) or 0
+		efeitoGolSeg = item
+	end
+	local esperaAntesDoReplay = math.max(Config.GOAL_CELEBRATION_SECONDS, efeitoGolSeg + 0.5)
+	local replayTotalSeconds = esperaAntesDoReplay + (Config.GOAL_REPLAY_PLAYBACK_SECONDS or 6) + 1
 
 	-- ⚠️ v104 — GOLDEN GOAL: gol na prorrogação encerra a partida. Mantém a
 	-- comemoração e o replay (é o lance da vitória), mas em vez do kickoff
@@ -1091,8 +1102,8 @@ local function onGoalScored(scoringTeamName)
 			playGoalCelebration(scorer)
 			if _G.NotifyFlowGoal then _G.NotifyFlowGoal(scorer) end
 		end
-		task.delay(Config.GOAL_CELEBRATION_SECONDS, function()
-			if scorer then stopGoalCelebration(scorer) end
+		if scorer then task.delay(Config.GOAL_CELEBRATION_SECONDS, function() stopGoalCelebration(scorer) end) end
+		task.delay(esperaAntesDoReplay, function()
 			if _G.SetDeadBallMode then _G.SetDeadBallMode(true) end
 			if snapshotOuro then
 				Remotes.GoalReplay:FireAllClients(scoringTeamName, snapshotOuro, eventosOuro)
@@ -1131,11 +1142,11 @@ local function onGoalScored(scoringTeamName)
 		if _G.NotifyFlowGoal then _G.NotifyFlowGoal(scorer) end
 	end
 
-	task.delay(Config.GOAL_CELEBRATION_SECONDS, function()
-		if scorer then
-			stopGoalCelebration(scorer)
-		end
-
+	-- (a comemoração para no tempo normal; o REPLAY espera o efeito de gol acabar)
+	if scorer then
+		task.delay(Config.GOAL_CELEBRATION_SECONDS, function() stopGoalCelebration(scorer) end)
+	end
+	task.delay(esperaAntesDoReplay, function()
 		if replaySnapshot then
 			Remotes.GoalReplay:FireAllClients(scoringTeamName, replaySnapshot, replayEventos) -- ⚠️ v103: + eventos · v112: capturados na hora do gol
 		end
