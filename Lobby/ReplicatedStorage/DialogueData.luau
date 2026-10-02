@@ -47,7 +47,7 @@ DialogueData.ShopKeeper = {
 	Start = "greeting",
 	Nodes = {
 		greeting = {
-			Speaker = "Lojista",
+			Speaker = "Lavinho",
 			Text = "E aí! Quer destravar um personagem novo ou reiniciar algum que já tem?",
 			Choices = {
 				{ Text = "Me mostra a loja", Next = "openShop" },
@@ -55,13 +55,13 @@ DialogueData.ShopKeeper = {
 			},
 		},
 		openShop = {
-			Speaker = "Lojista",
+			Speaker = "Lavinho",
 			Text = "Aqui está — pode fechar quando terminar.",
 			Action = "OpenShop",
 			Next = nil,
 		},
 		farewell = {
-			Speaker = "Lojista",
+			Speaker = "Lavinho",
 			Text = "Fechou! Qualquer coisa é só voltar aqui.",
 			Next = nil,
 		},
@@ -75,7 +75,7 @@ DialogueData.RollMaster = {
 	Start = "greeting",
 	Nodes = {
 		greeting = {
-			Speaker = "Recrutador",
+			Speaker = "Pedro",
 			Text = "Quer arriscar uma Hissatsu ou uma Arma nova?",
 			Choices = {
 				{ Text = "Bora ver", Next = "openRoll" },
@@ -83,13 +83,13 @@ DialogueData.RollMaster = {
 			},
 		},
 		openRoll = {
-			Speaker = "Recrutador",
+			Speaker = "Pedro",
 			Text = "Boa sorte! Pode fechar quando terminar.",
 			Action = "OpenRoll",
 			Next = nil,
 		},
 		farewell = {
-			Speaker = "Recrutador",
+			Speaker = "Pedro",
 			Text = "Beleza, quando quiser é só voltar.",
 			Next = nil,
 		},
@@ -105,7 +105,7 @@ DialogueData.QuestGiver = {
 	Start = "greeting",
 	Nodes = {
 		greeting = {
-			Speaker = "Zelador",
+			Speaker = "Tiluca",
 			Text = "Tenho algumas missões do dia pra você. Topa dar uma olhada?",
 			Choices = {
 				{ Text = "Ver missões", Next = "openQuests" },
@@ -113,13 +113,13 @@ DialogueData.QuestGiver = {
 			},
 		},
 		openQuests = {
-			Speaker = "Zelador",
+			Speaker = "Tiluca",
 			Text = "Aqui está — pode fechar quando terminar.",
 			Action = "OpenQuests",
 			Next = nil,
 		},
 		farewell = {
-			Speaker = "Zelador",
+			Speaker = "Tiluca",
 			Text = "Beleza, elas resetam todo dia — quando quiser é só voltar.",
 			Next = nil,
 		},
@@ -138,7 +138,7 @@ DialogueData.Kogamalotigo = {
 	Start = "greeting",
 	Nodes = {
 		greeting = {
-			Speaker = "Kogamalotigo",
+			Speaker = "Fidama",
 			Text = "Fala, craque. Quer dar uma olhada na sua ficha? Tenho tudo aqui — seus slots, seus atributos, o que você já destravou.",
 			Choices = {
 				{ Text = "Abre minha ficha", Next = "openCharacter" },
@@ -147,13 +147,13 @@ DialogueData.Kogamalotigo = {
 			},
 		},
 		openCharacter = {
-			Speaker = "Kogamalotigo",
+			Speaker = "Fidama",
 			Text = "Tá na mão. Mexe à vontade — quando terminar, é só fechar.",
 			Action = "OpenCharacter",
 			Next = nil,
 		},
 		explainAttributes = {
-			Speaker = "Kogamalotigo",
+			Speaker = "Fidama",
 			Text = "Resumindo: Físico segura carrinho e ganha disputa. Chute é força e alcance. Drible manda na finta, no domínio e no primeiro toque. Velocidade é o quanto você corre, Fôlego é quantas jogadas seguidas você aguenta, e Energia é quantas Hissatsus você consegue soltar.",
 			Choices = {
 				{ Text = "Então abre aí", Next = "openCharacter" },
@@ -161,7 +161,7 @@ DialogueData.Kogamalotigo = {
 			},
 		},
 		farewell = {
-			Speaker = "Kogamalotigo",
+			Speaker = "Fidama",
 			Text = "Tá certo. Quando quiser mexer na ficha, eu fico por aqui.",
 			Next = nil,
 		},

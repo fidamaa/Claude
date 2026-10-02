@@ -22,18 +22,19 @@
 	Tudo é LOCAL (cada jogador vê o boneco se mexer na própria tela): nada replica,
 	nada pesa no servidor.
 
-	Personalidades (DialogueId do boneco):
-	  Kogamalotigo — o técnico: parado, de repente vira a cabeça seca pra um lado,
-	                 depois pro outro, e volta.
-	  ShopKeeper   — o Rayão: com MEDO. Encolhido, tremendo, mãos no peito,
-	                 olhando pros lados o tempo todo.
+	Personalidades (DialogueId do boneco) — ⚠️ v118 nomes: Fidama, Lavinho, Pedro,
+	Tiluca, Bentes:
+	  Kogamalotigo — o Fidama (técnico): parado, de repente vira a cabeça seca pra um
+	                 lado, depois pro outro, e volta.
+	  ShopKeeper   — o Lavinho (lojista): apoiado no balcão, passa o pano, acena pra
+	                 quem chega e gesticula falando.
 	  RollMaster   — o Pedro: pose relaxada de mão na cintura; quando o jogador
 	                 chega perto ele CHAMA (braço levantado, acenando "vem cá");
 	                 falando, muda pra gestos de conversa.
-	  QuestGiver   — o Tiluca: pose de JoJo (a do KeyframeSequence "JojoPose"),
-	                 trocando de pose de tempos em tempos.
-	  Estatisticas — o Bentes/Pepe Nep sentado no banco: escreve num caderno
-	                 imaginário e levanta a cabeça quando alguém chega.
+	  QuestGiver   — o Tiluca: poses de JoJo com os braços bem abertos (ele é gordo:
+	                 braço cruzando o corpo entra na barriga).
+	  Estatisticas — o Bentes no banco: desenhando no caderno, com a Caneta do mapa
+	                 presa na mão; levanta a cabeça quando alguém chega.
 
 	"Falando": o DialogueClient liga o atributo local "Falando" no boneco durante
 	a conversa.
@@ -149,6 +150,25 @@ local function construir(model, modo)
 						end
 					end
 					table.insert(acessorios, { Parte = parte, Corpo = corpo, Rel = baked[corpo]:ToObjectSpace(parte.CFrame) })
+				end
+			end
+		end
+	end
+
+	-- ⚠️ v118 — objetos de MÃO que ficam fora do Model (ex.: a "Caneta" do Bentes, que
+	-- o usuário montou no mapa do lado dele): qualquer Model/Part chamado "Caneta"
+	-- (ou "Lapis") a até 4 studs da mão direita passa a seguir a mão.
+	if model.Parent then
+		local mao = pecas.RightHand
+		for _, obj in ipairs(model.Parent:GetChildren()) do
+			local nome = obj.Name:lower()
+			if (nome == "caneta" or nome == "lapis" or nome == "lápis") and obj ~= model then
+				local lista = obj:IsA("BasePart") and { obj } or obj:GetDescendants()
+				for _, parte in ipairs(lista) do
+					if parte:IsA("BasePart") and (parte.Position - mao.Position).Magnitude < 4 then
+						parte.Anchored = true
+						table.insert(acessorios, { Parte = parte, Corpo = "RightHand", Rel = baked.RightHand:ToObjectSpace(parte.CFrame) })
+					end
 				end
 			end
 		end
@@ -327,55 +347,58 @@ PERSONALIDADE.Kogamalotigo = function(p, t, dt, ctx)
 	return pose
 end
 
--- RAYÃO (lojista) — com MEDO
+-- LAVINHO (lojista) — ⚠️ v118: PEDIDO "o Lavinho não precisa ficar com medo, ele é
+-- um lojista, coloca ele numa posição que faça sentido". Apoiado no balcão com as
+-- duas mãos, de vez em quando passa um pano no balcão; quando alguém chega, acena
+-- e acompanha com o olhar; falando, gesticula como vendedor.
 PERSONALIDADE.ShopKeeper = function(p, t, dt, ctx)
 	local pose = basePose(t)
 	local e = p.Est
-	local tremor = math.sin(t * 41) * 1.6 + math.sin(t * 27 + 1) * 1.1
-	-- agachadinho, encolhido
-	pose.RootPos = V(math.sin(t * 47) * 0.012, -0.32, 0)
-	pose.RHip = V(16, 0, 6)
-	pose.LHip = V(16, 0, -6)
-	pose.RKnee = V(-34 + tremor, 0, 0)
-	pose.LKnee = V(-34 - tremor, 0, 0)
-	pose.RAnkle = V(18, 0, 0)
-	pose.LAnkle = V(18, 0, 0)
-	pose.Waist = V(-13, 0, 0)
-	-- mãos protegendo o peito, tremendo
-	pose.RShoulder = V(38 + tremor, 0, 8)
-	pose.LShoulder = V(38 - tremor, 0, -8)
-	pose.RElbow = V(100 + tremor * 1.4, 0, 0)
-	pose.LElbow = V(100 - tremor * 1.4, 0, 0)
-	pose.RWrist = V(0, 0, 10 * math.sin(t * 36))
-	pose.LWrist = V(0, 0, -10 * math.sin(t * 33))
-	-- olha pros lados o tempo todo (rápido, nervoso)
-	e.Prox = e.Prox or 0
-	e.Yaw = e.Yaw or 0
-	if t >= e.Prox then
-		local lado = (e.Yaw >= 0) and -1 or 1
-		e.Yaw = lado * (40 + math.random() * 35)
-		e.Prox = t + 0.55 + math.random() * 0.7
-		e.Susto = (math.random() < 0.25) and (t + 0.25) or 0
-	end
-	local pitch = 6 + 4 * math.sin(t * 5)
+	-- apoiado no balcão
+	pose.Waist = V(-14 + 1.2 * math.sin(t * 1.3), 0, 0)
+	pose.RShoulder = V(48, 0, 14)
+	pose.LShoulder = V(48, 0, -14)
+	pose.RElbow = V(38, 0, 0)
+	pose.LElbow = V(38, 0, 0)
+	pose.RWrist = V(-20, 0, 0)
+	pose.LWrist = V(-20, 0, 0)
+	pose.RHip = V(4, 0, 4)
+	pose.LHip = V(-6, 0, -4)
+	pose.LKnee = V(-8, 0, 0)
+	pose.Neck = V(-6, 10 * math.sin(t * 0.4), 0)
+	-- chegou alguém perto: um aceno rápido (uma vez por chegada)
+	local perto = ctx.Tem and ctx.Dist < 22
+	if perto and not e.Perto then e.AcenoAte = t + 1.6 end
+	e.Perto = perto
 	if ctx.Falando then
-		-- fala olhando pro jogador, mas dá umas olhadas rápidas em volta
-		local rapida = (math.floor(t * 0.9) % 3 == 2)
-		local alvoYaw = rapida and e.Yaw or math.clamp(ctx.Yaw, -70, 70)
-		pose.Neck = V(pitch, alvoYaw * 0.62, 0)
-		pose.Waist = V(-13, alvoYaw * 0.2, 0)
-		pose.RShoulder = V(48 + tremor + 12 * math.sin(t * 3.1), 0, 8)
-		pose.RElbow = V(95 + 20 * math.sin(t * 3.1 + 1), 0, 0)
+		local nod = gestosDeFala(pose, t, p.T0, 0.9)
+		pose.Waist = V(-6, 0, 0)
+		olharJogador(pose, ctx, 1, nod)
+		pose.Taxa = 8
+	elseif e.AcenoAte and e.AcenoAte > t then
+		local w = math.sin(t * 9)
+		pose.RShoulder = V(70, 0, 30)
+		pose.RElbow = V(95 + 25 * w, 0, 0)
+		pose.RWrist = V(0, 0, 18 * w)
+		pose.Waist = V(-6, 0, 0)
+		olharJogador(pose, ctx, 1, 4)
+		pose.Taxa = 9
 	else
-		pose.Neck = V(pitch, e.Yaw * 0.62, 0)
-		pose.Waist = V(-13, e.Yaw * 0.2, 0)
+		-- passa o pano no balcão de tempos em tempos
+		e.ProxPano = e.ProxPano or (t + 3)
+		if t >= e.ProxPano then
+			e.PanoAte = t + 2.4
+			e.ProxPano = t + 6 + math.random() * 5
+		end
+		if e.PanoAte and e.PanoAte > t then
+			local a = t * 6
+			pose.RShoulder = V(55 + 8 * math.sin(a), 6 * math.cos(a), 18 + 6 * math.cos(a))
+			pose.RElbow = V(30 + 10 * math.sin(a + 1), 0, 0)
+			pose.Neck = V(-14, -12, 0)
+		end
+		if perto then olharJogador(pose, ctx, 0.8, -4) end
+		pose.Taxa = 6
 	end
-	if e.Susto and e.Susto > t then
-		pose.RootPos = V(0, -0.5, 0)
-		pose.RShoulder = V(70, 0, 20)
-		pose.LShoulder = V(70, 0, -20)
-	end
-	pose.Taxa = 16
 	return pose
 end
 
@@ -440,24 +463,30 @@ PERSONALIDADE.RollMaster = function(p, t, dt, ctx)
 	return pose
 end
 
--- TILUCA (zelador/missões) — poses de JoJo (KeyframeSequence "JojoPose")
-local JOJO_A = {
-	Root = V(7.6, 0, 0),
-	RHip = V(7.1, 0.8, 3.2),
-	LHip = V(-23.3, 2.0, -7.0),
-	RShoulder = V(62.9, 11, -78.1), RElbow = V(70.2, 0, 0),
-	LShoulder = V(-77.5, -15.9, -92.3), LElbow = V(70.2, 0, 0),
-	Neck = V(-12.1, 0, 0),
+-- TILUCA (missões) — poses de JoJo.
+-- ⚠️ v118 — PEDIDO: "o Tiluca tá com o braço estranho" — o boneco dele é GORDO, e as
+-- poses com o braço cruzando o corpo enfiavam a mão na barriga. Agora todo braço
+-- que passa na frente do corpo fica bem aberto (ombro ≥ 40° pro lado) e as poses
+-- são de braço pra cima/pra fora.
+local JOJO_A = { -- "Jotaro": aponta pra frente, a outra mão aberta pro lado
+	Waist = V(-4, 22, 0), Neck = V(4, -18, 0),
+	RShoulder = V(82, 0, 28), RElbow = V(8, 0, 0),
+	LShoulder = V(10, 0, -58), LElbow = V(70, 0, 0),
+	RHip = V(0, 0, 12), LHip = V(12, 0, -10), LKnee = V(-12, 0, 0),
 }
-local JOJO_B = espelhar(JOJO_A)
-local JOJO_C = { -- "joestar": mão no rosto, tronco inclinado, perna aberta
-	Root = V(-6, 0, 0), Waist = V(-8, 0, 6),
-	RHip = V(-10, 0, 14), LHip = V(14, 0, -10), RKnee = V(-10, 0, 0), LKnee = V(-18, 0, 0),
-	RShoulder = V(20, 0, 20), RElbow = V(12, 0, 0),
-	LShoulder = V(88, 20, -10), LElbow = V(120, 0, 0),
-	Neck = V(6, -14, 8),
+local JOJO_B = { -- "Giorno": mão pra cima ao lado da cabeça, tronco torto
+	Waist = V(6, -16, -10), Neck = V(10, 14, 6),
+	RShoulder = V(150, 0, 36), RElbow = V(70, 0, 0),
+	LShoulder = V(18, 0, -62), LElbow = V(45, 0, 0),
+	RHip = V(-6, 0, 14), LHip = V(8, 0, -8), RKnee = V(-6, 0, 0),
 }
-local VARIANTES_JOJO = { JOJO_A, JOJO_B, JOJO_C, JOJO_A }
+local JOJO_C = { -- "Dio": braços abertos, inclinado pra trás, dominante
+	Waist = V(12, 0, 0), Neck = V(14, 0, 0),
+	RShoulder = V(30, 0, 72), RElbow = V(28, 0, 0),
+	LShoulder = V(30, 0, -72), LElbow = V(28, 0, 0),
+	RHip = V(0, 0, 10), LHip = V(0, 0, -10),
+}
+local VARIANTES_JOJO = { JOJO_A, JOJO_B, JOJO_C, espelhar(JOJO_A) }
 
 PERSONALIDADE.QuestGiver = function(p, t, dt, ctx)
 	local e = p.Est
@@ -486,36 +515,49 @@ PERSONALIDADE.QuestGiver = function(p, t, dt, ctx)
 	return pose
 end
 
--- BENTES / PEPE NEP (estatísticas) — sentado no banco, escreve num caderno
+-- BENTES (estatísticas) — sentado no banco, DESENHANDO no caderno.
+-- ⚠️ v118 — PEDIDO: "faz ele literalmente desenhando: tem que mexer o lápis que ele
+-- tá na mão também". A caneta do mapa ("Caneta", ver construir) segue a mão direita;
+-- a mão faz traços curtos e rápidos e vai descendo de linha, como quem rabisca.
 PERSONALIDADE.Estatisticas = function(p, t, dt, ctx)
+	local linha = (t % 3.4) / 3.4 -- 0..1 atravessando uma "linha" do desenho
+	local traco = math.sin(t * 15)
+	local volta = linha > 0.88 -- fim da linha: a mão volta pro começo
 	local pose = {
-		RootPos = ZERO, Waist = ZERO, Neck = V(-9 + 2.5 * math.sin(t * 0.9), 6 * math.sin(t * 0.37), 0),
-		RElbow = V(3 * math.sin(t * 9.5), 0, 0), RWrist = V(5 * math.sin(t * 9.5 + 0.7), 0, 3 * math.sin(t * 7)),
+		RootPos = ZERO, Waist = V(-2, 0, 0),
+		Neck = V(-11 + 1.5 * math.sin(t * 0.9), 4 * math.sin(t * 0.37), 0),
+		RShoulder = V(2 * traco, volta and 0 or (linha * 16 - 8), 0),
+		RElbow = V(volta and 3 or (3 * traco + 2 * math.sin(t * 5.3)), 0, 0),
+		RWrist = V(6 * math.sin(t * 15 + 0.7), 0, 10 * traco),
 		LWrist = V(0, 0, 0),
 	}
 	local e = p.Est
-	-- de vez em quando vira a página
-	e.Prox = e.Prox or (t + 4)
+	-- de vez em quando para, olha o desenho de longe e volta
+	e.Prox = e.Prox or (t + 6)
 	if t >= e.Prox then
-		e.Virando = t + 0.7
-		e.Prox = t + 4 + math.random() * 4
+		e.OlhandoAte = t + 1.2
+		e.Prox = t + 6 + math.random() * 5
 	end
-	if e.Virando and e.Virando > t then
-		pose.LWrist = V(-14, 0, 0)
-		pose.Neck = V(-14, 0, 0)
+	if e.OlhandoAte and e.OlhandoAte > t then
+		pose.Waist = V(6, 0, 0)
+		pose.Neck = V(-4, 6, 4)
+		pose.RShoulder = V(-6, 0, 0)
+		pose.RElbow = ZERO
+		pose.RWrist = ZERO
 	end
 	if ctx.Falando then
 		local nod = 3 * math.sin(t * 3.3)
 		olharJogador(pose, ctx, 1, nod)
-		pose.RElbow = V(10 + 12 * math.sin(t * 2.6), 0, 0)
+		pose.RShoulder = V(-4, 0, 0)
+		pose.RElbow = V(8 + 10 * math.sin(t * 2.6), 0, 0)
 		pose.RWrist = V(0, 0, 14 * math.sin(t * 2.6))
 		pose.Taxa = 8
-	elseif ctx.Tem and ctx.Dist < 20 then
-		-- levanta os olhos do caderno e acompanha quem chegou
-		olharJogador(pose, ctx, 0.9, -2)
-		pose.Taxa = 7
+	elseif ctx.Tem and ctx.Dist < 14 then
+		-- levanta os olhos do caderno e acompanha quem chegou (sem parar de rabiscar)
+		olharJogador(pose, ctx, 0.8, -2)
+		pose.Taxa = 12
 	else
-		pose.Taxa = 5
+		pose.Taxa = 14
 	end
 	return pose
 end
