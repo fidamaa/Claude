@@ -567,16 +567,521 @@ RunService.RenderStepped:Connect(function()
 	end
 end)
 
+-- ===== ⚠️ v116 — TODAS AS ARMAS COM EFEITO PRÓPRIO =====
+-- PEDIDO: "armas sem efeito visual (Ego do Rei chutando de fora da área) —
+-- conferir TODAS, inclusive as antigas". Antes só umas 12 das 31 Armas tinham
+-- desenho próprio; as outras (Ego do Rei, Zona de Ouro, Olho de Predador,
+-- Xerife, Muro Duplo, Reflexo, Paredão…) caíam no "generico": um aneizinho no
+-- chão que some em 0,45s e passava batido. Agora cada Arma tem uma assinatura
+-- visível: as de CHUTE/PASSE acompanham a bola (clarão + rastro + marca no ponto
+-- do chute), as de DESARME marcam o chão, as de GOLEIRO aparecem no corpo e as
+-- CONTÍNUAS deixam uma aura própria enquanto valem.
+local COR_ARMA = {
+	["Ego do Rei"] = Color3.fromRGB(168, 85, 247),
+	["Zona de Ouro"] = Color3.fromRGB(255, 205, 60),
+	["Olho de Predador"] = Color3.fromRGB(255, 60, 70),
+	["Passe Preciso"] = Color3.fromRGB(110, 200, 255),
+	["Lançamento Perfeito"] = Color3.fromRGB(255, 170, 70),
+	["Xerife"] = Color3.fromRGB(255, 215, 80),
+	["Muro Duplo"] = Color3.fromRGB(255, 140, 60),
+	["Leitor de Almas"] = Color3.fromRGB(190, 150, 255),
+	["Desarme Relâmpago"] = Color3.fromRGB(255, 240, 90),
+	["Reflexo"] = Color3.fromRGB(90, 230, 255),
+	["Corpo Elástico"] = Color3.fromRGB(190, 110, 255),
+	["Paredão"] = Color3.fromRGB(150, 215, 255),
+	["Domínio"] = Color3.fromRGB(120, 255, 190),
+	["A Zona"] = Color3.fromRGB(150, 235, 255),
+	["Defesa Zumbi"] = Color3.fromRGB(110, 220, 90),
+	["Última Barreira"] = Color3.fromRGB(110, 160, 255),
+	["Sexto Sentido"] = Color3.fromRGB(255, 120, 220),
+	["Metavisão"] = Color3.fromRGB(90, 255, 240),
+	["Maestro do Campo"] = Color3.fromRGB(255, 215, 90),
+	["Voz de Comando"] = Color3.fromRGB(120, 220, 255),
+	["Marcação Cerrada"] = Color3.fromRGB(200, 120, 70),
+	["Leitura de Passe"] = Color3.fromRGB(90, 200, 230),
+	["Antecipação Fantasma"] = Color3.fromRGB(160, 110, 230),
+	["Saída Rápida"] = Color3.fromRGB(255, 190, 90),
+	["Passo Furtivo"] = Color3.fromRGB(99, 102, 241),
+	["Tabela"] = Color3.fromRGB(45, 212, 191),
+}
+local BRANCO = Color3.new(1, 1, 1)
+
+local function pilarDeLuz(pos, cor, altura, largura, dur)
+	local p = parte(Vector3.new(altura, largura, largura), CFrame.new(pos + Vector3.new(0, altura / 2, 0)) * CFrame.Angles(0, 0, math.rad(90)), cor, 0.3)
+	p.Shape = Enum.PartType.Cylinder
+	TweenService:Create(p, TweenInfo.new(dur, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		Size = Vector3.new(altura * 1.25, largura * 0.2, largura * 0.2), Transparency = 1,
+	}):Play()
+	Debris:AddItem(p, dur + 0.05)
+end
+
+-- retículo de mira se fechando em cima do ponto (Olho de Predador, Zona de Ouro)
+local function miraEm(pos, cor, cor2)
+	local cam = workspace.CurrentCamera
+	local eixo = cam and (cam.CFrame.Position - pos) or Vector3.yAxis
+	eixo = eixo.Magnitude > 0.01 and eixo.Unit or Vector3.yAxis
+	for k = 1, 3 do
+		task.delay((k - 1) * 0.07, function()
+			anel(pos, eixo, k == 3 and cor2 or cor, 11 - k * 1.5, 1.8, 0.32, 0.15)
+		end)
+	end
+	local lado = eixo:Cross(Vector3.yAxis)
+	lado = lado.Magnitude > 0.01 and lado.Unit or Vector3.xAxis
+	local cima = lado:Cross(eixo).Unit
+	for _, d in ipairs({ lado, -lado, cima, -cima }) do
+		local p = parte(Vector3.new(0.14, 0.14, 4.5), CFrame.lookAt(pos + d * 5.5, pos + d * 0.6), cor2, 0.05)
+		TweenService:Create(p, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+			CFrame = CFrame.lookAt(pos + d * 1.6, pos), Transparency = 1,
+		}):Play()
+		Debris:AddItem(p, 0.35)
+	end
+	flash(pos, cor2, 1, 0.25)
+end
+
+-- pentagrama no chão (a estrela do Xerife)
+local function estrelaNoChao(pos, cor, raio, dur)
+	local pts = {}
+	for i = 0, 4 do
+		local a = math.rad(90 + i * 72)
+		pts[i] = pos + Vector3.new(math.cos(a) * raio, 0, math.sin(a) * raio)
+	end
+	for i = 0, 4 do
+		local a, b = pts[i], pts[(i + 2) % 5]
+		local p = parte(Vector3.new(0.4, 0.12, (b - a).Magnitude), CFrame.lookAt((a + b) / 2, b), cor, 0.05)
+		TweenService:Create(p, TweenInfo.new(dur, Enum.EasingStyle.Quad, Enum.EasingDirection.In), { Transparency = 1 }):Play()
+		Debris:AddItem(p, dur + 0.05)
+	end
+	anel(pos, Vector3.yAxis, cor, raio * 1.4, raio * 2.6, dur, 0.3)
+end
+
+-- parede de energia que sobe do chão e some
+local function muroDeEnergia(pos, dir, cor, larg, alt, dur)
+	local cf = CFrame.lookAt(pos, pos + dir)
+	local p = parte(Vector3.new(larg, 0.3, 0.5), cf * CFrame.new(0, 0.15, 0), cor, 0.45, Enum.Material.ForceField)
+	local topo = parte(Vector3.new(larg, 0.2, 0.7), cf * CFrame.new(0, 0.15, 0), cor, 0.05)
+	local info = TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+	TweenService:Create(p, info, { Size = Vector3.new(larg, alt, 0.5), CFrame = cf * CFrame.new(0, alt / 2, 0) }):Play()
+	TweenService:Create(topo, info, { CFrame = cf * CFrame.new(0, alt, 0) }):Play()
+	task.delay(dur, function()
+		TweenService:Create(p, TweenInfo.new(0.35), { Transparency = 1 }):Play()
+		TweenService:Create(topo, TweenInfo.new(0.35), { Transparency = 1 }):Play()
+	end)
+	Debris:AddItem(p, dur + 0.45)
+	Debris:AddItem(topo, dur + 0.45)
+end
+
+-- coluna de partículas subindo do corpo (espíritos, fumaça, brilho)
+local function emissorNoCorpo(pai, props)
+	local e = Instance.new("ParticleEmitter")
+	e.LightEmission = 0.8
+	e.LightInfluence = 0
+	for k, v in pairs(props) do e[k] = v end
+	e.Parent = pai
+	return e
+end
+
+-- chute/passe: marca no ponto onde a bola sai + clarão + rastro colorido atrás dela
+local function chuteDaArma(character, cor, cor2, dur, comAneis)
+	local root = character:FindFirstChild("HumanoidRootPart")
+	if not root then return end
+	task.spawn(function()
+		local bola = workspace:FindFirstChild(Config.BALL_NAME)
+		if not bola then return end
+		local inicio = os.clock()
+		while os.clock() - inicio < 0.45 and bola.AssemblyLinearVelocity.Magnitude < 20 do
+			RunService.Heartbeat:Wait()
+		end
+		local v = bola.AssemblyLinearVelocity
+		local dir = v.Magnitude > 1 and v.Unit or Vector3.new(root.CFrame.LookVector.X, 0, root.CFrame.LookVector.Z).Unit
+		local ponto = bola.Position
+		flash(ponto, BRANCO, 1.6, 0.22)
+		if comAneis ~= false then
+			anel(ponto, dir, cor, 1.5, 10, 0.3, 0.2)
+			task.delay(0.07, function() anel(ponto + dir * 2, dir, cor2, 1, 7, 0.25, 0.3) end)
+		end
+		local lado = dir:Cross(Vector3.yAxis)
+		lado = lado.Magnitude > 0.01 and lado.Unit or Vector3.xAxis
+		for _ = 1, 12 do
+			local ang = math.random() * math.pi * 2
+			local raio = 0.6 + math.random() * 1.6
+			local off = lado * math.cos(ang) * raio + Vector3.new(0, math.sin(ang) * raio, 0)
+			risco(ponto + off - dir * math.random() * 2, dir, math.random() < 0.4 and cor2 or cor, 3 + math.random() * 4, 0.25)
+		end
+		faiscas(ponto, cor, 26, 26)
+		rastroNaBola(cor, 1.4, dur or 1.6)
+	end)
+end
+
+local function aneisNoChao(root, cor, cor2)
+	local pe = root.Position - Vector3.new(0, 2.8, 0)
+	anel(pe, Vector3.yAxis, cor, 2, 11, 0.5, 0.3)
+	task.delay(0.1, function() anel(pe, Vector3.yAxis, cor2, 1, 7, 0.4, 0.4) end)
+end
+
+-- Armas de EVENTO (disparam uma vez, no gatilho): nome -> function(character, cor, duracao)
+local FX_ARMA = {}
+
+-- EGO DO REI: coroa roxa e dourada nasce em cima da cabeça e sobe, aura de rei no chão
+-- e a bola sai com rastro roxo — "você não passa, chuta".
+FX_ARMA["Ego do Rei"] = function(character)
+	local roxo, ouro = COR_ARMA["Ego do Rei"], Color3.fromRGB(255, 215, 90)
+	local root = character:FindFirstChild("HumanoidRootPart")
+	local cabeca = character:FindFirstChild("Head") or root
+	if not cabeca then return end
+	local base = cabeca.Position + Vector3.new(0, 2.2, 0)
+	local pecas = {}
+	local aro = parte(Vector3.new(0.35, 2.2, 2.2), CFrame.new(base) * CFrame.Angles(0, 0, math.rad(90)), ouro, 0.05)
+	aro.Shape = Enum.PartType.Cylinder
+	table.insert(pecas, aro)
+	for i = 0, 4 do
+		local a = i / 5 * math.pi * 2
+		local off = Vector3.new(math.cos(a) * 1.0, 0.65, math.sin(a) * 1.0)
+		table.insert(pecas, parte(Vector3.new(0.4, 1.2, 0.4), CFrame.new(base + off), i % 2 == 0 and ouro or roxo, 0.05))
+		local joia = parte(Vector3.new(0.34, 0.34, 0.34), CFrame.new(base + off + Vector3.new(0, 0.8, 0)), roxo, 0)
+		joia.Shape = Enum.PartType.Ball
+		table.insert(pecas, joia)
+	end
+	for _, p in ipairs(pecas) do
+		TweenService:Create(p, TweenInfo.new(1.2, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+			CFrame = p.CFrame + Vector3.new(0, 1.8, 0), Transparency = 1,
+		}):Play()
+		Debris:AddItem(p, 1.3)
+	end
+	flash(base, ouro, 1.6, 0.3)
+	if root then
+		aneisNoChao(root, roxo, ouro)
+		pilarDeLuz(root.Position - Vector3.new(0, 2.8, 0), roxo, 14, 3.4, 0.6)
+	end
+	chuteDaArma(character, roxo, ouro, 2.0)
+end
+
+-- ZONA DE OURO: mira dourada fecha no ponto de chute + marca no chão
+FX_ARMA["Zona de Ouro"] = function(character)
+	local ouro, claro = COR_ARMA["Zona de Ouro"], Color3.fromRGB(255, 245, 190)
+	local root = character:FindFirstChild("HumanoidRootPart")
+	if root then
+		aneisNoChao(root, ouro, claro)
+		miraEm(root.Position - Vector3.new(0, 2.6, 0), ouro, claro)
+	end
+	chuteDaArma(character, ouro, claro, 1.8)
+end
+
+-- OLHO DE PREDADOR: retículo vermelho trava na bola
+FX_ARMA["Olho de Predador"] = function(character)
+	local vermelho, rosa = COR_ARMA["Olho de Predador"], Color3.fromRGB(255, 190, 190)
+	local bola = workspace:FindFirstChild(Config.BALL_NAME)
+	if bola then miraEm(bola.Position, vermelho, rosa) end
+	local root = character:FindFirstChild("HumanoidRootPart")
+	if root then anel(root.Position - Vector3.new(0, 2.8, 0), Vector3.yAxis, vermelho, 2, 9, 0.4, 0.35) end
+	chuteDaArma(character, vermelho, rosa, 1.8, false)
+end
+
+FX_ARMA["Passe Preciso"] = function(character)
+	local root = character:FindFirstChild("HumanoidRootPart")
+	if root then aneisNoChao(root, COR_ARMA["Passe Preciso"], BRANCO) end
+	chuteDaArma(character, COR_ARMA["Passe Preciso"], BRANCO, 1.5, false)
+end
+
+FX_ARMA["Lançamento Perfeito"] = function(character)
+	local root = character:FindFirstChild("HumanoidRootPart")
+	local cor = COR_ARMA["Lançamento Perfeito"]
+	if root then
+		aneisNoChao(root, cor, BRANCO)
+		pilarDeLuz(root.Position - Vector3.new(0, 2.8, 0), cor, 9, 2.4, 0.5)
+	end
+	chuteDaArma(character, cor, BRANCO, 2.2)
+end
+
+-- XERIFE: estrela de xerife dourada no chão
+FX_ARMA["Xerife"] = function(character)
+	local root = character:FindFirstChild("HumanoidRootPart")
+	if not root then return end
+	local pe = root.Position - Vector3.new(0, 2.7, 0)
+	estrelaNoChao(pe, COR_ARMA["Xerife"], 4.2, 0.9)
+	pilarDeLuz(pe, COR_ARMA["Xerife"], 8, 2, 0.5)
+	faiscas(root.Position, COR_ARMA["Xerife"], 20, 14)
+end
+
+-- MURO DUPLO: duas paredes de energia dos lados do carrinho
+FX_ARMA["Muro Duplo"] = function(character)
+	local root = character:FindFirstChild("HumanoidRootPart")
+	if not root then return end
+	local cor = COR_ARMA["Muro Duplo"]
+	local pe = root.Position - Vector3.new(0, 2.7, 0)
+	local frente = Vector3.new(root.CFrame.LookVector.X, 0, root.CFrame.LookVector.Z)
+	frente = frente.Magnitude > 0.01 and frente.Unit or Vector3.new(0, 0, -1)
+	local lado = frente:Cross(Vector3.yAxis).Unit
+	muroDeEnergia(pe + lado * 3.4 + frente * 1.5, frente, cor, 5, 6, 0.9)
+	muroDeEnergia(pe - lado * 3.4 + frente * 1.5, frente, cor, 5, 6, 0.9)
+	anel(pe, Vector3.yAxis, cor, 2, 10, 0.45, 0.3)
+end
+
+-- LEITOR DE ALMAS: espíritos brancos e roxos sobem do chão
+FX_ARMA["Leitor de Almas"] = function(character)
+	local root = character:FindFirstChild("HumanoidRootPart")
+	if not root then return end
+	local cor, claro = COR_ARMA["Leitor de Almas"], Color3.fromRGB(240, 235, 255)
+	local a = Instance.new("Attachment")
+	a.Position = Vector3.new(0, -2.6, 0)
+	a.Parent = root
+	local e = emissorNoCorpo(a, {
+		Texture = "rbxasset://textures/particles/smoke_main.dds",
+		Color = ColorSequence.new(claro, cor),
+		Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.8), NumberSequenceKeypoint.new(1, 2.4) }),
+		Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.3), NumberSequenceKeypoint.new(1, 1) }),
+		Lifetime = NumberRange.new(0.8, 1.3), Speed = NumberRange.new(6, 10), SpreadAngle = Vector2.new(25, 25),
+		EmissionDirection = Enum.NormalId.Top, Rate = 60,
+		Shape = Enum.ParticleEmitterShape.Cylinder, ShapeStyle = Enum.ParticleEmitterShapeStyle.Surface,
+	})
+	task.delay(0.6, function() e.Enabled = false end)
+	Debris:AddItem(a, 2)
+	anel(root.Position - Vector3.new(0, 2.8, 0), Vector3.yAxis, cor, 2, 12, 0.6, 0.3)
+	pilarDeLuz(root.Position - Vector3.new(0, 2.8, 0), claro, 12, 2.6, 0.7)
+end
+
+-- DESARME RELÂMPAGO: raios amarelos no gancho do pé
+FX_ARMA["Desarme Relâmpago"] = function(character)
+	local root = character:FindFirstChild("HumanoidRootPart")
+	if not root then return end
+	local cor = COR_ARMA["Desarme Relâmpago"]
+	local frente = Vector3.new(root.CFrame.LookVector.X, 0, root.CFrame.LookVector.Z)
+	frente = frente.Magnitude > 0.01 and frente.Unit or Vector3.new(0, 0, -1)
+	flash(root.Position + frente * 2, BRANCO, 1.4, 0.2)
+	for i = 1, 7 do
+		local ang = math.rad((i - 4) * 14)
+		local dir = (CFrame.Angles(0, ang, 0) * CFrame.lookAt(Vector3.zero, frente)).LookVector
+		risco(root.Position - Vector3.new(0, 1.5, 0) + dir * 1.2, dir, i % 2 == 0 and BRANCO or cor, 6 + math.random() * 4, 0.28)
+	end
+	anel(root.Position - Vector3.new(0, 2.8, 0), Vector3.yAxis, cor, 2, 10, 0.4, 0.25)
+	faiscas(root.Position, cor, 24, 24)
+end
+
+-- GOLEIRO: REFLEXO — faíscas ciano em estrela na hora do mergulho
+FX_ARMA["Reflexo"] = function(character)
+	local root = character:FindFirstChild("HumanoidRootPart")
+	if not root then return end
+	local cor = COR_ARMA["Reflexo"]
+	flash(root.Position, BRANCO, 1.8, 0.2)
+	for i = 1, 10 do
+		local ang = (i / 10) * math.pi * 2
+		local dir = Vector3.new(math.cos(ang), math.random() * 0.6 - 0.2, math.sin(ang)).Unit
+		risco(root.Position + dir * 1.4, dir, i % 2 == 0 and BRANCO or cor, 3.5, 0.25)
+	end
+	anel(root.Position, root.CFrame.LookVector, cor, 2, 9, 0.3, 0.25)
+end
+
+-- GOLEIRO: CORPO ELÁSTICO — anéis roxos esticando na direção do mergulho
+FX_ARMA["Corpo Elástico"] = function(character)
+	local root = character:FindFirstChild("HumanoidRootPart")
+	if not root then return end
+	local cor = COR_ARMA["Corpo Elástico"]
+	local dir = root.AssemblyLinearVelocity
+	dir = dir.Magnitude > 3 and dir.Unit or root.CFrame.LookVector
+	for i = 1, 4 do
+		task.delay((i - 1) * 0.06, function()
+			if root.Parent then anel(root.Position + dir * (i * 1.6), dir, i % 2 == 0 and BRANCO or cor, 1.5, 8 - i, 0.35, 0.2) end
+		end)
+	end
+	linhasDeVelocidade(root, dir, cor, 12)
+end
+
+-- GOLEIRO: PAREDÃO — uma parede de energia enorme na frente do gol
+FX_ARMA["Paredão"] = function(character)
+	local root = character:FindFirstChild("HumanoidRootPart")
+	if not root then return end
+	local cor = COR_ARMA["Paredão"]
+	local frente = Vector3.new(root.CFrame.LookVector.X, 0, root.CFrame.LookVector.Z)
+	frente = frente.Magnitude > 0.01 and frente.Unit or Vector3.new(0, 0, -1)
+	local pe = root.Position - Vector3.new(0, 2.7, 0) + frente * 3.5
+	muroDeEnergia(pe, -frente, cor, 14, 8, 1.0)
+	anel(root.Position - Vector3.new(0, 2.8, 0), Vector3.yAxis, cor, 2, 12, 0.5, 0.3)
+	faiscas(root.Position + frente * 3, cor, 22, 16)
+end
+
+-- DOMÍNIO: a bola no ar é "laçada" por um anel verde
+FX_ARMA["Domínio"] = function(character)
+	local bola = workspace:FindFirstChild(Config.BALL_NAME)
+	local cor = COR_ARMA["Domínio"]
+	if bola then
+		anel(bola.Position, Vector3.yAxis, cor, 1.5, 7, 0.4, 0.2)
+		anel(bola.Position, Vector3.xAxis, BRANCO, 1, 5, 0.35, 0.3)
+		faiscas(bola.Position, cor, 16, 12)
+	end
+end
+
+-- ===== CONTÍNUAS: aura própria enquanto a Arma vale =====
+local auras = {} -- [character] = { [nome] = { coisas } }
+local CONT_FX = {}
+
+local function coisaDoCorpo(character, nomeParte)
+	local p = character:FindFirstChild(nomeParte)
+	if p then return p end
+	return character:FindFirstChild("HumanoidRootPart")
+end
+
+local function anexo(parteBase, y)
+	local a = Instance.new("Attachment")
+	a.Position = Vector3.new(0, y or 0, 0)
+	a.Parent = parteBase
+	return a
+end
+
+CONT_FX["A Zona"] = function(character, raiz, coisas)
+	local cor = COR_ARMA["A Zona"]
+	-- anel de 18 studs (o raio em que os adversários ficam lentos) preso ao chão do jogador
+	local anelFixo = parte(Vector3.new(0.12, 36, 36), raiz.CFrame * CFrame.new(0, -2.8, 0) * CFrame.Angles(0, 0, math.rad(90)), cor, 0.7, Enum.Material.ForceField)
+	anelFixo.Shape = Enum.PartType.Cylinder
+	anelFixo.Anchored = false
+	anelFixo.Massless = true
+	local w = Instance.new("WeldConstraint")
+	w.Part0 = raiz
+	w.Part1 = anelFixo
+	w.Parent = anelFixo
+	table.insert(coisas, anelFixo)
+	local a = anexo(coisaDoCorpo(character, "UpperTorso"), 0)
+	table.insert(coisas, a)
+	table.insert(coisas, emissorNoCorpo(a, {
+		Color = ColorSequence.new(BRANCO, cor), Rate = 14, Lifetime = NumberRange.new(0.7, 1.2),
+		Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.4), NumberSequenceKeypoint.new(1, 0) }),
+		Speed = NumberRange.new(1, 3), SpreadAngle = Vector2.new(180, 180), Acceleration = Vector3.new(0, 3, 0),
+		Shape = Enum.ParticleEmitterShape.Box, ShapeStyle = Enum.ParticleEmitterShapeStyle.Volume,
+	}))
+	-- entrada na Zona: onda grande que vai até os 18 studs
+	anel(raiz.Position - Vector3.new(0, 2.8, 0), Vector3.yAxis, cor, 2, 36, 0.8, 0.3)
+	flash(raiz.Position, BRANCO, 2, 0.35)
+end
+
+CONT_FX["Defesa Zumbi"] = function(character, raiz, coisas)
+	local a = anexo(raiz, -1.2)
+	table.insert(coisas, a)
+	table.insert(coisas, emissorNoCorpo(a, {
+		Texture = "rbxasset://textures/particles/smoke_main.dds",
+		Color = ColorSequence.new(Color3.fromRGB(140, 235, 90), Color3.fromRGB(40, 90, 40)), LightEmission = 0.2,
+		Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(1, 2.4) }),
+		Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.55), NumberSequenceKeypoint.new(1, 1) }),
+		Lifetime = NumberRange.new(0.9, 1.5), Speed = NumberRange.new(1, 3), Rate = 14, SpreadAngle = Vector2.new(40, 40),
+		Acceleration = Vector3.new(0, 2, 0),
+	}))
+	anel(raiz.Position - Vector3.new(0, 2.8, 0), Vector3.yAxis, COR_ARMA["Defesa Zumbi"], 2, 10, 0.6, 0.35)
+end
+
+CONT_FX["Última Barreira"] = function(character, raiz, coisas)
+	local cor = COR_ARMA["Última Barreira"]
+	local a = anexo(coisaDoCorpo(character, "UpperTorso"), 0)
+	table.insert(coisas, a)
+	table.insert(coisas, emissorNoCorpo(a, {
+		Color = ColorSequence.new(BRANCO, cor), Rate = 12, Lifetime = NumberRange.new(0.5, 0.9),
+		Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.45), NumberSequenceKeypoint.new(1, 0) }),
+		Speed = NumberRange.new(0.5, 1.5), SpreadAngle = Vector2.new(180, 180),
+		Shape = Enum.ParticleEmitterShape.Box, ShapeStyle = Enum.ParticleEmitterShapeStyle.Surface,
+	}))
+	-- arco de 5 placas de energia na frente do jogador
+	local frente = Vector3.new(raiz.CFrame.LookVector.X, 0, raiz.CFrame.LookVector.Z)
+	frente = frente.Magnitude > 0.01 and frente.Unit or Vector3.new(0, 0, -1)
+	local pe = raiz.Position - Vector3.new(0, 2.7, 0)
+	for i = -2, 2 do
+		local dir = (CFrame.Angles(0, math.rad(i * 28), 0) * CFrame.lookAt(Vector3.zero, frente)).LookVector
+		muroDeEnergia(pe + dir * 5, dir, cor, 3.4, 5, 0.9)
+	end
+	anel(pe, Vector3.yAxis, cor, 2, 12, 0.5, 0.3)
+end
+
+CONT_FX["Sexto Sentido"] = function(character, raiz, coisas)
+	local cor = COR_ARMA["Sexto Sentido"]
+	local a = anexo(coisaDoCorpo(character, "Head"), 0)
+	table.insert(coisas, a)
+	table.insert(coisas, emissorNoCorpo(a, {
+		Color = ColorSequence.new(BRANCO, cor), Rate = 10, Lifetime = NumberRange.new(0.6, 1),
+		Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.35), NumberSequenceKeypoint.new(1, 0) }),
+		Speed = NumberRange.new(1, 2.5), SpreadAngle = Vector2.new(180, 180), Acceleration = Vector3.new(0, 2, 0),
+	}))
+	local cabeca = coisaDoCorpo(character, "Head")
+	anel(cabeca.Position, Vector3.yAxis, cor, 1.5, 9, 0.6, 0.3)
+	anel(cabeca.Position, Vector3.xAxis, BRANCO, 1, 6, 0.5, 0.4)
+end
+
+CONT_FX["Metavisão"] = function(character, raiz, coisas)
+	local cor = COR_ARMA["Metavisão"]
+	local a = anexo(coisaDoCorpo(character, "Head"), 0.2)
+	table.insert(coisas, a)
+	table.insert(coisas, emissorNoCorpo(a, {
+		Color = ColorSequence.new(BRANCO, cor), Rate = 8, Lifetime = NumberRange.new(0.5, 0.9),
+		Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.3), NumberSequenceKeypoint.new(1, 0) }),
+		Speed = NumberRange.new(0.5, 1.5), SpreadAngle = Vector2.new(180, 180),
+	}))
+	local cabeca = coisaDoCorpo(character, "Head")
+	anel(cabeca.Position, Vector3.yAxis, cor, 1.5, 7, 0.5, 0.35)
+end
+
+local function auraDeEquipe(nome, raio)
+	return function(character, raiz, coisas)
+		local cor = COR_ARMA[nome]
+		local a = anexo(coisaDoCorpo(character, "UpperTorso"), 0)
+		table.insert(coisas, a)
+		table.insert(coisas, emissorNoCorpo(a, {
+			Color = ColorSequence.new(BRANCO, cor), Rate = 10, Lifetime = NumberRange.new(0.6, 1),
+			Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.35), NumberSequenceKeypoint.new(1, 0) }),
+			Speed = NumberRange.new(1, 2.5), SpreadAngle = Vector2.new(180, 180), Acceleration = Vector3.new(0, 3, 0),
+		}))
+		anel(raiz.Position - Vector3.new(0, 2.8, 0), Vector3.yAxis, cor, 3, raio * 2, 0.7, 0.45)
+		faiscas(raiz.Position, cor, 20, 10)
+	end
+end
+CONT_FX["Maestro do Campo"] = auraDeEquipe("Maestro do Campo", 40)
+CONT_FX["Voz de Comando"] = auraDeEquipe("Voz de Comando", 45)
+
+local contFx
+contFx = function(character, nome, ligado)
+	local mapa = auras[character]
+	if not mapa then
+		mapa = {}
+		auras[character] = mapa
+	end
+	local atual = mapa[nome]
+	if not ligado then
+		if atual then
+			mapa[nome] = nil
+			for _, x in ipairs(atual) do
+				if x.Parent then x:Destroy() end
+			end
+		end
+		return
+	end
+	if atual then return end
+	local raiz = character:FindFirstChild("HumanoidRootPart")
+	if not raiz then return end
+	local coisas = {}
+	mapa[nome] = coisas
+	local ok, erro = pcall(CONT_FX[nome], character, raiz, coisas)
+	if not ok then warn("[ArmasVFX] " .. nome .. ": " .. tostring(erro)) end
+	-- personagem saiu (fim de partida/respawn): leva a aura junto
+	character.AncestryChanged:Connect(function()
+		if not character:IsDescendantOf(workspace) then contFx(character, nome, false) end
+	end)
+end
+
 local function aoArmaVFX(character, nome, raridade, ligado, duracao, extra)
 	if typeof(character) ~= "Instance" or not character:IsA("Model") then return end
-	local cor = COR_RARIDADE[raridade] or COR_RARIDADE.Rare
+	local cor = COR_ARMA[nome] or COR_RARIDADE[raridade] or COR_RARIDADE.Rare
 	if typeof(nome) == "string" and ATIVAS[nome] then return ATIVAS[nome](character, extra) end
 	-- ⚠️ v108: Pique e Apostador têm efeito próprio (acima)
 	-- ⚠️ v111: o Pique virou tecla (o efeito vem pelo "Pique@arranque")
 	if nome == "Pique" then return end
 	if nome == "Apostador" then return apostador(character, ligado and true or false) end
+	-- ⚠️ v116: Armas contínuas com aura própria (A Zona, Defesa Zumbi, Última Barreira…)
+	if typeof(nome) == "string" and CONT_FX[nome] then
+		continua(character, cor, ligado and true or false) -- vento leve nos pés, na cor da Arma
+		contFx(character, nome, ligado and true or false)
+		return
+	end
 	if not ligado then
 		continua(character, cor, false)
+		return
+	end
+	-- ⚠️ v116: Armas de evento com assinatura própria (Ego do Rei, Xerife, Paredão…)
+	if typeof(nome) == "string" and FX_ARMA[nome] then
+		local ok, erro = pcall(FX_ARMA[nome], character, cor, duracao)
+		if not ok then warn("[ArmasVFX] " .. nome .. ": " .. tostring(erro)) end
 		return
 	end
 	if DO_TIME[nome] then
