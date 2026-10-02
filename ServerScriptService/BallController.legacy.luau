@@ -4656,6 +4656,11 @@ _G.SetDeadBallMode = function(active)
 end
 
 _G.ResetBallState = function(centerPosition)
+	-- ⚠️ v119 — BUG "às vezes as hissatsus fazem DOIS gols": o reinício (gol, saída,
+	-- kickoff) não desligava o voo travado da Hissatsu — o Heartbeat da MIRA TRAVADA
+	-- continuava recolocando a bola na reta do chute com a velocidade dela, e quando
+	-- a bola era solta no meio-campo ela disparava pro gol de novo.
+	stopPulseStraightFlight()
 	releaseOwner()
 	lastTouchers = {}
 	ultimoToqueNaBola = nil
@@ -5440,11 +5445,17 @@ local function pulsePerformKick(player, targetPoint, force, curveMult, aimDeviat
 		-- que cria aquele arco leve) — e sem gravidade nenhuma puxando pra
 		-- baixo até a bola perder a velocidade (ver startPulseStraightFlight
 		-- lá em cima, perto do gravityForce).
-		velocity = direction * force
+		-- ⚠️ v119 — PEDIDO: "as hissatsus estão indo muito rápido pro gol (tipo a Queda
+		-- Celestial)". A velocidade era IGUAL à força — numa Mítica, 600-900 studs/s: do
+		-- meio-campo chegava no gol em meio segundo, sem dar pra ver o voo. A força (a
+		-- VIDA da bola, que decide o duelo com o goleiro) continua a mesma; só a
+		-- VELOCIDADE do voo tem teto (HISSATSU_VELOCIDADE_MAX).
+		local rapidez = math.min(force, Config.HISSATSU_VELOCIDADE_MAX or 210)
+		velocity = direction * rapidez
 		startPulseStraightFlight(force)
 		-- ⚠️ v110: a RETA fica travada desde o chute (ver o Heartbeat do voo)
 		pulseFlightDirecao = direction
-		pulseFlightVelocidade = force
+		pulseFlightVelocidade = rapidez
 	end
 	ball.AssemblyLinearVelocity = velocity
 	lastShotForce = force

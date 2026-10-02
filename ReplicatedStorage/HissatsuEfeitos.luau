@@ -2031,10 +2031,14 @@ local function conePortal(pastaAlvo, ball)
 		b.Parent = cauda
 		return b
 	end
+	-- ⚠️ v119 — PEDIDO: "o caminho dela precisa ficar um pouco maior e precisam aparecer
+	-- os planetas, definitivamente, atrás dele — dentro do feixe, como um portal pra
+	-- outra dimensão". Feixes ~60% mais largos; o miolo de espaço mais transparente
+	-- (antes ele cobria os planetas, que eram peças 3D atrás dele).
 	local feixes = {
-		feixe(cores({ { 0, rgb(170, 240, 255) }, { 1, rgb(40, 190, 255) } }), 1.4, 30, 0.35, 1, 1, -2),                  -- borda ciano (mais larga)
-		feixe(cores({ { 0, rgb(255, 150, 255) }, { 0.5, rgb(220, 60, 230) }, { 1, rgb(130, 40, 220) } }), 1.2, 26, 0.15, 0.95, 1, -1), -- borda magenta
-		feixe(cores({ { 0, rgb(60, 30, 110) }, { 1, rgb(10, 8, 35) } }), 0.9, 21, 0.05, 0.55, 0, 0),                       -- o ESPAÇO dentro
+		feixe(cores({ { 0, rgb(170, 240, 255) }, { 1, rgb(40, 190, 255) } }), 2.2, 48, 0.35, 1, 1, -2),                  -- borda ciano (mais larga)
+		feixe(cores({ { 0, rgb(255, 150, 255) }, { 0.5, rgb(220, 60, 230) }, { 1, rgb(130, 40, 220) } }), 1.9, 42, 0.15, 0.95, 1, -1), -- borda magenta
+		feixe(cores({ { 0, rgb(60, 30, 110) }, { 1, rgb(10, 8, 35) } }), 1.4, 34, 0.3, 0.75, 0, 0),                        -- o ESPAÇO dentro
 	}
 	-- riscos amarelos correndo dentro do portal
 	local riscos = {}
@@ -2056,13 +2060,40 @@ local function conePortal(pastaAlvo, ball)
 		b.Parent = cauda
 		riscos[i] = { A = a, Desvio = V3(math.random() * 2 - 1, math.random() * 2 - 1, 0) * 7, Fase = math.random() * 6 }
 	end
-	-- planetas passando por dentro (vão da ponta pra boca e reaparecem)
+	-- planetas DESENHADOS passando por dentro do portal (da ponta pra boca, e
+	-- reaparecem): billboard com a esfera sombreada (um deles com anel) — sem
+	-- AlwaysOnTop (com ele o billboard some; ver memória)
+	local ESFERA, ANEL, BRILHO = "rbxassetid://110065763545195", "rbxassetid://109697697529772", "rbxassetid://116102662517740"
 	local planetas = {}
-	local coresPl = { rgb(235, 165, 90), rgb(225, 205, 170), rgb(250, 225, 150), rgb(170, 150, 210) }
-	for i = 1, 4 do
-		local pl = parte(pastaAlvo, "PlanetaPortal" .. i, { Shape = Enum.PartType.Ball, Material = Enum.Material.SmoothPlastic, Color = coresPl[i] })
-		pl.Transparency = 0.15
-		planetas[i] = { Parte = pl, Fase = (i - 1) / 4, Tam = 1.6 + math.random() * 2.2, Desvio = V3(math.random() * 2 - 1, math.random() * 2 - 1, 0) }
+	local coresPl = { rgb(235, 165, 90), rgb(225, 205, 170), rgb(250, 225, 150), rgb(170, 150, 210), rgb(120, 190, 255), rgb(255, 130, 110) }
+	for i = 1, #coresPl do
+		local anc = parte(pastaAlvo, "PlanetaPortal" .. i)
+		local bb = Instance.new("BillboardGui")
+		bb.LightInfluence = 0
+		bb.MaxDistance = 100000
+		bb.ClipsDescendants = false
+		bb.Size = UDim2.fromScale(1, 1)
+		bb.Adornee = anc
+		bb.Parent = anc
+		local function img(id, cor, sx, sy, transp, z, rot)
+			local g = Instance.new("ImageLabel")
+			g.BackgroundTransparency = 1
+			g.Image = id
+			g.ImageColor3 = cor
+			g.ImageTransparency = transp
+			g.AnchorPoint = Vector2.new(0.5, 0.5)
+			g.Position = UDim2.fromScale(0.5, 0.5)
+			g.Size = UDim2.fromScale(sx, sy)
+			g.ZIndex = z
+			g.Rotation = rot or 0
+			g.Parent = bb
+			return g
+		end
+		local imgs = { img(BRILHO, coresPl[i], 1.7, 1.7, 0.45, 1) }
+		if i == 2 or i == 5 then table.insert(imgs, img(ANEL, rgb(255, 235, 200), 2.2, 0.55, 0.15, 2, -18)) end
+		table.insert(imgs, img(ESFERA, coresPl[i], 1, 1, 0, 3))
+		planetas[i] = { Anc = anc, BB = bb, Imgs = imgs, Fase = (i - 1) / #coresPl, Tam = 3 + math.random() * 4.5,
+			Desvio = V3(math.random() * 2 - 1, math.random() * 2 - 1, 0) }
 	end
 	local estrelas = emissor(cauda, {
 		Cor = cores({ { 0, rgb(255, 255, 255) }, { 1, rgb(200, 220, 255) } }), Tamanho = numeros({ { 0, 0.35 }, { 1, 0 } }),
@@ -2075,12 +2106,12 @@ local function conePortal(pastaAlvo, ball)
 	local obj = { Coisas = { cauda, aBola } }
 	for _, b in ipairs(feixes) do table.insert(obj.Coisas, b) end
 	for _, r in ipairs(riscos) do table.insert(obj.Coisas, r.A) end
-	for _, pl in ipairs(planetas) do table.insert(obj.Coisas, pl.Parte) end
+	for _, pl in ipairs(planetas) do table.insert(obj.Coisas, pl.Anc) end
 	table.insert(obj.Coisas, brilhoEstrela)
 	function obj.Atualizar(tempo)
 		local v = ball.AssemblyLinearVelocity
 		local dir = v.Magnitude > 1 and v.Unit or V3(0, -0.3, -1).Unit
-		local comp = math.clamp(v.Magnitude * 0.22, 10, 26)
+		local comp = math.clamp(v.Magnitude * 0.24, 18, 46) -- ⚠️ v119: caminho maior (era 10-26)
 		local boca = ball.Position - dir * comp
 		local lado = dir:Cross(Vector3.yAxis)
 		if lado.Magnitude < 0.05 then lado = Vector3.xAxis end
@@ -2093,11 +2124,14 @@ local function conePortal(pastaAlvo, ball)
 			r.A.WorldPosition = boca + lado * (r.Desvio.X * (0.8 + 0.2 * oscila)) + cima * r.Desvio.Y
 		end
 		for _, pl in ipairs(planetas) do
-			local u = (tempo * 0.9 + pl.Fase) % 1
-			local pos = ball.Position - dir * (comp * u) + (lado * pl.Desvio.X + cima * pl.Desvio.Y) * (8 * u)
-			pl.Parte.Size = Vector3.one * (pl.Tam * (0.3 + 0.7 * u))
-			pl.Parte.CFrame = CFrame.new(pos)
-			pl.Parte.Transparency = 0.15 + 0.75 * u
+			local u = (tempo * 0.7 + pl.Fase) % 1
+			local pos = ball.Position - dir * (comp * (0.15 + 0.85 * u)) + (lado * pl.Desvio.X + cima * pl.Desvio.Y) * (11 * u)
+			local tam = pl.Tam * (0.35 + 0.65 * u)
+			pl.BB.Size = UDim2.fromScale(tam, tam)
+			pl.Anc.CFrame = CFrame.new(pos)
+			-- nasce (aparece) e some na boca do portal
+			local alfa = math.min(u / 0.12, 1) * (1 - math.max((u - 0.8) / 0.2, 0))
+			for k, g in ipairs(pl.Imgs) do g.ImageTransparency = 1 - alfa * (k == 1 and 0.55 or 1) end
 		end
 	end
 	return obj

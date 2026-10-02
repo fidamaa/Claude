@@ -523,6 +523,9 @@ Config.PULSE_DEFENDER_CHIP_RANGE = 12
 -- genérico de Passe/Cobrança) — sem isso o cap antigo apagava toda a
 -- diferença entre raridades altas.
 Config.PULSE_SHOT_FORCE_CAP_MULT = 6.0
+-- ⚠️ v119: teto da VELOCIDADE do voo do chute de Hissatsu (a força/vida da bola não
+-- muda). Antes a velocidade era igual à força (Mítica = 600-900 studs/s).
+Config.HISSATSU_VELOCIDADE_MAX = 210
 
 -- ⚠️ v85 — MIRA DA HISSATSU SEM ASSISTENTE: o ponto sob o cursor é usado
 -- exatamente como vem (ver _G.PulseComputeShotTarget no BallController e
