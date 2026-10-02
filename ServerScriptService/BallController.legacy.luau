@@ -6013,6 +6013,10 @@ _G.PulseExecuteTackle = function(player, effect, def)
 				if effect.FreezeRadius and effect.FreezeDuration and _G.PulseApplyAreaFreeze then
 					_G.PulseApplyAreaFreeze(player, effect.FreezeRadius, effect.FreezeDuration)
 				end
+				-- ⚠️ v113: Clarão de Fótons só cega (tela branca), num raio enorme
+				if effect.Cegueira and _G.PulseAplicarCegueira then
+					_G.PulseAplicarCegueira(player, r.Position, effect.Cegueira.Raio, effect.Cegueira.Duracao)
+				end
 				if effect.KnockbackRadius and effect.KnockbackForce and _G.PulseApplyAreaKnockback then
 					_G.PulseApplyAreaKnockback(player, effect.KnockbackRadius, effect.KnockbackForce)
 				end

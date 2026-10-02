@@ -611,7 +611,7 @@ Data.Pulses = {
 		Name = "Vendaval",
 		Rarity = "Rare",
 		Element = "Vento",
-		Description = "Vendaval dá um arranque curto que DEVOLVE energia em vez de gastar — é o que mantém suas outras habilidades disponíveis até o fim do jogo, já que a energia só enche de novo no intervalo.",
+		Description = "Vendaval dá um arranque que DEVOLVE energia em vez de gastar, te dá um pique de velocidade, a rajada EMPURRA quem estiver colado e o vento a favor acelera os companheiros perto por 3s.",
 		Action = "DribbleMove",
 		Scaling = { DribbleSkill = 0.6, Speed = 0.4 }, -- ⚠️ NOVO: fórmula de potência (arranque)
 		Cooldown = 35, -- ⚠️ v107: mítica no máximo 90s ("dar pra usar umas duas, três vezes na partida"; era 45)
@@ -629,6 +629,13 @@ Data.Pulses = {
 			EnergyRefund = 40,
 			SpeedBoostMult = 1.35,
 			SpeedBoostDuration = 3.5,
+			-- ⚠️ v113 — PEDIDO: "Vendaval: mais utilidade". A rajada EMPURRA quem está
+			-- colado e o vento a favor acelera os COMPANHEIROS em volta por 3s.
+			KnockbackRadius = 12,
+			KnockbackForce = 38,
+			TeamBuffRadius = 35,
+			TeamBuffDuration = 3,
+			TeamSpeedMult = 1.15,
 		},
 	},
 
@@ -730,11 +737,14 @@ Data.Pulses = {
 		Name = "Investida em Chamas",
 		Rarity = "Common",
 		Element = "Fogo",
-		Description = "Investida em Chamas te cobre com um véu de fogo e você avança JOGANDO LONGE quem estiver colado — o drible de quem não desvia, atravessa.",
+		Description = "Investida em Chamas te cobre com um véu do SEU elemento e você avança: Fogo joga longe quem estiver colado, Vento empurra muito mais longe, Void atordoa, Natureza deixa espinhos que lentificam, Luz cega.",
 		Action = "DribbleMove",
 		Scaling = { DribbleSkill = 0.6, Physical = 0.4 },
 		Cooldown = 25,
-		Effect = { DistanceMult = 1.35, SelfIframe = 0.6, KnockbackRadius = 8, KnockbackForce = 45 },
+		-- ⚠️ v113 — PEDIDO: "dash de fogo: variantes elementais com efeito diferente
+		-- por elemento". O efeito (e a cor do VFX) sai do elemento do JOGADOR (ver
+		-- VARIANTES_INVESTIDA no PulseController).
+		Effect = { DistanceMult = 1.35, SelfIframe = 0.6, VarianteElemental = true },
 	},
 
 	-- Illusion Ball (イリュージョンボール, Floresta -> Natureza): dá um mortal com a
@@ -745,11 +755,16 @@ Data.Pulses = {
 		Name = "Bola Ilusão",
 		Rarity = "Rare",
 		Element = "Natureza",
-		Description = "Bola Ilusão cria duas bolas falsas girando em volta de você — quem estiver perto se confunde e cai (quebra de tornozelo de longe) enquanto você passa com a de verdade.",
-		Action = "DribbleMove",
+		Description = "Bola Ilusão cria duas CÓPIAS suas com bola que saem em direções sorteadas (frente e diagonais) — você é a terceira e anda livre. Em 1,5s as cópias somem numa nuvem.",
+		-- ⚠️ v113 — PEDIDO: "Ilusão de bolas: 3 clones, um deles é você (aleatório);
+		-- os clones vão pra frente, diagonal direita e diagonal esquerda; você anda
+		-- livre; os clones somem em 1,5s com animação". Instantânea (sem o arranque
+		-- forçado do drible): 2 cópias em 2 das 3 direções, sorteadas.
+		Action = "Buff",
+		PositionHint = "MF",
 		Scaling = { DribbleSkill = 1 },
 		Cooldown = 35,
-		Effect = { DistanceMult = 1.5, SelfIframe = 1.0, AnkleRangeAdd = 6 },
+		Effect = { SelfIframe = 1.0, Ilusao = { Duracao = 1.5, Distancia = 22 } },
 	},
 
 	-- Zigzag Spark (ジグザグスパーク, Vento): pula de um lado pro outro juntando
@@ -763,7 +778,11 @@ Data.Pulses = {
 		Action = "DribbleMove",
 		Scaling = { DribbleSkill = 0.7, Speed = 0.3 },
 		Cooldown = 50,
-		Effect = { DistanceMult = 1.6, SelfIframe = 0.6, StunRadius = 16, StunDuration = 1.4 },
+		-- ⚠️ v113 — PEDIDO: "drible de raio: garantir o atordoamento 100%". O stun saía
+		-- no INSTANTE do aperto num raio menor (16, escalado) que o dos raios do VFX
+		-- (18, aos 0.5-0.8s) — quem se afastava via o raio acertar e não travava.
+		-- Agora sai quando o raio chega, raio 20, ignora resistência, pega o bot.
+		Effect = { DistanceMult = 1.6, SelfIframe = 0.6, StunGarantido = { Raio = 20, Duracao = 1.6, Atraso = 0.8 } },
 	},
 
 	-- Sprint Warp (スプリントワープ, Void): dispara levantando poeira e se TELEPORTA
@@ -817,7 +836,7 @@ Data.Pulses = {
 		Image = "rbxassetid://92156730116981", -- ⚠️ v104: arte do artista (pacote "Imagens (2)")
 		Rarity = "Rare",
 		Element = "Void",
-		Description = "Costura de Sombra manda sua SOMBRA correndo reta pelo chão na direção da mira — o primeiro adversário que ela alcançar fica PRESO 1.5s (alterne A/D pra segurar até 2s). Você também fica parado segurando a sombra, e ela não rouba a bola: serve pra TRAVAR o avanço dele.",
+		Description = "Costura de Sombra manda sua SOMBRA (larga) correndo reta pelo chão na direção da mira — o primeiro adversário que ela alcançar fica PRESO 1.5s (alterne A/D pra segurar até 2s). Você também fica parado segurando a sombra, e ela não rouba a bola: serve pra TRAVAR o avanço dele.",
 		Action = "Root",
 		Scaling = { Physical = 1 }, -- ⚠️ v98: sem Técnica (removida) — só os atributos da categoria · antes: Physical = 0.5, Technique = 0.5
 		Cooldown = 35, -- ⚠️ v107: mítica no máximo 90s ("dar pra usar umas duas, três vezes na partida"; era 45)
@@ -841,7 +860,7 @@ Data.Pulses = {
 		Effect = {
 			ZoneSlowRadius = 42,
 			ZoneSlowDuration = 8,
-			ZoneSlowMult = 0.45,
+			ZoneSlowMult = 0.5, -- ⚠️ v113: PEDIDO "lentidão na teia 50%"
 		},
 	},
 
@@ -902,13 +921,14 @@ Data.Pulses = {
 		Name = "Pisão de Sumô",
 		Rarity = "Common",
 		Element = "Fogo",
-		Description = "Pisão de Sumô dá um pisão que manda ondas de choque pelo chão — todo mundo perto perde o equilíbrio (atordoado) e o carrinho sai com alcance extra.",
-		Action = "Tackle",
+		Description = "Pisão de Sumô pisa NA MIRA, até 60 studs de distância: o pé gigante desce ali e as ondas de choque ATORDOAM quem estiver no lugar.",
+		-- ⚠️ v113 — PEDIDO: "Pisão: até 60 studs, no ponto do mouse, stuna quem
+		-- acertar". Deixou de ser carrinho: é instantâneo e cai onde você mirou.
+		Action = "Buff",
+		PositionHint = "DF",
 		Scaling = { Physical = 1 },
 		Cooldown = 25,
-		ImpactoAtraso = 0.38, -- o pisão
-		Deslocamento = "Passo",
-		Effect = { TackleRangeAdd = 3, StunRadius = 14, StunDuration = 0.9 },
+		Effect = { PisaoMira = { Alcance = 60, Raio = 13, Duracao = 1.2 } },
 	},
 
 	-- Spinning Cut (スピニングカット, Vento): chute giratório que manda um corte em
@@ -939,7 +959,7 @@ Data.Pulses = {
 		Cooldown = 50,
 		ImpactoAtraso = 0.05,
 		Deslocamento = "Carrinho",
-		Effect = { TackleRangeAdd = 7, FreezeRadius = 11, FreezeDuration = 1.4 },
+		Effect = { TackleRangeAdd = 10, FreezeRadius = 11, FreezeDuration = 1.4 }, -- ⚠️ v113: "um pouco mais longe" (era 7)
 	},
 
 	-- Photon Flash (フォトンフラッシュ, Fogo): junta faíscas de luz girando e solta
@@ -948,13 +968,14 @@ Data.Pulses = {
 		Name = "Clarão de Fótons",
 		Rarity = "Legendary",
 		Element = "Fogo",
-		Description = "Clarão de Fótons solta um clarão de luz que CEGA (atordoa) todos os adversários num raio grande, e o carrinho alcança bem longe.",
+		Description = "Clarão de Fótons solta um clarão de luz que CEGA (tela branca) todos os adversários num raio enorme, e o carrinho alcança bem longe.",
 		Action = "Tackle",
 		Scaling = { Physical = 0.6, Speed = 0.4 },
 		Cooldown = 70,
 		ImpactoAtraso = 0.56, -- o clarão
 		Deslocamento = "Corrida",
-		Effect = { TackleRangeAdd = 9, StunRadius = 26, StunDuration = 1.6 },
+		-- ⚠️ v113 — PEDIDO: "Drible do Fóton: sem stun, só cegueira, área maior"
+		Effect = { TackleRangeAdd = 9, Cegueira = { Raio = 40, Duracao = 2.2 } },
 	},
 
 	-- Snow Angel (スノーエンジェル, Vento): salta sobre o adversário girando as

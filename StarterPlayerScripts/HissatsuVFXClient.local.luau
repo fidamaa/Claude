@@ -546,15 +546,26 @@ VFX["Hora do Céu"] = function(ch, root)
 	end)
 end
 
+-- ⚠️ v113 — a Investida muda com o ELEMENTO do jogador (efeito no servidor,
+-- VARIANTES_INVESTIDA; aqui só as cores): {meio, claro, forte}
+local CORES_INVESTIDA = {
+	Fogo = { rgb(255, 110, 20), rgb(255, 230, 140), rgb(255, 130, 40) },
+	Vento = { rgb(150, 220, 255), rgb(235, 250, 255), rgb(170, 230, 255) },
+	Void = { rgb(130, 50, 220), rgb(215, 180, 255), rgb(150, 70, 240) },
+	Natureza = { rgb(70, 190, 70), rgb(200, 255, 170), rgb(90, 210, 90) },
+	Luz = { rgb(255, 230, 120), rgb(255, 255, 230), rgb(255, 240, 160) },
+}
 VFX["Investida em Chamas"] = function(ch, root)
 	animar(ch, "InvestidaChamas")
+	local dono = Players:GetPlayerFromCharacter(ch)
+	local pal = CORES_INVESTIDA[dono and dono:GetAttribute(Config.ELEMENT_ATTRIBUTE_NAME) or "Fogo"] or CORES_INVESTIDA.Fogo
 	-- véu de chamas em ESPIRAL subindo do chão (0.1-0.45s)
 	local base = noChao(root.Position, 0)
 	local chamas = {}
 	for i = 1, 3 do
 		local p = parte({ Transparency = 1, Size = V3(0.3, 0.3, 0.3) })
-		fogoEm(p, 70, 2, rgb(255, 110, 20))
-		rastroNaParte(p, 0.8, cores({ { 0, rgb(255, 230, 140) }, { 1, rgb(255, 90, 20) } }), 0.25, 0.9)
+		fogoEm(p, 70, 2, pal[1])
+		rastroNaParte(p, 0.8, cores({ { 0, pal[2] }, { 1, pal[1] } }), 0.25, 0.9)
 		chamas[i] = p
 	end
 	durante(0.9, function(t)
@@ -574,7 +585,7 @@ VFX["Investida em Chamas"] = function(ch, root)
 	for i = 0, 5 do
 		task.delay(0.05 + i * 0.06, function()
 			if not root.Parent then return end
-			anel(V3(root.Position.X, base.Y + 0.3 + i * 0.9, root.Position.Z), Vector3.yAxis, rgb(255, 130, 40), 3.5, 5.5, 0.35)
+			anel(V3(root.Position.X, base.Y + 0.3 + i * 0.9, root.Position.Z), Vector3.yAxis, pal[3], 3.5, 5.5, 0.35)
 		end)
 	end
 	-- a investida: fogo no corpo e estouro em quem for jogado longe
@@ -582,17 +593,17 @@ VFX["Investida em Chamas"] = function(ch, root)
 		if not root.Parent then return end
 		local a = Instance.new("Attachment")
 		a.Parent = root
-		local fogo = fogoEm(a, 110, 2.4)
+		local fogo = fogoEm(a, 110, 2.4, pal[1])
 		task.delay(0.6, function() fogo.Enabled = false; Debris:AddItem(a, 0.8) end)
-		for _, alvo in ipairs(adversariosPerto(ch, root.Position, 9)) do
-			onda(alvo.Position, frenteDe(root), rgb(255, 150, 50), 9, 0.3, 0.3)
-			faiscas(alvo.Position, rgb(255, 150, 60), 30, 20)
+		for _, alvo in ipairs(adversariosPerto(ch, root.Position, 10)) do
+			onda(alvo.Position, frenteDe(root), pal[3], 9, 0.3, 0.3)
+			faiscas(alvo.Position, pal[2], 30, 20)
 		end
 	end)
 end
 
 VFX["Bola Ilusão"] = function(ch, root)
-	animar(ch, "BolaIlusao")
+	-- (⚠️ v113: sem a animação — agora ele anda livre enquanto as cópias saem)
 	local bola = workspace:FindFirstChild(Config.BALL_NAME)
 	local fantasmas = {}
 	for i = 1, 2 do
@@ -635,6 +646,107 @@ VFX["Bola Ilusão"] = function(ch, root)
 		for _, f in ipairs(fantasmas) do sumir(f.Bola, 0.12); sumir(f.Aura, 0.12) end
 		if bola then faiscas(bola.Position, rgb(200, 140, 255), 25, 10) end
 	end)
+end
+
+-- ⚠️ v113 — BOLA ILUSÃO: 2 cópias do jogador COM BOLA saem em 2 direções
+-- (dados.Dirs, sorteadas no servidor entre frente e diagonais); ele é a
+-- terceira figura. Em Duracao somem numa nuvem roxa.
+VFX["Bola Ilusão@clones"] = function(ch, root, dados)
+	if not dados or type(dados.Dirs) ~= "table" then return end
+	local dur = dados.Duracao or 1.5
+	local dist = dados.Distancia or 22
+	local bolaReal = workspace:FindFirstChild(Config.BALL_NAME)
+	local inicio = root.CFrame
+	local antes = ch.Archivable
+	ch.Archivable = true
+	local copias = {}
+	for i, dir in ipairs(dados.Dirs) do
+		if typeof(dir) ~= "Vector3" then continue end
+		local ok, c = pcall(function() return ch:Clone() end)
+		if ok and c then
+			for _, d in ipairs(c:GetDescendants()) do
+				if d:IsA("Script") or d:IsA("LocalScript") or d:IsA("Sound") or d:IsA("Highlight")
+					or d:IsA("ParticleEmitter") or d:IsA("Trail") or d:IsA("Beam") then
+					d:Destroy()
+				elseif d:IsA("BasePart") then
+					d.CanCollide, d.CanQuery, d.CanTouch = false, false, false
+					d.Anchored = d.Name == "HumanoidRootPart"
+					d.Massless = true
+				elseif d:IsA("Humanoid") then
+					d.EvaluateStateMachine = false
+				end
+			end
+			c.Parent = pasta
+			local bola
+			if bolaReal then
+				local okB, b = pcall(function() return bolaReal:Clone() end)
+				if okB and b then
+					for _, f in ipairs(b:GetChildren()) do
+						if not (f:IsA("DataModelMesh") or f:IsA("Decal") or f:IsA("Texture")) then f:Destroy() end
+					end
+					b.Anchored, b.CanCollide, b.CanQuery, b.CanTouch = true, false, false, false
+					b.Parent = pasta
+					bola = b
+				end
+			end
+			if _G.AnimadorRegistrar then _G.AnimadorRegistrar(c, { SempreNoChao = true }) end
+			table.insert(copias, { Modelo = c, Root = c:FindFirstChild("HumanoidRootPart"), Dir = dir.Unit, Bola = bola })
+		end
+	end
+	ch.Archivable = antes
+	fumaca(noChao(root.Position, 0.5), cores({ { 0, rgb(210, 170, 255) }, { 1, rgb(120, 60, 200) } }), 12, 2, 5)
+	local raioBola = bolaReal and bolaReal.Size.X / 2 or 0.85
+	durante(dur, function(t)
+		for _, cp in ipairs(copias) do
+			if cp.Root then
+				local u = math.min(t / dur, 1)
+				local pos = inicio.Position + cp.Dir * dist * u
+				cp.Root.CFrame = CFrame.lookAt(pos, pos + cp.Dir)
+				if cp.Bola then
+					cp.Bola.CFrame = CFrame.new(noChao(pos + cp.Dir * 1.8, raioBola)) * CFrame.Angles(t * 10, 0, 0)
+				end
+			end
+		end
+	end, function()
+		for _, cp in ipairs(copias) do
+			local onde = cp.Root and cp.Root.Position or root.Position
+			fumaca(onde, cores({ { 0, rgb(225, 195, 255) }, { 1, rgb(110, 50, 190) } }), 18, 3, 7)
+			faiscas(onde, rgb(210, 160, 255), 25, 14)
+			anel(noChao(onde, 0.3), Vector3.yAxis, rgb(190, 120, 255), 1, 7, 0.35)
+			if _G.AnimadorRemover then pcall(_G.AnimadorRemover, cp.Modelo) end
+			for _, d in ipairs(cp.Modelo:GetDescendants()) do
+				if d:IsA("BasePart") and d.Name ~= "HumanoidRootPart" then sumir(d, 0.25, { Size = d.Size * 0.3 }) end
+			end
+			if cp.Bola then sumir(cp.Bola, 0.25) end
+			Debris:AddItem(cp.Modelo, 0.35)
+		end
+	end)
+end
+
+-- ⚠️ v113 — CEGUEIRA (Clarão de Fótons / Investida de Luz): quem está na lista
+-- fica com a tela branca e ela volta aos poucos.
+VFX["Clarão de Fótons@cegar"] = function(_ch, _root, dados)
+	if not dados or type(dados.Vitimas) ~= "table" then return end
+	local sou = false
+	for _, id in ipairs(dados.Vitimas) do if id == LocalPlayer.UserId then sou = true end end
+	if not sou then return end
+	local dur = math.max(tonumber(dados.Duracao) or 1.5, 0.3)
+	local gui = Instance.new("ScreenGui")
+	gui.Name = "Cegueira"
+	gui.IgnoreGuiInset = true
+	gui.DisplayOrder = 60
+	gui.ResetOnSpawn = false
+	local f = Instance.new("Frame")
+	f.Size = UDim2.fromScale(1, 1)
+	f.BorderSizePixel = 0
+	f.BackgroundColor3 = rgb(255, 252, 235)
+	f.BackgroundTransparency = 0
+	f.Parent = gui
+	gui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+	task.delay(dur * 0.4, function()
+		TweenService:Create(f, TweenInfo.new(dur * 0.6, Enum.EasingStyle.Quad, Enum.EasingDirection.In), { BackgroundTransparency = 1 }):Play()
+	end)
+	Debris:AddItem(gui, dur + 0.1)
 end
 
 VFX["Faísca Zigue-Zague"] = function(ch, root)
@@ -769,7 +881,7 @@ VFX["Costura de Sombra"] = function(ch, root, dados)
 		if not estado.Parou and ch.Parent then animar(ch, "CosturaSegura", math.max(atraso + alcance / vel - 0.5, 0.3)) end
 	end)
 	task.delay(atraso, function()
-		local faixa = parte({ Color = SOMBRA, Material = Enum.Material.SmoothPlastic, Transparency = 0.25, Size = V3(1.8, 0.05, 0.1) })
+		local faixa = parte({ Color = SOMBRA, Material = Enum.Material.SmoothPlastic, Transparency = 0.25, Size = V3(5.4, 0.05, 0.1) })
 		estado.Faixa = faixa
 		local de = noChao(origem, 0.06)
 		durante(alcance / vel + 0.05, function(t)
@@ -777,7 +889,7 @@ VFX["Costura de Sombra"] = function(ch, root, dados)
 			local len = math.min(alcance, t * vel)
 			local fim = de + dir * len
 			if len > 0.1 then
-				faixa.Size = V3(1.8, 0.05, len)
+				faixa.Size = V3(5.4, 0.05, len)
 				faixa.CFrame = CFrame.lookAt((de + fim) / 2, fim)
 			end
 		end, function()
@@ -817,14 +929,14 @@ VFX["Costura de Sombra@agarra"] = function(ch, root, dados)
 		Size = V3(0.3, 3.4, 3.4), CFrame = CFrame.new(base + V3(0, 0.1, 0)) * CFrame.Angles(0, 0, math.rad(90)), Transparency = 0.15 })
 	fumaca(base + V3(0, 0.5, 0), cores({ { 0, rgb(60, 30, 80) }, { 1, rgb(20, 10, 30) } }), 10, 1.5, 4)
 	-- a faixa liga os dois até soltar (o QTE pode esticar — ver "@segura")
-	local faixa = estado.Faixa or parte({ Color = SOMBRA, Material = Enum.Material.SmoothPlastic, Transparency = 0.25, Size = V3(1.8, 0.05, 0.1) })
+	local faixa = estado.Faixa or parte({ Color = SOMBRA, Material = Enum.Material.SmoothPlastic, Transparency = 0.25, Size = V3(5.4, 0.05, 0.1) })
 	durante(2.5, function()
 		if os.clock() >= estado.Fim then return end
 		local de = noChao(root.Position, 0.06)
 		local ate = noChao(alvo.Position, 0.06)
 		local len = (ate - de).Magnitude
 		if len > 0.1 then
-			faixa.Size = V3(1.8, 0.05, len)
+			faixa.Size = V3(5.4, 0.05, len)
 			faixa.CFrame = CFrame.lookAt((de + ate) / 2, ate)
 		end
 	end)
@@ -935,21 +1047,40 @@ VFX["Muralha Infinita"] = function(ch, root)
 	end)
 end
 
-VFX["Pisão de Sumô"] = function(ch, root)
+VFX["Pisão de Sumô"] = function(ch, _root)
+	-- ⚠️ v113: o pisão cai NA MIRA (ver "@mira"); aqui só a pose
 	animar(ch, "PisaoSumo")
+end
+VFX["Pisão de Sumô@mira"] = function(ch, root, dados)
 	local AMARELO = rgb(255, 225, 80)
+	local ponto = (dados and typeof(dados.Posicao) == "Vector3") and dados.Posicao or root.Position
+	local raio = (dados and dados.Raio) or 13
+	-- o PÉ GIGANTE desce no ponto mirado
+	local giro = CFrame.Angles(0, math.rad(root.Orientation.Y), 0)
+	local pe = parte({ Color = AMARELO, Size = V3(8, 3.2, 12.5), Transparency = 0.15, CFrame = CFrame.new(ponto + V3(0, 26, 0)) * giro })
+	local dedoes = parte({ Color = AMARELO, Size = V3(8, 2, 3.2), Transparency = 0.15, CFrame = pe.CFrame * CFrame.new(0, -0.5, -7.3) })
+	local luzPe = Instance.new("PointLight")
+	luzPe.Color = AMARELO
+	luzPe.Range = 20
+	luzPe.Parent = pe
+	TweenService:Create(pe, TweenInfo.new(0.38, Enum.EasingStyle.Quad, Enum.EasingDirection.In), { CFrame = CFrame.new(ponto + V3(0, 1.6, 0)) * giro }):Play()
+	TweenService:Create(dedoes, TweenInfo.new(0.38, Enum.EasingStyle.Quad, Enum.EasingDirection.In), { CFrame = CFrame.new(ponto + V3(0, 1.1, 0)) * giro * CFrame.new(0, 0, -7.3) }):Play()
+	task.delay(0.9, function() sumir(pe, 0.3); sumir(dedoes, 0.3) end)
 	task.delay(0.38, function() -- o PISÃO
 		if not root.Parent then return end
-		local base = noChao(root.Position, 0.2)
+		local base = noChao(ponto, 0.2)
+		for _, alvo in ipairs(adversariosPerto(ch, ponto, raio)) do
+			if alvo.Parent then animar(alvo.Parent, "Achatado", 0.9) end
+		end
 		for i = 0, 2 do
 			task.delay(i * 0.09, function()
 				anel(base, Vector3.yAxis, AMARELO, 3, 16 + i * 5, 0.5, 0.35)
 			end)
 		end
-		onda(base, Vector3.yAxis, rgb(255, 240, 150), 14, 0.3, 0.3)
+		onda(base, Vector3.yAxis, rgb(255, 240, 150), raio * 2, 0.3, 0.3)
 		fumaca(base, cores({ { 0, rgb(220, 200, 150) }, { 1, rgb(150, 130, 90) } }), 14, 2, 8)
-		-- o PÉ GIGANTE amarelo em cima de quem perdeu o equilíbrio
-		for i, alvo in ipairs(adversariosPerto(ch, root.Position, 15)) do
+		-- (o pé grande já desceu no ponto; os pés menores em cima dos outros saíram)
+		for i, alvo in ipairs({}) do
 			if i > 3 then break end
 			task.delay(0.1 + i * 0.06, function()
 				if not alvo.Parent then return end

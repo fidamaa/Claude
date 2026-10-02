@@ -739,7 +739,8 @@ local function executeRoot(player, effect, slot, def)
 		end
 		local alcance = effect.RootRadius or 46
 		local _ = effect.RootDuration -- (v110: tempo preso = 1.5s + QTE, até 2s — ver o agarrão abaixo)
-		local VEL, LARGURA, ATRASO = 85, 4.5, 0.45 -- (ATRASO = mãos juntas e braços pra trás na animação)
+		-- ⚠️ v113 — PEDIDO: "Costura de Sombra: sombra 3x maior" (largura 4.5 -> 13.5)
+		local VEL, LARGURA, ATRASO = 85, 13.5, 0.45 -- (ATRASO = mãos juntas e braços pra trás na animação)
 		local origem = root.Position
 		-- ⚠️ v110 — PEDIDO: "enquanto eu estiver usando essa habilidade eu NÃO
 		-- posso me mover, porque eu tô criando a sombra... é pra travar o avanço
@@ -1217,7 +1218,150 @@ end
 -- empurrar, um passe pode travar a bola pro companheiro, etc. As que
 -- dependem de física/posição vão pro BallController (_G.*); as que são
 -- puramente de estado do Pulso ficam aqui.
+-- ⚠️ v113 — cegueira: tela branca nos ADVERSÁRIOS no raio (Clarão de Fótons,
+-- Investida de Luz). Remoto direto (não vai pro replay: não pode cegar quem
+-- está assistindo o replay).
+_G.PulseAplicarCegueira = function(player, centro, raio, duracao)
+	if typeof(centro) ~= "Vector3" or not raio or not duracao then return end
+	local vitimas = {}
+	for _, other in ipairs(Players:GetPlayers()) do
+		if other == player or (player.Team and other.Team and player.Team == other.Team) then continue end
+		local r = other.Character and other.Character:FindFirstChild("HumanoidRootPart")
+		if r and Vector3.new(r.Position.X - centro.X, 0, r.Position.Z - centro.Z).Magnitude <= raio then
+			table.insert(vitimas, other.UserId)
+		end
+	end
+	if #vitimas > 0 and Remotes.HissatsuVFX and player.Character then
+		Remotes.HissatsuVFX:FireAllClients(player.Character, "Clarão de Fótons@cegar", nil, { Vitimas = vitimas, Duracao = duracao })
+	end
+end
+
+-- ⚠️ v113: variante da Investida pelo elemento do JOGADOR (ver PulseInstinctData)
+local VARIANTES_INVESTIDA = {
+	Fogo = { KnockbackRadius = 9, KnockbackForce = 50 },
+	Vento = { KnockbackRadius = 13, KnockbackForce = 80 },
+	Void = { StunGarantido = { Raio = 10, Duracao = 1.0, Atraso = 0.45 } },
+	Natureza = { ZoneSlowRadius = 12, ZoneSlowDuration = 3, ZoneSlowMult = 0.6 },
+	Luz = { Cegueira = { Raio = 13, Duracao = 1.4, Atraso = 0.45 } },
+}
+
 local function applyExtraEffectKeys(player, slot, def, effect)
+	if effect.VarianteElemental then
+		local el = player:GetAttribute(Config.ELEMENT_ATTRIBUTE_NAME)
+		local v = VARIANTES_INVESTIDA[el] or VARIANTES_INVESTIDA.Fogo
+		local copia = table.clone(effect)
+		copia.VarianteElemental = nil
+		for k, val in pairs(v) do copia[k] = val end
+		effect = copia
+	end
+
+	-- ⚠️ v113: ATORDOAMENTO GARANTIDO (Faísca Zigue-Zague, Investida Sombria):
+	-- sai quando o golpe CHEGA (Atraso), no raio inteiro, ignora a resistência
+	-- (Defesa Zumbi) e pega também o goleiro bot.
+	if effect.StunGarantido then
+		local sg = effect.StunGarantido
+		task.delay(sg.Atraso or 0, function()
+			local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+			if not root then return end
+			for _, other in ipairs(Players:GetPlayers()) do
+				if other == player or (player.Team and other.Team and player.Team == other.Team) then continue end
+				local r = other.Character and other.Character:FindFirstChild("HumanoidRootPart")
+				if r and (r.Position - root.Position).Magnitude <= sg.Raio and _G.StunPlayer then
+					local mult = _G.GetInstinctStunMult and _G.GetInstinctStunMult(other) or 1
+					_G.StunPlayer(other, sg.Duracao / math.max(mult, 0.05))
+				end
+			end
+			if _G.GetGKBotPositions and _G.FreezeGKBot then
+				for _, bot in ipairs(_G.GetGKBotPositions()) do
+					if (not player.Team or bot.TeamName ~= player.Team.Name) and (bot.Position - root.Position).Magnitude <= sg.Raio then
+						_G.FreezeGKBot(bot.TeamName, sg.Duracao)
+					end
+				end
+			end
+		end)
+	end
+
+	-- ⚠️ v113: cegueira em volta de quem usou (Investida de Luz)
+	if effect.Cegueira then
+		local cg = effect.Cegueira
+		task.delay(cg.Atraso or 0, function()
+			local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+			if root then _G.PulseAplicarCegueira(player, root.Position, cg.Raio, cg.Duracao) end
+		end)
+	end
+
+	-- ⚠️ v113: BOLA ILUSÃO — 2 cópias em 2 das 3 direções (frente, diagonais),
+	-- sorteadas; quem usou é a terceira figura e anda livre (ver HissatsuVFX).
+	if effect.Ilusao then
+		local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+		if root then
+			local look = Vector3.new(root.CFrame.LookVector.X, 0, root.CFrame.LookVector.Z)
+			look = look.Magnitude > 0.01 and look.Unit or Vector3.new(0, 0, -1)
+			local angulos = { 0, 40, -40 }
+			table.remove(angulos, math.random(1, 3)) -- a direção que sobra é a "sua"
+			local dirs = {}
+			for i, a in ipairs(angulos) do dirs[i] = CFrame.Angles(0, math.rad(a), 0):VectorToWorldSpace(look) end
+			if Remotes.HissatsuVFX then
+				Config.DispararVFX("HissatsuVFX", player.Character, "Bola Ilusão@clones", def.Element,
+					{ Dirs = dirs, Duracao = effect.Ilusao.Duracao or 1.5, Distancia = effect.Ilusao.Distancia or 22 })
+			end
+		end
+	end
+
+	-- ⚠️ v113: PISÃO DE SUMÔ NA MIRA (até Alcance studs): o pé desce onde você
+	-- mirou e atordoa quem estiver ali.
+	if effect.PisaoMira then
+		local pm = effect.PisaoMira
+		local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+		if root then
+			local ponto
+			local mira = LastAimPoint[player]
+			if typeof(mira) == "Vector3" and mira.X == mira.X then
+				local plano = Vector3.new(mira.X - root.Position.X, 0, mira.Z - root.Position.Z)
+				if plano.Magnitude > (pm.Alcance or 60) then plano = plano.Unit * (pm.Alcance or 60) end
+				ponto = root.Position + plano
+			else
+				local look = Vector3.new(root.CFrame.LookVector.X, 0, root.CFrame.LookVector.Z)
+				ponto = root.Position + (look.Magnitude > 0.01 and look.Unit or Vector3.new(0, 0, -1)) * 12
+			end
+			local chaoY = root.Position.Y - 2.9
+			do
+				local filtro = RaycastParams.new()
+				filtro.FilterType = Enum.RaycastFilterType.Exclude
+				filtro.RespectCanCollide = true
+				local ignorar = {}
+				for _, p in ipairs(Players:GetPlayers()) do if p.Character then table.insert(ignorar, p.Character) end end
+				local bola = workspace:FindFirstChild(Config.BALL_NAME)
+				if bola then table.insert(ignorar, bola) end
+				filtro.FilterDescendantsInstances = ignorar
+				local hit = workspace:Raycast(Vector3.new(ponto.X, root.Position.Y + 6, ponto.Z), Vector3.new(0, -30, 0), filtro)
+				if hit then chaoY = hit.Position.Y end
+			end
+			ponto = Vector3.new(ponto.X, chaoY, ponto.Z)
+			freezeMovement(player, 0.5)
+			if Remotes.HissatsuVFX and player.Character then
+				Config.DispararVFX("HissatsuVFX", player.Character, "Pisão de Sumô@mira", def.Element, { Posicao = ponto, Atraso = 0.38, Raio = pm.Raio })
+			end
+			task.delay(0.38, function()
+				for _, other in ipairs(Players:GetPlayers()) do
+					if other == player or (player.Team and other.Team and player.Team == other.Team) then continue end
+					local r = other.Character and other.Character:FindFirstChild("HumanoidRootPart")
+					if r and Vector3.new(r.Position.X - ponto.X, 0, r.Position.Z - ponto.Z).Magnitude <= pm.Raio and _G.StunPlayer then
+						_G.StunPlayer(other, pm.Duracao)
+					end
+				end
+				if _G.GetGKBotPositions and _G.FreezeGKBot then
+					for _, bot in ipairs(_G.GetGKBotPositions()) do
+						if (not player.Team or bot.TeamName ~= player.Team.Name)
+							and Vector3.new(bot.Position.X - ponto.X, 0, bot.Position.Z - ponto.Z).Magnitude <= pm.Raio then
+							_G.FreezeGKBot(bot.TeamName, pm.Duracao)
+						end
+					end
+				end
+			end)
+		end
+	end
+
 	-- Iframe próprio (ex: Pulso Fantasma, Explosão, Carrinho Blindado).
 	if effect.SelfIframe and _G.GrantPulseIframe then
 		_G.GrantPulseIframe(player, effect.SelfIframe)
