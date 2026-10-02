@@ -909,6 +909,16 @@ FX_ARMA["Domínio"] = function(character)
 	end
 end
 
+-- MONSTRO DO DRIBLE (passivo da finta): a sombra amarela do Bachira fica pra trás
+FX_ARMA["Monstro do Drible"] = function(character)
+	local root = character:FindFirstChild("HumanoidRootPart")
+	if not root then return end
+	local amarelo = Color3.fromRGB(255, 205, 40)
+	sombra(root.Position, root.CFrame.LookVector, amarelo, 0.5, 0.5)
+	anel(root.Position - Vector3.new(0, 2.8, 0), Vector3.yAxis, amarelo, 2, 9, 0.35, 0.35)
+	faiscas(root.Position - Vector3.new(0, 2.5, 0), amarelo, 14, 14)
+end
+
 -- ===== CONTÍNUAS: aura própria enquanto a Arma vale =====
 local auras = {} -- [character] = { [nome] = { coisas } }
 local CONT_FX = {}
