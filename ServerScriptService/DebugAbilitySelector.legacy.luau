@@ -69,6 +69,12 @@ end
 local VALID_ROLES = { GK = true, DF = true, MF = true, FW = true }
 
 Remotes.DebugConfigureTesting.OnServerEvent:Connect(function(player, kind, value)
+	-- ⚠️ v118: equipar pelo debugger também atualiza a barra de habilidades do HUD
+	if kind == "Instinct" or kind == "Pulse" then
+		task.delay(0.2, function()
+			if player.Parent then player:SetAttribute("LoadoutVersao", (player:GetAttribute("LoadoutVersao") or 0) + 1) end
+		end)
+	end
 	if kind == "Instinct" then
 		if not instinctExists(value) then
 			warn(string.format("⚠️ DebugAbilitySelector: Instinto '%s' não existe em PulseInstinctData — ignorado.", tostring(value)))

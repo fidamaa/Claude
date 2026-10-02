@@ -6596,11 +6596,14 @@ end)()
 		end
 		-- ⚠️ v111 (teste): 16° dava só ~3 studs de desvio num passe de 40 — quase
 		-- não se via a curva. 20° x Curva (Rin 20°, Sae 24°).
-		local ang = math.rad(20 * math.clamp(curva, 0.2, 1.5))
+		-- ⚠️ v118 — PEDIDO: "a curva do chute do Rin é muito pequena, sabor curva —
+		-- quero pelo menos 3x mais". O desvio agora é LINEAR na Curva (tg = tan20°·
+		-- Curva; Rin Curva 3 = ~27% da distância no meio do caminho) e a velocidade
+		-- pra frente NÃO cai mais com a abertura (o chute não perde força).
+		local tg = math.tan(math.rad(20)) * math.clamp(curva, 0.2, 3.5)
 		local rapidez = horizontal.Magnitude
-		local tempoAteAlvo = distancia / (rapidez * math.cos(ang))
-		local tg = math.tan(ang)
-		local aberto = frente * (rapidez * math.cos(ang)) + direita * (lado * rapidez * math.sin(ang))
+		local tempoAteAlvo = distancia / rapidez
+		local aberto = frente * rapidez + direita * (lado * rapidez * tg)
 		ball.AssemblyLinearVelocity = aberto + Vector3.new(0, ball.AssemblyLinearVelocity.Y, 0)
 		-- ⚠️ v111 (teste): a curva era uma força por TEMPO calculada com a
 		-- velocidade de saída — a bola perde velocidade no caminho, então ela
@@ -6718,67 +6721,150 @@ end)()
 	end
 
 	-- =====================================================================
-	-- TABELA → UM-DOIS: toca no companheiro e a bola VOLTA na sua frente,
-	-- de primeira. Sem companheiro perto, faz a tabela com a SUA SOMBRA
-	-- (igual os chutes em grupo sozinho).
+	-- ⚠️ v118 — PASSE MAGNETIZADO (Tabela e Passe do Prodígio)
+	-- PEDIDO: "o passe de volta da tabela tem que ser automático, direto no seu
+	-- pé — se você se mexer um pouco, hoje não pega" + "o passe do Sae tem que
+	-- ser literalmente automático: alto, em curva, e magnetiza no corpo do
+	-- jogador". A bola não é mais só lançada numa parábola fixa: o servidor guia
+	-- a trajetória o voo inteiro (posição desejada a cada quadro) e o ponto de
+	-- chegada SEGUE o receptor — se ele andar, a bola acompanha. No fim, ele
+	-- domina sozinho. Se alguém pegar no meio do caminho (interceptação), o
+	-- guia solta e vale a física normal.
+	--   opts.Altura  = altura máxima acima da saída (passe alto)  OU
+	--   opts.Rapidez = velocidade horizontal (passe rasteiro/rápido)
+	--   opts.Desvio  = curva lateral (fração da distância, 0 = reto)
+	--   opts.Lado    = 1 / -1 (lado da curva)
+	-- =====================================================================
+	local passeGeracao = 0
+	local function pePe(r)
+		return Vector3.new(r.Position.X, r.Position.Y - 2.2, r.Position.Z)
+	end
+	local function passeMagnetico(de, receptor, opts, aoChegar)
+		local _, rDe = getCharacterParts(de)
+		local _, rRec = getCharacterParts(receptor)
+		if not rDe or not rRec then return false end
+		lancarBola(de, rDe, pePe(rRec), 60)
+		passeGeracao += 1
+		curveGeneration += 1 -- encerra qualquer curva antiga
+		local minha = passeGeracao
+		local g = workspace.Gravity * Config.BALL_GRAVITY_MULTIPLIER
+		local p0 = ball.Position
+		local alvo0 = pePe(rRec)
+		local plano0 = Vector3.new(alvo0.X - p0.X, 0, alvo0.Z - p0.Z)
+		local dist = plano0.Magnitude
+		local dy = alvo0.Y - p0.Y
+		local vy, T
+		if opts.Altura then
+			vy = math.sqrt(2 * g * math.max(opts.Altura, 1))
+			T = (vy + math.sqrt(math.max(0, vy * vy - 2 * g * dy))) / g
+		else
+			T = math.max(dist / (opts.Rapidez or 70), 0.25)
+			vy = (dy + 0.5 * g * T * T) / T
+		end
+		local frente = dist > 0.5 and plano0.Unit or plano(rDe.CFrame.LookVector, Vector3.new(0, 0, -1))
+		local lado = opts.Lado or 1
+		local desvio = (opts.Desvio or 0) * dist
+		local t = 0
+		local function posicaoEm(tt)
+			local u = math.clamp(tt / T, 0, 1)
+			local _, r = getCharacterParts(receptor)
+			local alvo = r and (pePe(r) + plano(r.AssemblyLinearVelocity, Vector3.zero) * math.min(r.AssemblyLinearVelocity.Magnitude, 40) * math.max(T - tt, 0) * 0.6) or alvo0
+			local planoAlvo = Vector3.new(alvo.X - p0.X, 0, alvo.Z - p0.Z)
+			local dirAgora = planoAlvo.Magnitude > 0.5 and planoAlvo.Unit or frente
+			local direita = dirAgora:Cross(Vector3.yAxis)
+			direita = direita.Magnitude > 0.01 and direita.Unit or Vector3.xAxis
+			local h = p0 + planoAlvo * u + direita * (lado * desvio * math.sin(math.pi * u))
+			-- vertical: parábola que termina na altura do pé do receptor
+			local yBase = p0.Y + vy * tt - 0.5 * g * tt * tt
+			local correcao = (alvo.Y - alvo0.Y) * u
+			return Vector3.new(h.X, yBase + correcao, h.Z), r
+		end
+		local conexao
+		conexao = RunService.Heartbeat:Connect(function(dt)
+			if minha ~= passeGeracao or not receptor.Parent then conexao:Disconnect() return end
+			if owner ~= nil then conexao:Disconnect() return end -- alguém dominou/interceptou
+			t += dt
+			local proxima, r = posicaoEm(t + dt)
+			if not r then conexao:Disconnect() return end
+			local perto = (ball.Position - r.Position).Magnitude <= 4.5
+			if t >= T or (perto and t > T * 0.5) then
+				conexao:Disconnect()
+				if (ball.Position - r.Position).Magnitude <= 9 then
+					ball.AssemblyLinearVelocity = Vector3.zero
+					setOwner(receptor)
+					pushToucher(receptor)
+					if aoChegar then task.spawn(aoChegar) end
+				end
+				return
+			end
+			ball.AssemblyLinearVelocity = (proxima - ball.Position) / math.max(dt, 1 / 120)
+		end)
+		return true, T
+	end
+
+	-- companheiro mais perto de um ponto (dentro do alcance de quem passa)
+	local function companheiroPerto(player, ponto, maxDoPassador, maxDoPonto)
+		local _, eu = getCharacterParts(player)
+		local melhor, menor = nil, maxDoPonto or math.huge
+		for _, plr in ipairs(Players:GetPlayers()) do
+			if plr == player or areOpponents(player, plr) or not plr.Team or plr.Team ~= player.Team then continue end
+			local _, r = getCharacterParts(plr)
+			if r and eu and (r.Position - eu.Position).Magnitude <= (maxDoPassador or math.huge) then
+				local d = Vector3.new(r.Position.X - ponto.X, 0, r.Position.Z - ponto.Z).Magnitude
+				if d < menor then melhor, menor = plr, d end
+			end
+		end
+		return melhor
+	end
+
+	-- lado da curva com menos gente no caminho
+	local function ladoLivre(player, de, para)
+		local frente = plano(para - de, Vector3.new(0, 0, -1))
+		local direita = frente:Cross(Vector3.yAxis).Unit
+		local dist = Vector3.new(para.X - de.X, 0, para.Z - de.Z).Magnitude
+		local peso = 0
+		for _, pos in ipairs(obstaculos(player)) do
+			local rel = Vector3.new(pos.X - de.X, 0, pos.Z - de.Z)
+			local along = rel:Dot(frente)
+			if along > 2 and along < dist then
+				local lateral = rel:Dot(direita)
+				if math.abs(lateral) < dist * 0.4 then peso += (lateral > 0 and 1 or -1) end
+			end
+		end
+		return peso > 0 and -1 or 1
+	end
+
+	-- =====================================================================
+	-- TABELA → UM-DOIS: toca no companheiro e a bola VOLTA de primeira.
+	-- ⚠️ v118 — PEDIDO: "não pode ser usada sozinho, precisa ter alguém; e o
+	-- passe de volta tem que ser automático, direto no seu pé (hoje, se você se
+	-- mexer um pouco, não pega)". Sem a sombra; a ida e a volta são passes
+	-- magnetizados (a volta persegue você até chegar no pé).
 	-- =====================================================================
 	_G.ArmaAtiva_Tabela = function(player, effect)
 		if owner ~= player then return false, "precisa estar com a bola" end
 		if isStunned(player) then return false, "atordoado" end
 		local _, root = getCharacterParts(player)
 		if not root then return false end
-		local frente = direcaoDaMira(player, root)
-		-- companheiro mais perto na frente
-		local parceiro, ponto, menor = nil, nil, effect.Raio or 50
-		for _, plr in ipairs(Players:GetPlayers()) do
-			if plr == player or areOpponents(player, plr) then continue end
-			local _, r = getCharacterParts(plr)
-			if r then
-				local rel = r.Position - root.Position
-				local d = rel.Magnitude
-				if d < menor and d > 6 and plano(rel, frente):Dot(frente) > -0.2 then
-					parceiro, ponto, menor = plr, r.Position, d
-				end
-			end
-		end
-		local sombra = parceiro == nil
-		if sombra then
-			-- a sombra aparece na diagonal, do lado com mais espaço
-			local direita = frente:Cross(Vector3.yAxis).Unit
-			local lado = alcanceLivre(root.Position, (frente + direita).Unit, 16) >= alcanceLivre(root.Position, (frente - direita).Unit, 16) and 1 or -1
-			local dirSombra = (frente * 0.8 + direita * 0.6 * lado).Unit
-			ponto = root.Position + dirSombra * alcanceLivre(root.Position, dirSombra, 15)
-		end
-		local chao = root.Position.Y - 2.5
-		local alvoIda = Vector3.new(ponto.X, chao + 1, ponto.Z)
-		local ida = (alvoIda - ball.Position).Magnitude
-		local rapidez = math.clamp(ida * 2.2 + 30, 55, 110)
-		lancarBola(player, root, alvoIda, rapidez)
-		vfx(player, "Tabela@ida", { De = root.Position, Ponto = alvoIda, Sombra = sombra }, 1.4)
-		local tempoIda = ida / rapidez + 0.05
-		task.delay(tempoIda, function()
-			if not player.Parent then return end
-			-- a bola ainda está com o parceiro/sombra? (ninguém do outro time pegou)
-			if owner and owner ~= parceiro then return end
-			if not owner and (ball.Position - alvoIda).Magnitude > 9 then return end
-			local _, meu = getCharacterParts(player)
-			if not meu then return end
-			local minhaFrente = plano(meu.AssemblyLinearVelocity, nil) or frente
-			local volta = meu.Position + minhaFrente * (effect.Adiantar or 12)
-			volta = Vector3.new(volta.X, chao + 1, volta.Z)
-			local distVolta = (volta - ball.Position).Magnitude
-			if owner then releaseOwner() end
-			ball.CanCollide = true
-			recentKicker, recentKickTime = parceiro or player, tick()
-			kickerClearedBody = false
-			hasBodyBlockedThisFlight = false
+		local _, mira = direcaoDaMira(player, root)
+		local raio = effect.Raio or 60
+		-- companheiro: o mais perto da mira (se tiver mira), senão o mais perto de você
+		local parceiro = companheiroPerto(player, mira or root.Position, raio, mira and 30 or nil)
+			or companheiroPerto(player, root.Position, raio, nil)
+		if not parceiro then return false, string.format("precisa de um companheiro a até %d studs", raio) end
+		local _, rParc = getCharacterParts(parceiro)
+		vfx(player, "Tabela@ida", { De = root.Position, Ponto = pePe(rParc), Sombra = false }, 1.4)
+		passeMagnetico(player, parceiro, { Rapidez = 95 }, function()
+			-- devolve de primeira, no pé de quem começou a tabela
+			task.wait(0.12)
+			if owner ~= parceiro or not player.Parent then return end
+			local _, rMeu = getCharacterParts(player)
+			local _, rP = getCharacterParts(parceiro)
+			if not rMeu or not rP then return end
+			playAnimation(parceiro, Config.ANIMATIONS.Kick, nil, nil, true)
+			passeMagnetico(parceiro, player, { Rapidez = 100 })
 			selfPickupLockUntil[player] = nil
-			local v = _G.VelocidadeBalistica and _G.VelocidadeBalistica(ball.Position, volta, math.clamp(distVolta * 2.2 + 30, 55, 110))
-			ball.AssemblyLinearVelocity = v or (plano(volta - ball.Position, frente) * 60)
-			applyCurve(nil, plano(volta - ball.Position, frente))
-			playKickFeedback(60)
-			if parceiro then playAnimation(parceiro, Config.ANIMATIONS.Kick, nil, nil, true) end
-			vfx(player, "Tabela@volta", { De = ball.Position, Ponto = volta, Sombra = sombra }, 1)
+			vfx(player, "Tabela@volta", { De = ball.Position, Ponto = pePe(rMeu), Sombra = false }, 1)
 		end)
 		return true
 	end
@@ -6821,31 +6907,29 @@ end)()
 	-- pé dele — contornando quem estiver no meio. Quem recebe chuta mais forte.
 	-- =====================================================================
 	_G.ArmaAtiva_PasseCurvo = function(player, effect)
+		-- ⚠️ v118 — PEDIDO: "o passe do Sae tem que ser literalmente automático:
+		-- aponta no jogador (o mais perto do mouse), sai um passe ALTO, em curva, e
+		-- magnetiza no corpo dele; com distância máxima um pouco antes do meio do
+		-- campo; cooldown maior". Ver passeMagnetico acima.
 		if owner ~= player then return false, "precisa estar com a bola" end
 		if isStunned(player) then return false, "atordoado" end
 		local _, root = getCharacterParts(player)
 		if not root then return false end
 		local frente, mira = direcaoDaMira(player, root)
-		local alvo = mira or (root.Position + frente * 40)
-		local companheiro, menor = nil, effect.RaioCompanheiro or 18
-		for _, plr in ipairs(Players:GetPlayers()) do
-			if plr == player or areOpponents(player, plr) then continue end
-			local _, r = getCharacterParts(plr)
-			if r and (r.Position - alvo).Magnitude < menor then companheiro, menor = plr, (r.Position - alvo).Magnitude end
-		end
-		local chao = root.Position.Y - 2.5
-		if companheiro then
-			local _, r = getCharacterParts(companheiro)
-			alvo = r.Position + plano(r.AssemblyLinearVelocity, Vector3.zero) * 0.35 * math.min(r.AssemblyLinearVelocity.Magnitude, 30)
-		end
-		alvo = Vector3.new(alvo.X, chao + 1, alvo.Z)
-		local dist = (alvo - ball.Position).Magnitude
-		if dist < 10 then return false, "mire mais longe (curva precisa de espaço)" end
-		local rapidez = math.clamp(dist * 1.6 + 35, 60, Config.KICK_MAX_FORCE * getKickForceMultiplier(player))
-		lancarBola(player, root, alvo, rapidez)
-		_G.ArmaAplicarCurva(player, alvo, effect.Curva or 1.2, false)
-		vfx(player, "Passe do Prodígio", nil, 1.6)
-		if companheiro and effect.CompanheiroForcaMult and _G.SetPulseTeammateBuff then
+		local maxDist = effect.MaxDistancia or 340
+		local ponto = mira or (root.Position + frente * 60)
+		local companheiro = companheiroPerto(player, ponto, nil, nil)
+		if not companheiro then return false, "nenhum companheiro em campo" end
+		local _, r = getCharacterParts(companheiro)
+		local dist = (r.Position - root.Position).Magnitude
+		if dist > maxDist then return false, string.format("companheiro longe demais (%.0f studs, máx %d)", dist, maxDist) end
+		if dist < 12 then return false, "companheiro perto demais pro passe alto" end
+		local lado = ladoLivre(player, root.Position, r.Position)
+		-- quanto mais longe, mais alto (passe longo do Sae vem do céu)
+		local altura = math.clamp((effect.Altura or 34) * (0.45 + dist / 300), 12, 60)
+		passeMagnetico(player, companheiro, { Altura = altura, Desvio = effect.Desvio or 0.35, Lado = lado })
+		vfx(player, "Passe do Prodígio", nil, 2.4)
+		if effect.CompanheiroForcaMult and _G.SetPulseTeammateBuff then
 			_G.SetPulseTeammateBuff(companheiro, effect.CompanheiroForcaMult, 6)
 		end
 		return true

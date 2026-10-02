@@ -212,7 +212,18 @@ setmetatable(ATIVA_EXECUTORS, { __index = function(_, acao)
 	return f and function(player, effect) return f(player, effect) end or nil
 end })
 
-local ativaReadyAt = {} -- [player] = tick() em que a ativa pode rodar de novo
+-- ⚠️ v118: cooldown POR ARMA (antes era um só por jogador: usar a do E travava a
+-- do R também, e o HUD novo mostra cada uma separada)
+local ativaReadyAtPorNome = {} -- [player] = { [nomeDaArma] = tick() em que pode de novo }
+local function prontaEm(player, nome)
+	local t = ativaReadyAtPorNome[player]
+	return t and t[nome] or nil
+end
+local ativaReadyAt = setmetatable({}, {
+	__newindex = function(_, player, valor)
+		if valor == nil then ativaReadyAtPorNome[player] = nil end
+	end,
+})
 
 local debugNoCooldown = {} -- [player] = true (ferramenta de teste, ver DebugAbilitySelector)
 
@@ -223,7 +234,11 @@ _G.SetInstinctDebugNoCooldown = function(player, enabled)
 end
 -- ⚠️ v110 (debugger): zera AGORA o cooldown da ativa da arma
 _G.ZerarInstinctCooldown = function(player)
-	ativaReadyAt[player] = nil
+	local t = ativaReadyAtPorNome[player]
+	if t then
+		for nome in pairs(t) do player:SetAttribute("ArmaCD_" .. nome, nil) end
+	end
+	ativaReadyAtPorNome[player] = nil
 end
 
 local function tryRunAtiva(player, def)
@@ -242,7 +257,7 @@ local function tryRunAtiva(player, def)
 	local cooldown = def.AtivaCooldown
 		or (Config.INSTINCT_COOLDOWN_BY_RARITY and Config.INSTINCT_COOLDOWN_BY_RARITY[def.Rarity])
 		or 10
-	local readyAt = ativaReadyAt[player]
+	local readyAt = prontaEm(player, def.Name)
 	if readyAt and tick() < readyAt and not debugNoCooldown[player] then return false end
 
 	-- ⚠️ v5.6: Instinct Mode agora amplifica TODO buff que o instinto daria
@@ -269,7 +284,11 @@ local function tryRunAtiva(player, def)
 	if ok then
 		-- Só entra em cooldown quando a jogada REALMENTE aconteceu — se
 		-- não tinha bola no ar, o jogador não fica penalizado por isso.
-		ativaReadyAt[player] = tick() + cooldown
+		ativaReadyAtPorNome[player] = ativaReadyAtPorNome[player] or {}
+		ativaReadyAtPorNome[player][def.Name] = tick() + cooldown
+		-- ⚠️ v118: o HUD de habilidades lê daqui (contagem e escurecer o slot)
+		player:SetAttribute("ArmaCD_" .. def.Name, workspace:GetServerTimeNow() + cooldown)
+		player:SetAttribute("ArmaCDTotal_" .. def.Name, cooldown)
 	end
 	return ok and true or false, motivo
 end
@@ -1109,7 +1128,7 @@ Remotes.ActivateInstinct.OnServerEvent:Connect(function(player, aimPoint, slotIn
 		-- A condição bateu, mas a AÇÃO não pôde acontecer (cooldown, ou
 		-- não havia bola cabeceável na janela).
 		local motivo = "em cooldown"
-		local readyAt = ativaReadyAt[player]
+		local readyAt = prontaEm(player, def.Name)
 		if readyAt and tick() < readyAt and not debugNoCooldown[player] then
 			motivo = string.format("em cooldown (%.0fs)", readyAt - tick())
 		else
@@ -1125,7 +1144,7 @@ Remotes.ActivateInstinct.OnServerEvent:Connect(function(player, aimPoint, slotIn
 
 	setAuraActive(player, def, true, AURA_PULSE_SECONDS)
 	-- ⚠️ v111: 4º parâmetro = cooldown da ativa, pro HUD contar
-	local cd = (not debugNoCooldown[player]) and ativaReadyAt[player] and (ativaReadyAt[player] - tick()) or nil
+	local cd = (not debugNoCooldown[player]) and prontaEm(player, def.Name) and (prontaEm(player, def.Name) - tick()) or nil
 	Remotes.InstinctFeedback:FireClient(player, true, name, nil, cd)
 	task.delay(1.5, function()
 		Remotes.InstinctFeedback:FireClient(player, false, name)

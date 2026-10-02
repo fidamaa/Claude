@@ -1476,7 +1476,11 @@ Data.Instincts = {
 		Trigger = "KickAtGoal",
 		-- ⚠️ v5.5: 200 studs era longe demais (pedido: diminuir pra 100).
 		-- ⚠️ v5.6: pedido: diminuir mais uma vez, pra 80.
-		Condition = { MinDistanceToGoal = 14, MaxDistanceToGoal = 96, RequireOutsideEnemyArea = true, RequireMaxCharge = true }, -- ⚠️ v112: 80 -> 96 (campo 20% maior)
+		-- ⚠️ v118 — BUG "já tentei muitas vezes, dentro e fora da área, com força
+		-- máxima e não ativa de jeito nenhum": a área adversária vai até ~152 studs
+		-- do gol, e o teto era 96 — fora da área E a menos de 96 era IMPOSSÍVEL.
+		-- Agora vale de fora da área até 300 studs (um pouco além do meio-campo).
+		Condition = { MinDistanceToGoal = 14, MaxDistanceToGoal = 300, RequireOutsideEnemyArea = true, RequireMaxCharge = true },
 		Effect = { ForceMult = 1.30, AimDeviationMult = 0.2 },
 	},
 
@@ -1595,9 +1599,9 @@ Data.Instincts = {
 		-- ⚠️ v111: tecla = UM-DOIS. Toca no companheiro mais perto na sua frente
 		-- e a bola VOLTA de primeira na sua frente. Sozinho, a tabela é com a
 		-- sua sombra (igual os chutes em grupo sozinho).
-		Description = "Tabela: com a bola, a tecla da Arma faz o UM-DOIS — você toca no companheiro mais perto à frente e a bola volta de primeira, 12 studs na sua frente. Sem companheiro perto, a tabela é com a sua sombra. E recebendo depois de 5 passes seguidos do time: +30% em TODOS os atributos por 5s.",
+		Description = "Tabela: com a bola, a tecla da Arma faz o UM-DOIS — você toca no companheiro mais perto (até 60 studs) e a bola volta de primeira, automática, direto no seu pé, mesmo que você esteja correndo. Precisa de um companheiro perto. E recebendo depois de 5 passes seguidos do time: +30% em TODOS os atributos por 5s.",
 		Passiva = "Recebendo a bola depois de 5 passes seguidos do seu time (sem perder a posse no meio): +30% em TODOS os atributos pelos primeiros 5 segundos depois de receber.",
-		Ativa = "Tecla da Arma, com a bola: um-dois com o companheiro mais perto à frente (ou com a sua sombra) — a bola volta 12 studs na sua frente.",
+		Ativa = "Tecla da Arma, com a bola: um-dois com o companheiro mais perto (até 60 studs) — a bola volta sozinha no seu pé.",
 		Trigger = "Instant",
 		Condition = { MinTeamPassChain = 5, MaxSecondsAfterReceive = 5 },
 		Effect = { AllBoost = 0.3 },
@@ -1605,7 +1609,7 @@ Data.Instincts = {
 		AtivaSoNaTecla = true,
 		AtivaCondition = { RequirePossession = true },
 		AtivaAction = "Tabela",
-		AtivaEffect = { Raio = 50, Adiantar = 12 },
+		AtivaEffect = { Raio = 60 }, -- ⚠️ v118: precisa de companheiro; a volta é automática, no pé
 		AtivaCooldown = 10,
 	},
 
@@ -1708,7 +1712,7 @@ Data.Instincts = {
 		Passiva = "Chute a gol a mais de 25 studs do gol: a bola curva sozinha em volta de quem está no caminho até o ponto mirado, +10% de força e mira mais limpa. (Andando bem de lado com A/D, você força o lado da curva.)",
 		Trigger = "KickAtGoal",
 		Condition = { MinDistanceToGoal = 25 },
-		Effect = { Curva = 1, ForceMult = 1.1, AimDeviationMult = 0.25 },
+		Effect = { Curva = 3, ForceMult = 1.1, AimDeviationMult = 0.25 }, -- ⚠️ v118: "curva 3x maior" (era 1)
 	},
 
 	-- ---------- MF ----------
@@ -1755,15 +1759,18 @@ Data.Instincts = {
 		-- nunca acontecia). Agora é na TECLA: a bola vai curvando até onde você
 		-- mira (ou até o pé do companheiro perto da mira), contornando quem está
 		-- no meio, sozinha.
-		Description = "Passe do Prodígio (Itoshi Sae): com a bola, aperte a tecla da Arma e sai um PASSE CURVO até onde você mira — se tiver companheiro perto da mira, no pé dele — contornando sozinho quem estiver no meio. Quem recebe chuta 20% mais forte por 6s.",
-		Ativa = "Tecla da Arma, com a bola: passe curvo até a mira (ou até o companheiro perto dela), contornando quem está no caminho; quem recebe chuta 20% mais forte por 6s.",
+		Description = "Passe do Prodígio (Itoshi Sae): com a bola, aponte o mouse pro companheiro e aperte a tecla da Arma — sai um passe ALTO, em curva, que cai magnetizado no corpo dele (até 340 studs). Quem recebe chuta 20% mais forte por 6s. Recarga de 16s.",
+		Ativa = "Tecla da Arma, com a bola: passe alto e curvo, automático, no companheiro mais perto do mouse (até 340 studs); quem recebe chuta 20% mais forte por 6s.",
 		Trigger = "Botao",
 		Tecla = "R",
 		Condition = { RequirePossession = true },
 		Effect = {},
 		AtivaAction = "PasseCurvo",
-		AtivaEffect = { Curva = 1.2, CompanheiroForcaMult = 1.2, RaioCompanheiro = 18 },
-		AtivaCooldown = 6,
+		-- ⚠️ v118 — PEDIDO: "passe automático de verdade: aponta o mouse no
+		-- companheiro e sai um passe ALTO, em curva, que magnetiza no corpo dele;
+		-- distância máxima um pouco antes do meio-campo; cooldown maior".
+		AtivaEffect = { CompanheiroForcaMult = 1.2, MaxDistancia = 340, Altura = 34, Desvio = 0.35 },
+		AtivaCooldown = 16,
 	},
 	-- Itoshi Sae (o "maestro"): com a bola no pé, o time inteiro joga no ritmo dele.
 	{
