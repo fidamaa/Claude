@@ -1352,6 +1352,8 @@ local function applyExtraEffectKeys(player, slot, def, effect)
 					local r = other.Character and other.Character:FindFirstChild("HumanoidRootPart")
 					if r and Vector3.new(r.Position.X - ponto.X, 0, r.Position.Z - ponto.Z).Magnitude <= pm.Raio and _G.StunPlayer then
 						_G.StunPlayer(other, pm.Duracao)
+						-- ⚠️ v120b — PEDIDO: "o pisão de sumô pode deixar atordoado com o efeito de tontura"
+						if _G.MostrarTontura then _G.MostrarTontura(other, pm.Duracao) end
 					end
 				end
 				if _G.GetGKBotPositions and _G.FreezeGKBot then

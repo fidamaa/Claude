@@ -1279,14 +1279,17 @@ Data.Instincts = {
 		Image = "rbxassetid://100014626629607", -- ⚠️ v77: arte do artista (ver pedido do usuário)
 		Rarity = "Common",
 		Cor = Color3.fromRGB(199, 203, 209),
-		Description = "Domínio aumenta em +6 sua hitbox de recepção perto de adversários e domina sozinho qualquer bola caindo por perto no ar — facilita dominar a bola em diversas situações, inclusive bolas altas e disputadas.",
+		-- ⚠️ v120b — GRAB (PEDIDO: "o trap do Nagi: domina no ar"): alcance próprio de 14
+		-- studs (antes dependia do alcance da cabeçada) e bola até 95 de velocidade.
+		Description = "Domínio (o trap do Nagi): aumenta em +6 sua hitbox de recepção perto de adversários e GRUDA no seu pé qualquer bola solta no ar a até 14 studs — até passe forte e cruzamento, sozinho, com penas brancas.",
 		Passiva = "Bola solta perto de um adversário: +6 de alcance de recepção.",
-		Ativa = "Se a bola estiver caindo por perto, você a domina no ar sozinho.",
+		Ativa = "Bola solta no ar a até 14 studs (até velocidade 95): ela vem e gruda no seu pé sozinha.",
 		Trigger = "Instant",
 		Condition = { LooseBallOpponentRadius = 12 },
 		Effect = { PickupRadiusAdd = 6 },
 		AtivaAction = "AerialControl",
-		AtivaEffect = {},
+		AtivaEffect = { RaioTrap = 14, AlturaTrap = 12, VelMaxTrap = 95 },
+		AtivaSempre = true, -- (o trap vale com ou sem adversário perto)
 		AtivaCooldown = 8,
 	},
 
@@ -1379,7 +1382,7 @@ Data.Instincts = {
 		Image = "rbxassetid://136729033024503", -- ⚠️ v77: arte do artista (ver pedido do usuário)
 		Rarity = "Rare",
 		Cor = Color3.fromRGB(245, 197, 24),
-		Description = "Monstro do Drible (Bachira): com a bola, a tecla da Arma faz o Drible do Monstro — 3 cortes em zigue-zague (~30 studs) pra onde você mira, sem poder ser desarmado no meio, e quem estiver no caminho cai. De bônus, sua finta (Q) no campo de ataque alcança +6 e derruba por mais tempo quem der carrinho.",
+		Description = "Monstro do Drible (Bachira): com a bola, a tecla da Arma faz o Drible do Monstro — 3 cortes RÁPIDOS em zigue-zague (~30 studs) pra onde você mira, sem poder ser desarmado no meio, e quem estiver no caminho cai tonto. COUNTER: com ele pronto, quem tentar te desarmar (carrinho, bote) ativa o monstro sozinho — você escapa driblando e ele fica tonto. De bônus, sua finta (Q) no campo de ataque alcança +6 e derruba por mais tempo quem der carrinho.",
 		-- ⚠️ v5.4: era uma Ativa separada (AtivaAction="DribbleMove") que
 		-- rodava a finta DE NOVO por cima da finta manual que o jogador já
 		-- tinha apertado — a segunda sobrescrevia a primeira sem herdar o
@@ -1395,12 +1398,15 @@ Data.Instincts = {
 		-- exemplo, o Monstro do Drible pode ser isso". Com a bola, a tecla faz o
 		-- DRIBLE DO MONSTRO (Bachira): 3 cortes em zigue-zague pra frente (~30
 		-- studs), ninguém desarma no meio, e quem estiver no caminho cai.
-		Ativa = "Tecla da Arma, com a bola: Drible do Monstro — 3 cortes em zigue-zague (~30 studs) na direção da mira; ninguém te desarma no meio e quem estiver no caminho cai.",
+		-- ⚠️ v120b — PEDIDO: "o counter do Passo Furtivo vai pro Monstro do Drible; aumenta
+		-- a velocidade do monstro do drible, que dá o counter assim que o cara tenta acertar".
+		-- TempoCorte 0.3 → 0.2 (mais rápido) e o counter automático (ContraGuardaFurtiva).
+		Ativa = "Tecla da Arma, com a bola: Drible do Monstro — 3 cortes rápidos em zigue-zague (~30 studs) na direção da mira; ninguém te desarma no meio e quem estiver no caminho cai. Pronta, ela também é COUNTER: tentou te desarmar, o monstro dribla sozinho e quem tentou fica tonto.",
 		Tecla = "R",
 		AtivaSoNaTecla = true,
 		AtivaCondition = { RequirePossession = true },
 		AtivaAction = "DribleMonstro",
-		AtivaEffect = { Cortes = 3, PassoCorte = 10, LarguraCorte = 4, TempoCorte = 0.3, StunNoCaminho = 1.3, RaioCaminho = 7 },
+		AtivaEffect = { Cortes = 3, PassoCorte = 10, LarguraCorte = 4, TempoCorte = 0.2, StunNoCaminho = 1.3, RaioCaminho = 7, StunContra = 1.6 },
 		AtivaCooldown = 12,
 	},
 
@@ -1518,7 +1524,9 @@ Data.Instincts = {
 		-- ⚠️ v119 — PEDIDO: "um counter: o cara vai dar carrinho em você, você faz
 		-- alguma coisa — um drible". COM a bola a tecla agora é a GUARDA: quem tentar
 		-- te desarmar nesse tempo erra, você some num passo pro lado e ele cai.
-		Description = "Passo Furtivo: sem a bola, a tecla da Arma te faz SUMIR da vista dos adversários por 3,5s. COM a bola, é a GUARDA FURTIVA: por 1,6s, quem der carrinho ou tentar te desarmar erra — você some num passo pro lado e ele fica atordoado. E sempre que ninguém está te olhando, +25% de velocidade e +5 de alcance pra receber.",
+		-- ⚠️ v120b: a guarda (counter do carrinho) foi pro Monstro do Drible (PEDIDO);
+		-- o Passo Furtivo volta a ser só o SUMIR.
+		Description = "Passo Furtivo: sem a bola, a tecla da Arma te faz SUMIR da vista dos adversários por 3,5s. E sempre que ninguém está te olhando, +25% de velocidade e +5 de alcance pra receber.",
 		Passiva = "Sem a posse da bola e com NENHUM adversário olhando na sua direção: +25% de velocidade e +5 de alcance de recepção.",
 		Trigger = "Instant",
 		Condition = { RequireUnseen = true, RequireNoPossession = true },
@@ -1526,12 +1534,12 @@ Data.Instincts = {
 		-- ⚠️ v111: tecla = SUMIR (Stealth, Blue Lock) — some da vista dos
 		-- adversários por 3,5s (quase transparente e sem nome pra eles) e, como
 		-- ninguém te vê, o bônus acima liga junto.
-		Ativa = "Tecla da Arma: sem a bola, some da vista dos adversários por 3,5s; COM a bola, guarda de 1,6s — carrinho/desarme em você erra e quem tentou cai.",
+		Ativa = "Tecla da Arma, sem a bola: some da vista dos adversários por 3,5s.",
 		Tecla = "R",
 		AtivaSoNaTecla = true,
 		AtivaCondition = {},
-		AtivaAction = "SumirOuGuarda",
-		AtivaEffect = { Duracao = 3.5, Janela = 1.6, Desvio = 7, Stun = 1.6 },
+		AtivaAction = "Sumir",
+		AtivaEffect = { Duracao = 3.5 },
 		AtivaCooldown = 16,
 	},
 
@@ -1892,11 +1900,17 @@ Data.Instincts = {
 		Posicao = "DF",
 		Rarity = "Legendary",
 		Cor = Color3.fromRGB(255, 120, 60),
-		Description = "Última Barreira: quando você é o ÚLTIMO do time entre a bola e o seu gol, no próprio campo, corre 35% mais — a recuperação que salva o jogo.",
+		-- ⚠️ v120b — PEDIDO: "quero pelo menos uns três counters no jogo, em armas que
+		-- faça sentido (uma arma pra duas utilidades)". Última Barreira vira o COUNTER
+		-- DO CHUTE: pronta, o chute adversário que passar perto de você no seu campo
+		-- é bloqueado no peito e a bola fica com você (sozinho, sem apertar nada).
+		Description = "Última Barreira: quando você é o ÚLTIMO do time entre a bola e o seu gol, no próprio campo, corre 35% mais. COUNTER DO CHUTE: pronta, o chute adversário que passar a até 7 studs de você no seu campo é bloqueado no peito e a bola fica com você (recarrega em 25s).",
 		Passiva = "Último do time antes do seu gol, no próprio campo: +35% de velocidade.",
 		Trigger = "Instant",
 		Condition = { RequireLastManBack = true, DefendingHalf = true },
 		Effect = { SpeedMult = 1.35 },
+		CounterEffect = { Raio = 7, Altura = 6, VelMin = 30 },
+		CounterCooldown = 25,
 	},
 	-- Karasu Tabito: desarme cirúrgico, no tempo certo.
 	{

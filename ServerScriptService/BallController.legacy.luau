@@ -3392,6 +3392,7 @@ local function applyAnkleBreaker(mover, moverRoot, rangeBonus, stunBonus, always
 		if distance <= range or alwaysStun then
 			stunPlayer(plr, stun)
 			ragdollPlayer(plr, Config.ANKLE_BREAKER_RAGDOLL_DURATION)
+			if _G.MostrarTontura then _G.MostrarTontura(plr, stun) end -- ⚠️ v120b: tontura onde atordoa
 			hitAny = true
 		end
 	end
@@ -5923,11 +5924,26 @@ end
 -- PulseController.lua.
 _G.PulseExecuteAerialControl = function(player, effect)
 	if isStunned(player) then return false end
-	if not _G.PulseCanHeader(player, effect) then return false end
 	if owner then return false end -- só bola SOLTA no ar — tirar de quem já controla é Tackle, não isso
-
 	local _, root = getCharacterParts(player)
 	if not root then return false end
+	-- ⚠️ v120b — PEDIDO: "também é bom ter GRABS: pegar a bola no ar, tipo o Nagi —
+	-- alguma arma do Nagi que domine no ar, que faça o trap do Nagi". Com RaioTrap
+	-- (Domínio) o alcance é próprio (não o da cabeçada, que ficou menor): bola solta
+	-- no ar a até RaioTrap na horizontal / AlturaTrap na vertical, até VelMaxTrap de
+	-- velocidade — ela vem até o pé e gruda (com penas brancas, o motivo do Nagi).
+	if effect and effect.RaioTrap then
+		local rel = ball.Position - root.Position
+		local horizontal = Vector3.new(rel.X, 0, rel.Z).Magnitude
+		if horizontal > effect.RaioTrap or math.abs(rel.Y) > (effect.AlturaTrap or 12) then return false end
+		if ball.AssemblyLinearVelocity.Magnitude > (effect.VelMaxTrap or 95) then return false end
+		if rel.Y < 0.5 and ball.AssemblyLinearVelocity.Magnitude < 8 then return false end -- (bola parada no chão: é recepção normal)
+		if Remotes.ArmaVFX and player.Character then
+			Config.DispararVFX("ArmaVFX", player.Character, "Domínio@trap", nil, true, 0.8, { De = ball.Position })
+		end
+	elseif not _G.PulseCanHeader(player, effect) then
+		return false
+	end
 
 	ball.CanCollide = true
 	ball.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
@@ -6486,6 +6502,44 @@ end
 	end)
 end)()
 
+-- ⚠️ v120b — COUNTER DO CHUTE (Última Barreira): chute de adversário (não Hissatsu
+-- em voo — essa vai pro duelo) passando perto de quem tem a arma pronta, no campo
+-- dele e indo pro gol dele: bloqueia no peito e a posse é dele.
+;(function()
+	RunService.Heartbeat:Connect(function()
+		if owner or not recentKicker or pulseStraightFlightActive or ballFrozenForGuardQTE or deadBallMode then return end
+		if tick() - recentKickTime > 3 then return end
+		local v = ball.AssemblyLinearVelocity
+		if v.Magnitude < 30 or not _G.UsarCounterDaArma then return end
+		for _, plr in ipairs(Players:GetPlayers()) do
+			if plr == recentKicker or not areOpponents(recentKicker, plr) or isStunned(plr) then continue end
+			if GKAreaUtil.IsEffectiveGK(plr) then continue end
+			local equipadas = _G.GetEquippedInstincts and _G.GetEquippedInstincts(plr) or {}
+			local tem = false
+			for _, n in ipairs(equipadas) do if n == "Última Barreira" then tem = true break end end
+			if not tem then continue end
+			local _, r = getCharacterParts(plr)
+			local golDele = r and plr.Team and ownGoalOf(plr.Team.Name)
+			if not golDele then continue end
+			local rel = ball.Position - r.Position
+			if Vector3.new(rel.X, 0, rel.Z).Magnitude > 7 or math.abs(rel.Y) > 6 then continue end
+			if (golDele.Position - ball.Position):Dot(v) <= 0 then continue end -- só chute indo pro gol dele
+			if attackingHalfOf(plr.Team.Name, r.Position) then continue end -- só no próprio campo
+			local efeito = _G.UsarCounterDaArma(plr, "Última Barreira")
+			if efeito then
+				ball.AssemblyLinearVelocity = Vector3.zero
+				ball.AssemblyAngularVelocity = Vector3.zero
+				ball.CanCollide = true
+				setOwner(plr)
+				if Remotes.ArmaVFX and plr.Character then
+					Config.DispararVFX("ArmaVFX", plr.Character, "Última Barreira@contra", nil, true, 0.8, { Ponto = ball.Position })
+				end
+				return
+			end
+		end
+	end)
+end)()
+
 -- ⚠️ v120b — O MURO AZUL DO CORTE GIRATÓRIO FICA DE PÉ. PEDIDO: "o match cutting
 -- (aquele corte azul no meio): faz ele durar mais tempo, porque se a bola bater
 -- nele vai diminuir a velocidade da bola — sem animação nenhuma, bateu, tira uns
@@ -6653,6 +6707,12 @@ end)()
 		if Remotes.ArmaVFX and player.Character then
 			Config.DispararVFX("ArmaVFX", player.Character, nome, nil, true, dur or 1, extra)
 		end
+	end
+	-- ⚠️ v120b — PEDIDO: "o efeito do cara ficando tonto (do Chapéu) coloca em outros
+	-- lugares que deixam atordoado". Estrelinhas girando na cabeça de quem ficou tonto.
+	_G.MostrarTontura = function(alvo, dur)
+		if typeof(alvo) ~= "Instance" or not alvo:IsA("Player") or not alvo.Character then return end
+		vfx(alvo, "Tontura", { Alvo = alvo.Character, Tempo = dur or 1.5 }, dur or 1.5)
 	end
 
 	local function direcaoDaMira(player, root)
@@ -6877,14 +6937,15 @@ end)()
 	-- zague pra frente (~30 studs), sem poder ser desarmado no meio, e quem
 	-- estiver no caminho cai (tornozelo quebrado)
 	-- =====================================================================
-	_G.ArmaAtiva_DribleMonstro = function(player, effect)
+	-- (dirForcada: o COUNTER do Monstro manda a direção — pra longe de quem tentou)
+	_G.ArmaAtiva_DribleMonstro = function(player, effect, dirForcada)
 		if owner ~= player then return false, "precisa estar com a bola" end
 		if isStunned(player) then return false, "atordoado" end
 		if GKAreaUtil.IsEffectiveGK(player) then return false, "goleiro na área não dribla" end
 		if _G.IsPulseInProgress and _G.IsPulseInProgress(player) then return false end
 		local _, root = getCharacterParts(player)
 		if not root then return false end
-		local frente = direcaoDaMira(player, root)
+		local frente = (typeof(dirForcada) == "Vector3" and dirForcada.Magnitude > 0.01) and dirForcada.Unit or direcaoDaMira(player, root)
 		local direita = frente:Cross(Vector3.yAxis).Unit
 		local cortes = effect.Cortes or 3
 		local passo = effect.PassoCorte or 10
@@ -6913,6 +6974,7 @@ end)()
 					if o and (o.Position - (r.Position + alvo * 0.5)).Magnitude <= (effect.RaioCaminho or 7) then
 						derrubados[plr] = true
 						stunPlayer(plr, stun)
+						if _G.MostrarTontura then _G.MostrarTontura(plr, stun) end
 						ragdollPlayer(plr, math.min(stun, Config.ANKLE_BREAKER_RAGDOLL_DURATION or 1))
 					end
 				end
@@ -7340,6 +7402,29 @@ end)()
 		-- chamado na resolução de TODO desarme (carrinho, bote, investida): se o
 		-- alvo está em guarda, o desarme vira contra-ataque e devolve true
 		_G.ContraGuardaFurtiva = function(alvo, atacante)
+			-- ⚠️ v120b — PEDIDO: "esse counter (do Passo Furtivo) vai pro Monstro do Drible,
+			-- e aumenta a velocidade dele: ele dá o counter assim que o cara tenta acertar".
+			-- Com a bola e o Monstro do Drible pronto, QUALQUER desarme em você (carrinho,
+			-- bote, investida) vira o drible do monstro pra longe dele — e ele fica tonto.
+			if owner == alvo and _G.UsarCounterDaArma and not isStunned(alvo) then
+				local efeitoMonstro = _G.UsarCounterDaArma(alvo, "Monstro do Drible")
+				if efeitoMonstro then
+					local _, ra = getCharacterParts(alvo)
+					local _, rt = getCharacterParts(atacante)
+					local dir = nil
+					if ra and rt then
+						local longe = plano(ra.Position - rt.Position, plano(ra.CFrame.LookVector, Vector3.new(0, 0, -1)))
+						local lado = longe:Cross(Vector3.yAxis).Unit * ((math.random() < 0.5) and 1 or -1)
+						dir = (longe + lado * 0.6).Unit
+					end
+					local stunContra = efeitoMonstro.StunContra or 1.6
+					stunPlayer(atacante, stunContra)
+					ragdollPlayer(atacante, 1)
+					vfx(alvo, "Monstro do Drible@contra", { Alvo = atacante.Character, Tempo = stunContra }, 0.8)
+					_G.ArmaAtiva_DribleMonstro(alvo, efeitoMonstro, dir)
+					return true
+				end
+			end
 			local g = guardaFurtiva[alvo]
 			if not g then return false end
 			guardaFurtiva[alvo] = nil

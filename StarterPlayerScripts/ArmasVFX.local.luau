@@ -416,6 +416,74 @@ local function sombra(pos, olhando, cor, dur, transp)
 	end
 end
 
+-- ⚠️ v120b — PEDIDO: "o Monstro do Drible faz uma cópia do personagem com os braços
+-- pequenos: faz uma cópia EXATA do personagem, pra parecer que mexeu mesmo". Clona o
+-- corpo de verdade (roupa, cabelo, rosto) congelado na pose daquele instante, com
+-- um contorno da cor e sumindo.
+local function copiaExata(character, cor, dur, transp)
+	if typeof(character) ~= "Instance" then return end
+	local antes = character.Archivable
+	character.Archivable = true
+	local ok, copia = pcall(function() return character:Clone() end)
+	character.Archivable = antes
+	if not ok or not copia then return end
+	local origem = {}
+	for _, p in ipairs(character:GetDescendants()) do
+		if p:IsA("BasePart") then origem[p.Parent.Name .. "/" .. p.Name] = p end
+	end
+	local partes = {}
+	for _, d in ipairs(copia:GetDescendants()) do
+		if d:IsA("Script") or d:IsA("LocalScript") or d:IsA("Sound") or d:IsA("ParticleEmitter") or d:IsA("Trail")
+			or d:IsA("Beam") or d:IsA("BillboardGui") or d:IsA("Highlight") or d:IsA("JointInstance") or d:IsA("Constraint") then
+			d:Destroy()
+		elseif d:IsA("BasePart") then
+			local o = origem[d.Parent.Name .. "/" .. d.Name]
+			if o then d.CFrame = o.CFrame end
+			d.Anchored = true
+			d.CanCollide = false
+			d.CanQuery = false
+			d.CanTouch = false
+			d.CastShadow = false
+			if d.Name == "HumanoidRootPart" or d.Name == "OlhosFlow" then
+				d.Transparency = 1
+			else
+				d.Transparency = math.max(d.Transparency, transp or 0.3)
+				table.insert(partes, d)
+			end
+		elseif d:IsA("Humanoid") then
+			d.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
+		end
+	end
+	local contorno = Instance.new("Highlight")
+	contorno.FillColor = cor
+	contorno.FillTransparency = 0.75
+	contorno.OutlineColor = cor
+	contorno.OutlineTransparency = 0.1
+	contorno.DepthMode = Enum.HighlightDepthMode.Occluded
+	contorno.Parent = copia
+	copia.Name = "CopiaDoDrible"
+	copia.Parent = workspace
+	for _, d in ipairs(partes) do
+		TweenService:Create(d, TweenInfo.new(dur, Enum.EasingStyle.Quad, Enum.EasingDirection.In), { Transparency = 1 }):Play()
+	end
+	TweenService:Create(contorno, TweenInfo.new(dur), { OutlineTransparency = 1, FillTransparency = 1 }):Play()
+	Debris:AddItem(copia, dur + 0.1)
+end
+
+-- rastro do movimento: uma faixa de luz do ponto inicial ao final do corte
+local function rastroDoCorte(de, ate, cor)
+	local meio = (de + ate) / 2
+	local dist = (ate - de).Magnitude
+	if dist < 0.5 then return end
+	local faixa = parte(Vector3.new(1.6, 0.25, dist), CFrame.lookAt(meio - Vector3.new(0, 2.6, 0), ate - Vector3.new(0, 2.6, 0)), cor, 0.2)
+	local linha = parte(Vector3.new(0.35, 0.35, dist), CFrame.lookAt(meio, ate), cor, 0.35)
+	for _, p in ipairs({ faixa, linha }) do
+		TweenService:Create(p, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
+			{ Transparency = 1, Size = Vector3.new(p.Size.X * 0.3, p.Size.Y, p.Size.Z) }):Play()
+		Debris:AddItem(p, 0.55)
+	end
+end
+
 local function linhasDeVelocidade(root, dir, cor, n)
 	local lado = dir:Cross(Vector3.yAxis)
 	lado = lado.Magnitude > 0.01 and lado.Unit or Vector3.xAxis
@@ -445,11 +513,15 @@ ATIVAS["Monstro do Drible@drible"] = function(character, extra)
 	for i = 1, (extra and extra.Cortes) or 3 do
 		task.delay((i - 1) * tempo, function()
 			if not root.Parent then return end
-			-- o "monstro" do Bachira: sombra amarela atrás a cada corte
-			local dir = extra and typeof(extra.Dir) == "Vector3" and extra.Dir or root.CFrame.LookVector
-			sombra(root.Position, dir, amarelo, 0.5, 0.5)
-			anel(root.Position - Vector3.new(0, 2.8, 0), Vector3.yAxis, amarelo, 2, 9, 0.35, 0.35)
-			faiscas(root.Position - Vector3.new(0, 2.5, 0), amarelo, 14, 14)
+			-- o "monstro" do Bachira: uma CÓPIA EXATA dele fica pra trás a cada corte
+			-- (⚠️ v120b) e uma faixa de luz liga o começo ao fim do corte
+			local de = root.Position
+			copiaExata(character, amarelo, 0.55, 0.3)
+			anel(de - Vector3.new(0, 2.8, 0), Vector3.yAxis, amarelo, 2, 9, 0.35, 0.35)
+			faiscas(de - Vector3.new(0, 2.5, 0), amarelo, 14, 14)
+			task.delay(tempo * 0.95, function()
+				if root.Parent then rastroDoCorte(de, root.Position, amarelo) end
+			end)
 		end)
 	end
 end
@@ -667,6 +739,50 @@ tontura = function(alvo, dur)
 			e.CFrame = CFrame.new(head.Position + Vector3.new(math.cos(a) * 0.9, 0.9 + 0.12 * math.sin(a * 2), math.sin(a) * 0.9))
 		end
 	end)
+end
+
+-- ⚠️ v120b — PEDIDO: "gostei do efeito do cara ficando tonto no Chapéu: coloca em
+-- outros lugares que deixam atordoado (o pisão de sumô...)". O servidor manda
+-- "Tontura" com o corpo de quem ficou tonto e o tempo.
+ATIVAS["Tontura"] = function(character, extra)
+	local alvo = extra and typeof(extra.Alvo) == "Instance" and extra.Alvo or character
+	task.spawn(tontura, alvo, (extra and extra.Tempo) or 1.5)
+end
+-- GRAB do Domínio (o trap do Nagi): penas brancas da bola até o pé
+ATIVAS["Domínio@trap"] = function(character, extra)
+	local root = character:FindFirstChild("HumanoidRootPart")
+	if not root then return end
+	local branco = Color3.fromRGB(245, 248, 255)
+	local de = extra and typeof(extra.De) == "Vector3" and extra.De or root.Position
+	local pe = root.Position - Vector3.new(0, 2.4, 0) + root.CFrame.LookVector
+	for i = 1, 10 do
+		local p = parte(Vector3.new(0.12, 0.7, 0.35), CFrame.new(de:Lerp(pe, i / 10)) * CFrame.Angles(math.random() * 6, math.random() * 6, 0), branco, 0.15)
+		TweenService:Create(p, TweenInfo.new(0.9, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+			{ CFrame = p.CFrame * CFrame.new(math.random(-2, 2), -1.5, math.random(-2, 2)) * CFrame.Angles(1.5, 0, 1), Transparency = 1 }):Play()
+		Debris:AddItem(p, 0.95)
+	end
+	anel(pe, Vector3.yAxis, branco, 1, 6, 0.35, 0.35)
+	rastroNaBola(branco, 1, 0.5)
+end
+-- COUNTER do chute (Última Barreira): bloqueou no peito
+ATIVAS["Última Barreira@contra"] = function(character, extra)
+	local laranja = Color3.fromRGB(255, 120, 60)
+	local root = character:FindFirstChild("HumanoidRootPart")
+	if not root then return end
+	local ponto = extra and typeof(extra.Ponto) == "Vector3" and extra.Ponto or root.Position
+	flash(ponto, Color3.new(1, 1, 1), 3, 0.2)
+	anel(root.Position, root.CFrame.LookVector, laranja, 2, 10, 0.35, 0.3)
+	faiscas(ponto, laranja, 24, 18)
+end
+-- COUNTER do Monstro do Drible: tentou desarmar, o monstro esquiva e ele fica tonto
+ATIVAS["Monstro do Drible@contra"] = function(character, extra)
+	local amarelo = Color3.fromRGB(255, 205, 40)
+	local root = character:FindFirstChild("HumanoidRootPart")
+	if root then
+		flash(root.Position, amarelo, 2, 0.25)
+		anel(root.Position - Vector3.new(0, 2.8, 0), Vector3.yAxis, amarelo, 3, 14, 0.4, 0.4)
+	end
+	if extra and typeof(extra.Alvo) == "Instance" then task.spawn(tontura, extra.Alvo, (extra.Tempo or 1.6)) end
 end
 
 -- SUMIR (Passo Furtivo): pra quem é ADVERSÁRIO de quem sumiu, o corpo fica

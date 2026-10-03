@@ -323,6 +323,28 @@ _G.GetEquippedInstincts = function(player)
 	return EquippedList[player] or {}
 end
 
+-- ⚠️ v120b — COUNTERS AUTOMÁTICOS (Monstro do Drible, Última Barreira): a arma
+-- reage sozinha quando o lance acontece. Se `nome` está equipada e fora do
+-- cooldown, marca o cooldown (igual a ativa normal, com o HUD) e devolve o
+-- AtivaEffect dela; senão nil.
+_G.UsarCounterDaArma = function(player, nome)
+	local equipada = false
+	for _, n in ipairs(EquippedList[player] or {}) do
+		if findInstinct(n) and findInstinct(n).Name == nome then equipada = true break end
+	end
+	if not equipada then return nil end
+	local def = findInstinct(nome)
+	if not def then return nil end
+	local readyAt = prontaEm(player, def.Name)
+	if readyAt and tick() < readyAt and not debugNoCooldown[player] then return nil end
+	local cooldown = def.CounterCooldown or def.AtivaCooldown or 10
+	ativaReadyAtPorNome[player] = ativaReadyAtPorNome[player] or {}
+	ativaReadyAtPorNome[player][def.Name] = tick() + cooldown
+	player:SetAttribute("ArmaCD_" .. def.Name, workspace:GetServerTimeNow() + cooldown)
+	player:SetAttribute("ArmaCDTotal_" .. def.Name, cooldown)
+	return def.CounterEffect or def.AtivaEffect or {}
+end
+
 -- Compat: quem só quer "o principal" (slot 1) — usado pelo loop de carga
 -- contínua e pelos poucos lugares que ainda pensam em 1 só.
 local function equippedPrimary(player)
@@ -973,7 +995,8 @@ task.spawn(function()
 
 				-- ⚠️ v5: a ativa de um instinto contínuo é tentada enquanto a
 				-- condição valer (ex.: Domínio segurando bola caindo perto)
-				if isActive and def.AtivaAction and not def.AtivaSoNaTecla then
+				-- ⚠️ v120b: AtivaSempre (o trap do Domínio) tenta mesmo com a passiva desligada
+				if (isActive or def.AtivaSempre) and def.AtivaAction and not def.AtivaSoNaTecla then
 					tryRunAtiva(player, def)
 				end
 			end
