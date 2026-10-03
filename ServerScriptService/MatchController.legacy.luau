@@ -751,7 +751,9 @@ local function ensureRewardData(player)
 		PlayerName = player.Name,
 		MoneyEarned = Rewards.BASE_PARTICIPATION,
 		XPEarned = Rewards.BASE_XP,
-		Stats = { Goals = 0, Assists = 0, Tackles = 0, Dribbles = 0, Saves = 0, MVP = false, Won = false },
+		-- ⚠️ v123: mais informação da partida pras ESTATÍSTICAS do Lobby (chutes,
+		-- passes, Hissatsus usadas) — ver _G.RegistrarEstatistica
+		Stats = { Goals = 0, Assists = 0, Tackles = 0, Dribbles = 0, Saves = 0, Shots = 0, Passes = 0, Hissatsus = 0, MVP = false, Won = false },
 		MatchResult = "ongoing",
 	}
 	playerRewards[player.UserId] = data
@@ -788,6 +790,16 @@ _G.RegisterSave = function(player)
 	local data = ensureRewardData(player)
 	data.Stats.Saves += 1
 	addReward(player, Rewards.SAVE_MONEY, Rewards.SAVE_XP)
+end
+
+-- ⚠️ v123 — PEDIDO: "as estatísticas do Lobby ainda não estão armazenando direito: é só
+-- coletar as informações da partida na recompensa... leva mais algumas informações e
+-- coloca pra aumentar nas estatísticas pessoais". Contador genérico (sem dinheiro/XP):
+-- Shots (chute a gol, normal ou Hissatsu), Passes, Hissatsus (usadas com sucesso).
+_G.RegistrarEstatistica = function(player, chave, quanto)
+	if typeof(player) ~= "Instance" or not player:IsA("Player") then return end
+	local data = ensureRewardData(player)
+	data.Stats[chave] = (tonumber(data.Stats[chave]) or 0) + (quanto or 1)
 end
 
 
@@ -1334,6 +1346,12 @@ end
 -- ===== SALVAR / TELEPORTAR =====
 local function saveRewards(player)
 	if salaPersonalizada then return end -- ⚠️ v104: sala personalizada não dá recompensa
+	-- ⚠️ v123 — ACHADO (dados reais: 13 partidas na carreira com gols/dribles/desarmes
+	-- todos 0): todo teste no STUDIO, ao parar o Play, caía aqui pelo PlayerRemoving e
+	-- gravava uma recompensa "ongoing" de verdade no DataStore — o Lobby entregava
+	-- depois (+1 partida zerada, +100 de dinheiro). No Studio não grava mais (atributo
+	-- SalvarRecompensaNoStudio = true no Workspace pra testar o fluxo de propósito).
+	if RunService:IsStudio() and workspace:GetAttribute("SalvarRecompensaNoStudio") ~= true then return end
 	local data = playerRewards[player.UserId]
 	if not data then return end
 	-- ⚠️ CORRIGIDO: LobbyRewardsReceiver.legacy.luau (place Lobby) lê
@@ -1342,7 +1360,10 @@ local function saveRewards(player)
 	-- recompensa legítima calculava rewardsAge = os.time() - 0, um número
 	-- gigante, e era mis-flagada como antiga (só um warn cosmético hoje,
 	-- mas o campo devia existir de verdade).
-	data.SavedAt = os.time()
+	-- ⚠️ v123: carimbo FIXO da partida (antes era renovado a cada save — o save do
+	-- PlayerRemoving, depois do teleporte, ganhava um SavedAt mais novo e escapava do
+	-- "já reivindicada" do Lobby, podendo entregar a mesma partida de novo)
+	data.SavedAt = data.SavedAt or os.time()
 	local success, err = pcall(function()
 		rewardsDataStore:SetAsync("Rewards_" .. player.UserId, data)
 	end)

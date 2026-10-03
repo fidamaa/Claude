@@ -40,7 +40,7 @@ local COR_ACENTO      = Color3.fromRGB(255, 120, 90)
 local COR_TEXTO       = Color3.fromRGB(238, 241, 248)
 local COR_TEXTO_FRACO = Color3.fromRGB(120, 128, 148)
 
-local LARGURA, ALTURA = 480, 470
+local LARGURA, ALTURA = 500, 500 -- (v123: 3 colunas, 14 cartões)
 
 local function cantos(inst, raio)
 	local c = Instance.new("UICorner")
@@ -59,16 +59,28 @@ local function contorno(inst, cor, esp, transp)
 end
 
 -- ===== o que mostrar =====
+-- ⚠️ v123 — PEDIDO: "leva mais algumas informações da partida e coloca pra aumentar
+-- nas estatísticas pessoais": + empates, derrotas, chutes, passes, Hissatsus e o
+-- recorde de gols numa partida (vêm na recompensa da partida — ver AddCareerStats).
 local CARTOES = {
-	{ Chave = "Matches",  Nome = "PARTIDAS",     Cor = Color3.fromRGB(76, 156, 255) },
-	{ Chave = "Wins",     Nome = "VITÓRIAS",     Cor = Color3.fromRGB(64, 196, 122) },
-	{ Chave = "Goals",    Nome = "GOLS",         Cor = Color3.fromRGB(255, 200, 70) },
-	{ Chave = "Assists",  Nome = "ASSISTÊNCIAS", Cor = Color3.fromRGB(170, 120, 255) },
-	{ Chave = "Tackles",  Nome = "DESARMES",     Cor = Color3.fromRGB(255, 120, 90) },
-	{ Chave = "Dribbles", Nome = "DRIBLES",      Cor = Color3.fromRGB(80, 220, 230) },
-	{ Chave = "Saves",    Nome = "DEFESAS",      Cor = Color3.fromRGB(120, 200, 255) },
-	{ Chave = "MVPs",     Nome = "MVP",          Cor = Color3.fromRGB(255, 170, 50) },
+	{ Chave = "Matches",   Nome = "PARTIDAS",     Cor = Color3.fromRGB(76, 156, 255) },
+	{ Chave = "Wins",      Nome = "VITÓRIAS",     Cor = Color3.fromRGB(64, 196, 122) },
+	{ Chave = "Draws",     Nome = "EMPATES",      Cor = Color3.fromRGB(190, 190, 200) },
+	{ Chave = "Losses",    Nome = "DERROTAS",     Cor = Color3.fromRGB(230, 90, 90) },
+	{ Chave = "Goals",     Nome = "GOLS",         Cor = Color3.fromRGB(255, 200, 70) },
+	{ Chave = "Assists",   Nome = "ASSISTÊNCIAS", Cor = Color3.fromRGB(170, 120, 255) },
+	{ Chave = "Shots",     Nome = "CHUTES",       Cor = Color3.fromRGB(255, 150, 60) },
+	{ Chave = "Passes",    Nome = "PASSES",       Cor = Color3.fromRGB(110, 210, 160) },
+	{ Chave = "Tackles",   Nome = "DESARMES",     Cor = Color3.fromRGB(255, 120, 90) },
+	{ Chave = "Dribbles",  Nome = "DRIBLES",      Cor = Color3.fromRGB(80, 220, 230) },
+	{ Chave = "Saves",     Nome = "DEFESAS",      Cor = Color3.fromRGB(120, 200, 255) },
+	{ Chave = "Hissatsus", Nome = "HISSATSUS",    Cor = Color3.fromRGB(230, 110, 230) },
+	{ Chave = "MVPs",      Nome = "MVP",          Cor = Color3.fromRGB(255, 170, 50) },
+	{ Chave = "BestGoals", Nome = "RECORDE GOLS", Cor = Color3.fromRGB(255, 225, 120) },
 }
+local COLUNAS = 3
+local ALT_CARTAO, ESPACO = 54, 8
+local LINHAS = math.ceil(#CARTOES / COLUNAS)
 
 -- ===== GUI =====
 local screenGui = Instance.new("ScreenGui")
@@ -174,7 +186,7 @@ divisor.Parent = panel
 
 -- grade de cartões (2 colunas)
 local grade = Instance.new("Frame")
-grade.Size = UDim2.new(1, -36, 0, 4 * 62 + 3 * 10)
+grade.Size = UDim2.new(1, -36, 0, LINHAS * ALT_CARTAO + (LINHAS - 1) * ESPACO)
 grade.Position = UDim2.new(0, 18, 0, 76)
 grade.BackgroundTransparency = 1
 grade.ZIndex = 10
@@ -182,11 +194,12 @@ grade.Parent = panel
 
 local numeros = {} -- [Chave] = TextLabel
 for i, c in ipairs(CARTOES) do
-	local col = (i - 1) % 2
-	local lin = math.floor((i - 1) / 2)
+	local col = (i - 1) % COLUNAS
+	local lin = math.floor((i - 1) / COLUNAS)
 	local cartao = Instance.new("Frame")
-	cartao.Size = UDim2.new(0.5, -5, 0, 62)
-	cartao.Position = UDim2.new(col * 0.5, col * 5, 0, lin * 72)
+	local w = 1 / COLUNAS
+	cartao.Size = UDim2.new(w, -ESPACO * (COLUNAS - 1) / COLUNAS, 0, ALT_CARTAO)
+	cartao.Position = UDim2.new(col * w, col * ESPACO / COLUNAS, 0, lin * (ALT_CARTAO + ESPACO))
 	cartao.BackgroundColor3 = COR_CARTAO
 	cartao.BorderSizePixel = 0
 	cartao.ZIndex = 10
@@ -204,8 +217,8 @@ for i, c in ipairs(CARTOES) do
 	cantos(faixa, 2)
 
 	local nome = Instance.new("TextLabel")
-	nome.Size = UDim2.new(1, -30, 0, 16)
-	nome.Position = UDim2.new(0, 22, 0, 9)
+	nome.Size = UDim2.new(1, -26, 0, 14)
+	nome.Position = UDim2.new(0, 20, 0, 7)
 	nome.BackgroundTransparency = 1
 	nome.Text = c.Nome
 	nome.TextColor3 = COR_TEXTO_FRACO
@@ -216,13 +229,13 @@ for i, c in ipairs(CARTOES) do
 	nome.Parent = cartao
 
 	local valor = Instance.new("TextLabel")
-	valor.Size = UDim2.new(1, -30, 0, 28)
-	valor.Position = UDim2.new(0, 22, 0, 24)
+	valor.Size = UDim2.new(1, -26, 0, 26)
+	valor.Position = UDim2.new(0, 20, 0, 22)
 	valor.BackgroundTransparency = 1
 	valor.Text = "0"
 	valor.TextColor3 = COR_TEXTO
 	valor.Font = Enum.Font.GothamBlack
-	valor.TextSize = 24
+	valor.TextSize = 22
 	valor.TextXAlignment = Enum.TextXAlignment.Left
 	valor.ZIndex = 11
 	valor.Parent = cartao
@@ -232,7 +245,7 @@ end
 -- linha de médias
 local medias = Instance.new("Frame")
 medias.Size = UDim2.new(1, -36, 0, 62)
-medias.Position = UDim2.new(0, 18, 0, 76 + 4 * 72 + 2)
+medias.Position = UDim2.new(0, 18, 0, 76 + LINHAS * (ALT_CARTAO + ESPACO) + 2)
 medias.BackgroundColor3 = COR_CARTAO_ALT
 medias.BorderSizePixel = 0
 medias.ZIndex = 10
@@ -242,7 +255,7 @@ contorno(medias, COR_ACENTO, 1, 0.55)
 
 local function criarMedia(posX, rotulo)
 	local nome = Instance.new("TextLabel")
-	nome.Size = UDim2.new(0.5, -10, 0, 16)
+	nome.Size = UDim2.new(1 / 3, -10, 0, 16)
 	nome.Position = UDim2.new(posX, 12, 0, 9)
 	nome.BackgroundTransparency = 1
 	nome.Text = rotulo
@@ -253,7 +266,7 @@ local function criarMedia(posX, rotulo)
 	nome.ZIndex = 11
 	nome.Parent = medias
 	local valor = Instance.new("TextLabel")
-	valor.Size = UDim2.new(0.5, -10, 0, 26)
+	valor.Size = UDim2.new(1 / 3, -10, 0, 26)
 	valor.Position = UDim2.new(posX, 12, 0, 25)
 	valor.BackgroundTransparency = 1
 	valor.Text = "--"
@@ -266,7 +279,8 @@ local function criarMedia(posX, rotulo)
 	return valor
 end
 local valorTaxa = criarMedia(0, "TAXA DE VITÓRIA")
-local valorGolsPartida = criarMedia(0.5, "GOLS POR PARTIDA")
+local valorGolsPartida = criarMedia(1 / 3, "GOLS POR PARTIDA")
+local valorPontaria = criarMedia(2 / 3, "GOLS / CHUTES") -- ⚠️ v123
 
 local aviso = Instance.new("TextLabel")
 aviso.Size = UDim2.new(1, -36, 0, 18)
@@ -310,7 +324,13 @@ local function preencher(dados)
 		contarAte(valorTaxa, math.min(100, vitorias / partidas * 100), g, function(v) return string.format("%d%%", math.floor(v + 0.5)) end)
 		contarAte(valorGolsPartida, (dados.Goals or 0) / partidas, g, function(v) return string.format("%.1f", v) end)
 		aviso.Text = ""
+	end
+	if (dados.Shots or 0) > 0 then
+		contarAte(valorPontaria, math.min(100, (dados.Goals or 0) / dados.Shots * 100), g, function(v) return string.format("%d%%", math.floor(v + 0.5)) end)
 	else
+		valorPontaria.Text = "--"
+	end
+	if partidas <= 0 then
 		valorTaxa.Text = "--"
 		valorGolsPartida.Text = "--"
 		aviso.Text = "As partidas jogadas daqui pra frente entram na sua carreira."
@@ -330,6 +350,7 @@ local function abrirPainel()
 	for _, c in ipairs(CARTOES) do numeros[c.Chave].Text = "0" end
 	valorTaxa.Text = "--"
 	valorGolsPartida.Text = "--"
+	valorPontaria.Text = "--"
 	aviso.Text = "carregando…"
 	screenGui.Enabled = true
 	panel.Position = UDim2.new(0.5, 0, 0.5, 14)

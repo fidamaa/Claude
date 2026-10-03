@@ -576,7 +576,7 @@ local function validatePlayerData(data)
 	if type(data.CareerStats) ~= "table" then
 		data.CareerStats = {}
 	end
-	for _, chave in ipairs({ "Goals", "Assists", "Tackles", "Dribbles", "Saves", "MVPs", "Matches" }) do
+	for _, chave in ipairs({ "Goals", "Assists", "Tackles", "Dribbles", "Saves", "MVPs", "Matches", "Shots", "Passes", "Hissatsus", "Draws", "Losses", "BestGoals" }) do -- (v123: +6)
 		if type(data.CareerStats[chave]) ~= "number" then
 			data.CareerStats[chave] = 0
 		end
@@ -1020,7 +1020,10 @@ end
 -- ⚠️ v115: soma as estatísticas de UMA partida na carreira (chamado pelo
 -- LobbyRewardsReceiver junto com o AddPlayerWin). `stats` é o Stats do Game:
 -- { Goals, Assists, Tackles, Dribbles, Saves, MVP, Won }.
-_G.AddCareerStats = function(player, stats)
+-- ⚠️ v123: + Shots, Passes, Hissatsus e o RESULTADO (empate/derrota; vitória continua
+-- em data.Wins). Partida só conta em "Matches" se terminou (win/lose/draw) — quem saiu
+-- no meio ("ongoing") soma o que fez, mas não conta partida.
+_G.AddCareerStats = function(player, stats, resultado)
 	local data = onlinePlayersData[player.UserId]
 	if not data or type(stats) ~= "table" then return false end
 	local c = data.CareerStats
@@ -1038,8 +1041,17 @@ _G.AddCareerStats = function(player, stats)
 	soma("Tackles", stats.Tackles)
 	soma("Dribbles", stats.Dribbles)
 	soma("Saves", stats.Saves)
+	soma("Shots", stats.Shots)
+	soma("Passes", stats.Passes)
+	soma("Hissatsus", stats.Hissatsus)
 	if stats.MVP == true then soma("MVPs", 1) end
-	soma("Matches", 1)
+	if resultado == nil or resultado == "win" or resultado == "lose" or resultado == "draw" then
+		soma("Matches", 1)
+	end
+	if resultado == "draw" then soma("Draws", 1) end
+	if resultado == "lose" then soma("Losses", 1) end
+	-- recorde de gols numa partida só
+	if type(stats.Goals) == "number" and stats.Goals > (c.BestGoals or 0) then c.BestGoals = math.floor(stats.Goals) end
 	_G.RequestSave(player)
 	return true
 end
@@ -1176,6 +1188,9 @@ getCareerStatsFunc.OnServerInvoke = function(player)
 	return {
 		Goals = c.Goals or 0, Assists = c.Assists or 0, Tackles = c.Tackles or 0,
 		Dribbles = c.Dribbles or 0, Saves = c.Saves or 0, MVPs = c.MVPs or 0,
+		-- ⚠️ v123
+		Shots = c.Shots or 0, Passes = c.Passes or 0, Hissatsus = c.Hissatsus or 0,
+		Draws = c.Draws or 0, Losses = c.Losses or 0, BestGoals = c.BestGoals or 0,
 		-- quem já tinha vitórias antes do contador de partidas não fica com "0 partidas":
 		-- o mínimo coerente é o número de vitórias
 		Matches = math.max(c.Matches or 0, data.Wins or 0), Wins = data.Wins or 0,

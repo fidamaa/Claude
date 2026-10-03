@@ -1701,6 +1701,11 @@ local function resolveAndExecute(player, slot, def, effect)
 			applyExtraEffectKeys(player, slot, def, effect)
 		end
 		feedback(player, "Fired", def.Name)
+		-- ⚠️ v123: estatísticas da partida (Hissatsu usada; Hissatsu de chute = chute a gol)
+		if _G.RegistrarEstatistica then
+			_G.RegistrarEstatistica(player, "Hissatsus")
+			if action == "Shot" then _G.RegistrarEstatistica(player, "Shots") end
+		end
 		-- ⚠️ v109: VFX das Hissatsus sem cutscene (dribles/defesas) em todo cliente
 		if Remotes.HissatsuVFX and player.Character and not def.Cutscene and action ~= "Tackle" and action ~= "Root" then
 			Config.DispararVFX("HissatsuVFX", player.Character, def.Name, def.Element)
@@ -2507,6 +2512,7 @@ _G.ConsumirGuardaSemQTE = function(player)
 	GKGuard[player] = nil
 	clearMovementFreeze(player)
 	feedback(player, "Fired", guard.Def.Name)
+	if _G.RegistrarEstatistica then _G.RegistrarEstatistica(player, "Hissatsus") end -- ⚠️ v123
 	return guard.Def
 end
 

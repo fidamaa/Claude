@@ -56,9 +56,18 @@ local function claimPendingRewards(player)
 	for attempt = 1, MAX_RETRY_ATTEMPTS do
 		local claimed
 		local success, err = pcall(function()
+			-- ⚠️ v123 — BUG: no Roblox, devolver nil no UpdateAsync CANCELA a escrita (não
+			-- apaga a chave). A recompensa nunca saía do DataStore — só o carimbo
+			-- LastRewardClaimedAt segurava a duplicação. Agora grava uma MARCA de
+			-- "já entregue" no lugar (mesmo efeito atômico: só uma chamada vê o valor).
 			rewardsDataStore:UpdateAsync(key, function(current)
+				if type(current) == "table" and current.Reivindicada then
+					claimed = nil
+					return current -- já entregue antes: não muda nada
+				end
 				claimed = current
-				return nil -- remove atomicamente ao mesmo tempo que lê
+				if current == nil then return nil end -- nada pendente: não escreve
+				return { Reivindicada = true, ReivindicadaEm = os.time(), SavedAt = current.SavedAt }
 			end)
 		end)
 
@@ -170,7 +179,7 @@ local function applyRewards(player, rewards)
 	end
 	-- ⚠️ v115: soma a partida nas estatísticas de carreira (NPC Bentes)
 	if _G.AddCareerStats and type(rewards.Stats) == "table" then
-		_G.AddCareerStats(player, rewards.Stats)
+		_G.AddCareerStats(player, rewards.Stats, rewards.MatchResult) -- ⚠️ v123: + resultado
 	end
 
 	-- ⚠️ NOVO: alimenta o progresso das missões diárias (QuestManager.
@@ -249,7 +258,10 @@ local function peekPendingRewards(player)
 	local success, rewards = pcall(function()
 		return rewardsDataStore:GetAsync(key)
 	end)
-	if success then return rewards end
+	if success then
+		if type(rewards) == "table" and rewards.Reivindicada then return nil end -- (v123: marca de já entregue)
+		return rewards
+	end
 	warn(string.format("⚠️ Erro ao espiar recompensas: %s", tostring(rewards)))
 	return nil
 end

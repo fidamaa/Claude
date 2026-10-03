@@ -3894,6 +3894,11 @@ _G.ProcessarChuteServidor = function(player, chargedForce, targetPoint, noAr, te
 		velocity += Vector3.new(0, force * Config.KICK_UPWARD_BOOST, 0)
 	end
 	ball.AssemblyLinearVelocity = velocity
+	-- ⚠️ v123: estatísticas da partida (chute a gol / passe) — ver _G.RegistrarEstatistica
+	if _G.RegistrarEstatistica then
+		if kickTrigger == "KickAtGoal" then _G.RegistrarEstatistica(player, "Shots")
+		elseif kickTrigger == "KickAtTeammate" then _G.RegistrarEstatistica(player, "Passes") end
+	end
 
 	-- garante que o toque conte pra assistência/gol mesmo em voleio sem posse formal
 	pushToucher(player)
