@@ -7493,12 +7493,20 @@ end)()
 			local janela = effect.Janela or 1.6
 			guardaFurtiva[player] = { Ate = tick() + janela, Effect = effect }
 			if _G.GrantPulseIframe then _G.GrantPulseIframe(player, janela) end
+			-- ⚠️ v123 — PEDIDO: "quando usar o counter, ele faz uma animação e fica
+			-- PARALISADO". Postura de guarda (AnimacoesProcedurais GuardaCounter) e travado
+			-- no lugar pela janela; o carrinho que chegar nesse tempo vira o contra-ataque.
+			stunPlayer(player, janela)
+			avisarAcao(player.Character, "GuardaCounter", janela)
 			vfx(player, "Passo Furtivo@guarda", { Tempo = janela }, janela)
 			return true
 		end
 		-- chamado na resolução de TODO desarme (carrinho, bote, investida): se o
 		-- alvo está em guarda, o desarme vira contra-ataque e devolve true
+		local contraDaGuarda -- (definida logo abaixo)
 		_G.ContraGuardaFurtiva = function(alvo, atacante)
+			-- ⚠️ v123: a GUARDA do Passo Furtivo (postura de counter) tem prioridade
+			if guardaFurtiva[alvo] and contraDaGuarda(alvo, atacante) then return true end
 			-- ⚠️ v120b — PEDIDO: "esse counter (do Passo Furtivo) vai pro Monstro do Drible,
 			-- e aumenta a velocidade dele: ele dá o counter assim que o cara tenta acertar".
 			-- Com a bola e o Monstro do Drible pronto, QUALQUER desarme em você (carrinho,
@@ -7522,23 +7530,43 @@ end)()
 					return true
 				end
 			end
+			return false
+		end
+		-- ⚠️ v123 — PEDIDO: "se alguém der um carrinho nela, o cara do counter vai ganhar
+		-- iframe e ir 2 vezes mais longe que o dash padrão". Sai da guarda, fica invencível
+		-- durante a arrancada (2x Config.DASH_DISTANCE, pra longe de quem veio, um pouco
+		-- de lado) e quem tentou cai tonto.
+		contraDaGuarda = function(alvo, atacante)
 			local g = guardaFurtiva[alvo]
 			if not g then return false end
 			guardaFurtiva[alvo] = nil
 			if tick() > g.Ate or owner ~= alvo then return false end
+			clearStun(alvo) -- sai da postura (estava travado)
+			avisarAcao(alvo.Character, "parar:GuardaCounter")
+			local durDash = (Config.DASH_DURATION or 0.25) * 1.6
+			if _G.GrantPulseIframe then _G.GrantPulseIframe(alvo, durDash + 0.5) end
 			local _, ra = getCharacterParts(alvo)
 			local _, rt = getCharacterParts(atacante)
-			if ra and rt then
-				local vindo = plano(ra.Position - rt.Position, plano(ra.CFrame.LookVector, Vector3.new(0, 0, -1)))
+			if ra then
+				-- pra longe de quem veio (sem saber de onde, pra frente)
+				local frente = plano(ra.CFrame.LookVector, Vector3.new(0, 0, -1))
+				local vindo = rt and plano(ra.Position - rt.Position, frente) or frente
 				local lado = vindo:Cross(Vector3.yAxis).Unit * ((math.random() < 0.5) and 1 or -1)
-				local passo = lado * (g.Effect.Desvio or 7) + vindo * 3
-				local livre = alcanceLivre(ra.Position, passo.Unit, passo.Magnitude)
-				playDribbleAnimation(alvo, lado:Dot(ra.CFrame.RightVector) > 0 and "Right" or "Left", 0.3)
-				sendDisplacement(alvo, passo.Unit * livre, 0.22)
+				local dir = (vindo + lado * 0.45).Unit
+				local distancia = (Config.DASH_DISTANCE or 16) * (g.Effect.DashMult or 2)
+				local livre = alcanceLivre(ra.Position, dir, distancia)
+				local local_ = ra.CFrame:VectorToObjectSpace(dir)
+				-- (um instante depois: o cliente cancela deslocamento enquanto ainda vê o
+				-- WalkSpeed 0 da postura — o clearStun acima precisa chegar antes)
+				task.delay(0.08, function()
+					avisarAcao(alvo.Character, "Dash", durDash, { X = local_.X, Z = -local_.Z })
+					sendDisplacement(alvo, dir * livre, durDash)
+				end)
 			end
-			stunPlayer(atacante, g.Effect.Stun or 1.6)
+			local stun = g.Effect.Stun or 1.6
+			stunPlayer(atacante, stun)
 			ragdollPlayer(atacante, 1)
-			if _G.GrantPulseIframe then _G.GrantPulseIframe(alvo, 0.5) end
+			if _G.MostrarTontura then _G.MostrarTontura(atacante, stun) end
 			vfx(alvo, "Passo Furtivo@contra", { Alvo = atacante.Character }, 0.8)
 			return true
 		end

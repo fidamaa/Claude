@@ -1065,6 +1065,38 @@ Anim.Acoes.Agarrar = {
 	end,
 }
 
+-- ----- GUARDA DE COUNTER (Passo Furtivo com a bola) — ⚠️ v123 -----
+-- PEDIDO: "quando usar o counter, ele vai fazer uma animação e ficar paralisado".
+-- Postura de espera: base aberta, corpo um pouco de lado e abaixado, braços abertos
+-- e prontos (R6: braço bem fora do tronco), respirando de leve enquanto dura.
+do
+	local guarda = {
+		Root = V(-12, -22, 0), Neck = V(4, 20, 0),
+		RHip = V(18, 0, 16), LHip = V(-10, 0, -16), RKnee = V(-35, 0, 0), LKnee = V(-30, 0, 0),
+		RShoulder = V(30, 0, 58), LShoulder = V(45, 0, -52), RElbow = V(55, 0, 0), LElbow = V(70, 0, 0),
+		RootPos = V(0, -0.35, 0),
+	}
+	local respira = {
+		Root = V(-15, -22, 0), Neck = V(6, 20, 0),
+		RHip = V(20, 0, 17), LHip = V(-9, 0, -17), RKnee = V(-38, 0, 0), LKnee = V(-33, 0, 0),
+		RShoulder = V(34, 0, 62), LShoulder = V(48, 0, -56), RElbow = V(58, 0, 0), LElbow = V(72, 0, 0),
+		RootPos = V(0, -0.42, 0),
+	}
+	Anim.Acoes.GuardaCounter = {
+		Duracao = 1.6, EntradaSeg = 0.06, SaidaSeg = 0.12, Suave = true,
+		Quadros = function()
+			return {
+				{ 0.00, neutro() },
+				{ 0.14, guarda },
+				{ 0.55, respira },
+				{ 0.95, guarda },
+				{ 1.35, respira },
+				{ 1.60, guarda },
+			}
+		end,
+	}
+end
+
 -- ----- DASH (arrancada) — ⚠️ v104 -----
 -- PEDIDO: "faça uma animação de dash também, e inclua um vento em volta com
 -- VFX, como se tivesse bem rápido atravessando o vento". Arrancada de anime:

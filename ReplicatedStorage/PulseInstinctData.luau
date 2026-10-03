@@ -1534,7 +1534,11 @@ Data.Instincts = {
 		-- te desarmar nesse tempo erra, você some num passo pro lado e ele cai.
 		-- ⚠️ v120b: a guarda (counter do carrinho) foi pro Monstro do Drible (PEDIDO);
 		-- o Passo Furtivo volta a ser só o SUMIR.
-		Description = "Passo Furtivo: sem a bola, a tecla da Arma te faz SUMIR da vista dos adversários por 3,5s. E sempre que ninguém está te olhando, +25% de velocidade e +5 de alcance pra receber.",
+		-- ⚠️ v123 — PEDIDO: "quando usar o counter, ele faz uma animação e fica PARALISADO;
+		-- se alguém der carrinho nele, ganha iframe e vai 2x mais longe que o dash padrão"
+		-- + "coloca em outra arma, mantém o Monstro do Drible como está". COM a bola, a
+		-- tecla é a GUARDA (counter do carrinho); sem a bola continua o SUMIR.
+		Description = "Passo Furtivo: sem a bola, a tecla da Arma te faz SUMIR da vista dos adversários por 3,5s. COM a bola, a tecla é o COUNTER DO CARRINHO: você trava numa guarda por 1,6s — quem tentar te desarmar nesse tempo erra e fica tonto, e você arranca pra longe com o dobro do dash, invencível. E sempre que ninguém está te olhando, +25% de velocidade e +5 de alcance pra receber.",
 		Passiva = "Sem a posse da bola e com NENHUM adversário olhando na sua direção: +25% de velocidade e +5 de alcance de recepção.",
 		Trigger = "Instant",
 		Condition = { RequireUnseen = true, RequireNoPossession = true },
@@ -1542,12 +1546,12 @@ Data.Instincts = {
 		-- ⚠️ v111: tecla = SUMIR (Stealth, Blue Lock) — some da vista dos
 		-- adversários por 3,5s (quase transparente e sem nome pra eles) e, como
 		-- ninguém te vê, o bônus acima liga junto.
-		Ativa = "Tecla da Arma, sem a bola: some da vista dos adversários por 3,5s.",
+		Ativa = "Tecla da Arma: sem a bola, some da vista dos adversários por 3,5s; com a bola, guarda de counter (1,6s parado) — carrinho em você vira arrancada 2x o dash.",
 		Tecla = "R",
 		AtivaSoNaTecla = true,
 		AtivaCondition = {},
-		AtivaAction = "Sumir",
-		AtivaEffect = { Duracao = 3.5 },
+		AtivaAction = "SumirOuGuarda",
+		AtivaEffect = { Duracao = 3.5, Janela = 1.6, Stun = 1.6, DashMult = 2 },
 		AtivaCooldown = 16,
 	},
 
