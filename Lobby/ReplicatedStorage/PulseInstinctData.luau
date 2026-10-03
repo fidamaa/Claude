@@ -764,7 +764,7 @@ Data.Pulses = {
 		Image = "rbxassetid://88339078899907", -- ⚠️ v118: arte do artista (pacote "Imagens (4)")
 		Rarity = "Rare",
 		Element = "Natureza",
-		Description = "Bola Ilusão: TRÊS figuras suas com bola saem juntas (pra frente e nas duas diagonais) e você TROCA de lugar com uma delas, sorteada — ninguém sabe qual é você. Continue no caminho dela fingindo ser cópia; em 1,5s as cópias somem numa nuvem.",
+		Description = "Bola Ilusão (precisa estar com a bola): você some numa nuvem e TRÊS figuras suas com bola saem juntas (pra frente e nas duas diagonais); você reaparece no lugar de uma delas, sorteada — ninguém sabe qual é você. Continue no caminho dela fingindo ser cópia; em 1,5s as cópias somem numa nuvem.",
 		-- ⚠️ v113 — PEDIDO: "Ilusão de bolas: 3 clones, um deles é você (aleatório);
 		-- os clones vão pra frente, diagonal direita e diagonal esquerda; você anda
 		-- livre; os clones somem em 1,5s com animação". Instantânea (sem o arranque
@@ -773,7 +773,11 @@ Data.Pulses = {
 		PositionHint = "MF",
 		Scaling = { DribbleSkill = 1 },
 		Cooldown = 35,
-		Effect = { SelfIframe = 1.0, Ilusao = { Duracao = 1.5, Distancia = 22 } },
+		-- ⚠️ v123 — PEDIDO: "a Bola Ilusão funciona sem a bola, e não teleporta o player
+		-- pra posição de um dos clones". PrecisaDaBola + Troca (s): você some e reaparece
+		-- no lugar de uma das três figuras.
+		PrecisaDaBola = true,
+		Effect = { SelfIframe = 1.0, Ilusao = { Duracao = 1.5, Distancia = 22, Troca = 0.45 } },
 	},
 
 	-- Zigzag Spark (ジグザグスパーク, Vento): pula de um lado pro outro juntando

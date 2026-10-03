@@ -652,6 +652,8 @@ end
 -- (dados.Dirs, sorteadas no servidor entre frente e diagonais); ele é a
 -- terceira figura. Em Duracao somem numa nuvem roxa.
 VFX["Bola Ilusão@clones"] = function(ch, root, dados)
+	-- ⚠️ v123 — PEDIDO: "aumenta a névoa aí em 20%" (quantidade e tamanho das nuvens)
+	local NEVOA = 1.2
 	if not dados or type(dados.Dirs) ~= "table" then return end
 	local dur = dados.Duracao or 1.5
 	local dist = dados.Distancia or 22
@@ -694,14 +696,56 @@ VFX["Bola Ilusão@clones"] = function(ch, root, dados)
 		end
 	end
 	ch.Archivable = antes
-	fumaca(noChao(root.Position, 0.5), cores({ { 0, rgb(210, 170, 255) }, { 1, rgb(120, 60, 200) } }), 12, 2, 5)
+	fumaca(noChao(root.Position, 0.5), cores({ { 0, rgb(210, 170, 255) }, { 1, rgb(120, 60, 200) } }), math.round(12 * NEVOA), 2 * NEVOA, 5)
 	-- ⚠️ v120b: TROCA de lugar — "some" na nuvem e as três figuras saem dela juntas
 	if dados.Trocou then
-		fumaca(noChao(root.Position, 1.5), cores({ { 0, rgb(235, 215, 255) }, { 1, rgb(140, 80, 220) } }), 26, 4, 3)
+		fumaca(noChao(root.Position, 1.5), cores({ { 0, rgb(235, 215, 255) }, { 1, rgb(140, 80, 220) } }), math.round(26 * NEVOA), 4 * NEVOA, 3)
 		faiscas(root.Position, rgb(210, 160, 255), 30, 12)
 	end
 	local raioBola = bolaReal and bolaReal.Size.X / 2 or 0.85
+	-- ⚠️ v123 — TROCA DE LUGAR DE VERDADE: com dados.Meu/Troca, as TRÊS figuras saem e o
+	-- jogador (e a bola) fica invisível até `Troca`; aí o servidor teleporta ele pro
+	-- lugar da figura `Meu`, que some, e um puf sai nas três ao mesmo tempo.
+	local trocaSeg = tonumber(dados.Troca)
+	local meuIdx = tonumber(dados.Meu)
+	local escondidos = {}
+	local function esconder(modelo, sim)
+		for _, d in ipairs(modelo:GetDescendants()) do
+			if d:IsA("BasePart") or d:IsA("Decal") then
+				if sim then
+					escondidos[d] = true
+					d.LocalTransparencyModifier = 1
+				elseif escondidos[d] then
+					d.LocalTransparencyModifier = 0
+				end
+			end
+		end
+	end
+	local trocou = false
+	if trocaSeg and meuIdx then
+		esconder(ch, true)
+		if bolaReal then escondidos[bolaReal] = true; bolaReal.LocalTransparencyModifier = 1 end
+	end
+	local function fazerTroca()
+		if trocou then return end
+		trocou = true
+		esconder(ch, false)
+		if bolaReal then bolaReal.LocalTransparencyModifier = 0 end
+		for i, cp in ipairs(copias) do
+			local onde = cp.Root and cp.Root.Position or root.Position
+			fumaca(onde, cores({ { 0, rgb(225, 195, 255) }, { 1, rgb(110, 50, 190) } }), math.round(10 * NEVOA), 2.5 * NEVOA, 4)
+			faiscas(onde, rgb(210, 160, 255), 14, 10)
+			if i == meuIdx then
+				-- a figura sorteada vira o jogador de verdade: some na hora
+				if _G.AnimadorRemover then pcall(_G.AnimadorRemover, cp.Modelo) end
+				cp.Modelo:Destroy()
+				if cp.Bola then cp.Bola:Destroy() end
+				cp.Root, cp.Bola, cp.Sumiu = nil, nil, true
+			end
+		end
+	end
 	durante(dur, function(t)
+		if trocaSeg and meuIdx and t >= trocaSeg then fazerTroca() end
 		for _, cp in ipairs(copias) do
 			if cp.Root then
 				local u = math.min(t / dur, 1)
@@ -713,9 +757,11 @@ VFX["Bola Ilusão@clones"] = function(ch, root, dados)
 			end
 		end
 	end, function()
+		if trocaSeg and meuIdx then fazerTroca() end -- (garantia: nunca fica invisível)
 		for _, cp in ipairs(copias) do
+			if cp.Sumiu then continue end
 			local onde = cp.Root and cp.Root.Position or root.Position
-			fumaca(onde, cores({ { 0, rgb(225, 195, 255) }, { 1, rgb(110, 50, 190) } }), 18, 3, 7)
+			fumaca(onde, cores({ { 0, rgb(225, 195, 255) }, { 1, rgb(110, 50, 190) } }), math.round(18 * NEVOA), 3 * NEVOA, 7)
 			faiscas(onde, rgb(210, 160, 255), 25, 14)
 			anel(noChao(onde, 0.3), Vector3.yAxis, rgb(190, 120, 255), 1, 7, 0.35)
 			if _G.AnimadorRemover then pcall(_G.AnimadorRemover, cp.Modelo) end

@@ -1110,6 +1110,10 @@ end
 -- ===== PRECONDIÇÃO DA AÇÃO (checada ANTES de gastar cooldown) =====
 local function actionPrecheck(player, def)
 	local action = def.Action
+	-- ⚠️ v123: Hissatsu que só faz sentido com a bola (ex.: Bola Ilusão), qualquer Action
+	if def.PrecisaDaBola and not (_G.PulseHasControl and _G.PulseHasControl(player)) then
+		return false, "Sem posse de bola"
+	end
 	if action == "Shot" or action == "Pass" or action == "DribbleMove" then
 		if not (_G.PulseHasControl and _G.PulseHasControl(player)) then
 			return false, "Sem posse de bola"
@@ -1311,18 +1315,35 @@ local function applyExtraEffectKeys(player, slot, def, effect)
 			local meu = math.random(1, 3)
 			local dur = effect.Ilusao.Duracao or 1.5
 			local dist = effect.Ilusao.Distancia or 22
-			local dirs, minhaDir = {}, nil
-			for i, a in ipairs(angulos) do
-				local d = CFrame.Angles(0, math.rad(a), 0):VectorToWorldSpace(look)
-				if i == meu then minhaDir = d else table.insert(dirs, d) end
+			-- ⚠️ v123 — PEDIDO: "não teleporta o player pra posição de um dos clones". As
+			-- TRÊS figuras saem juntas da nuvem; o jogador (e a bola) some e, em `troca`
+			-- segundos, é TELEPORTADO pro lugar da figura sorteada — que vira ele. Puf nas
+			-- três ao mesmo tempo (ninguém sabe qual), as outras duas seguem e somem.
+			local troca = math.clamp(effect.Ilusao.Troca or 0.45, 0.1, dur - 0.1)
+			local dirs = {}
+			for _, a in ipairs(angulos) do
+				table.insert(dirs, CFrame.Angles(0, math.rad(a), 0):VectorToWorldSpace(look))
 			end
 			if Remotes.HissatsuVFX then
 				Config.DispararVFX("HissatsuVFX", player.Character, "Bola Ilusão@clones", def.Element,
-					{ Dirs = dirs, Duracao = dur, Distancia = dist, Trocou = true })
+					{ Dirs = dirs, Meu = meu, Troca = troca, Duracao = dur, Distancia = dist, Trocou = true })
 			end
-			if minhaDir and Remotes.ApplyDisplacement then
-				Remotes.ApplyDisplacement:FireClient(player, minhaDir * dist, dur)
-			end
+			local origem = root.Position
+			local minhaDir = dirs[meu]
+			task.delay(troca, function()
+				local r = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+				if not r then return end
+				local destino = origem + minhaDir * dist * (troca / dur)
+				-- não atravessa parede: para antes de algo sólido no caminho
+				local filtro = RaycastParams.new()
+				filtro.FilterType = Enum.RaycastFilterType.Exclude
+				filtro.FilterDescendantsInstances = { player.Character, workspace:FindFirstChild(Config.BALL_NAME) }
+				filtro.RespectCanCollide = true
+				local hit = workspace:Raycast(origem, destino - origem, filtro)
+				if hit then destino = origem + (destino - origem).Unit * math.max(hit.Distance - 2, 0) end
+				r.CFrame = CFrame.lookAt(destino, destino + minhaDir)
+				r.AssemblyLinearVelocity = minhaDir * (dist / dur)
+			end)
 		end
 	end
 
