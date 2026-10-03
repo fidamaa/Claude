@@ -557,7 +557,8 @@ function R1.Pose(t) return samplePose(R1_POSE, t) end
 --   • não cai mais raio do céu: a energia sai dos DOIS corpos pra bola (Efeitos).
 local R1_ESPELHO_X = R1.KickPoint.X -- plano vertical que passa pela bola
 local function r1Espelho(p) return V3(2 * R1_ESPELHO_X - p.X, p.Y, p.Z) end
-local R1_PARCEIRO_INICIO = V3(-2.4, 0, 0.6) -- correndo do lado esquerdo do chutador
+-- ⚠️ v122 — PEDIDO: "nos chutes em conjunto (menos a Zona Morta) os companheiros mais LONGE do jogador" (era -2.4, 0, 0.6)
+local R1_PARCEIRO_INICIO = V3(-4.0, 0, 0.8) -- correndo do lado esquerdo do chutador
 function R1.ParceiroPos(t)
 	if t < 0.3 then return R1_PARCEIRO_INICIO end
 	if t < 0.95 then
@@ -1334,8 +1335,9 @@ function GA.Pose(t) return samplePose(GA_POSE, t) end
 -- Terra"). Os dois companheiros (os de verdade que entraram no QTE; sem eles,
 -- sombras): o 1º soca o campo junto com você e FICA no chão, olhando vocês
 -- subirem; o 2º sobe AO SEU LADO na mão e chuta junto (pose espelhada).
-local GA_LADO = V3(1.9, 0, 0.35)
-local GA_SOCADOR = V3(-2.2, 0, 3.4)
+-- ⚠️ v122 — PEDIDO: "nos chutes em conjunto (menos a Zona Morta) os companheiros mais LONGE do jogador" (eram 1.9 / -2.2, 3.4)
+local GA_LADO = V3(3.4, 0, 0.35)
+local GA_SOCADOR = V3(-3.8, 0, 4.8)
 local GA_OLHA_SUBIR = { Neck = { 45, 0, 0 }, RShoulder = { 150, 0, 30 }, LShoulder = { 20, 0, -30 } }
 GA.Clones = {
 	Quantidade = 2,
@@ -1411,8 +1413,9 @@ DT.Tema = {
 	Contorno = rgb(40, 10, 0), Flash = rgb(255, 230, 190),
 	Tint = rgb(255, 232, 215), Saturation = 0.25, Contrast = 0.15, Brightness = 0,
 }
-local DT_PARCEIRO = V3(-3.4, 0, 2.8)
-local DT_BOLA_PE = V3(-2.6, -2.3, 1.2) -- no pé do parceiro
+-- ⚠️ v122 — PEDIDO: "nos chutes em conjunto (menos a Zona Morta) os companheiros mais LONGE do jogador" (era -3.4, 0, 2.8; a bola acompanha o pé dele)
+local DT_PARCEIRO = V3(-5.0, 0, 3.8)
+local DT_BOLA_PE = V3(-4.2, -2.3, 2.2) -- no pé do parceiro
 local DT_POSE_INICIO = {
 	{ 0.00, {} },
 	{ 0.30, { Root = { -12, 0, 0 }, Neck = { 25, 0, 0 }, RHip = { 40, 0, 0 }, LHip = { 40, 0, 0 },
@@ -1716,7 +1719,8 @@ GB.Centro = V3(0, 12.8, -6) -- onde a bola fica no chute (no meio dos três pés
 GB.KickPoint = GB.Centro
 GB.KickContactDir = V3(0, -0.2, -1).Unit
 local GB_BOLA_ALTO = V3(0, 17, -7)
-local GB_LADOS = { [1] = -3.6, [2] = 3.6 }
+-- ⚠️ v122 — PEDIDO: "nos chutes em conjunto (menos a Zona Morta) os companheiros mais LONGE do jogador" (no chão; era 3.6 — no ar eles fecham na bola)
+local GB_LADOS = { [1] = -5.4, [2] = 5.4 }
 local GB_CHUTE_RAIZ = { [0] = V3(0, 12.3, -2.6), [1] = V3(-2.4, 12.6, -3.8), [2] = V3(2.4, 12.6, -3.8) }
 local function gbPos(i, t)
 	local chao = i == 0 and V3(0, 0, 0) or V3(GB_LADOS[i], 0, 0.4)
