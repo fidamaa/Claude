@@ -658,6 +658,24 @@ _G.GetKickChargeInfo = function()
 	}
 end
 
+-- ⚠️ v122 — CURVA DO RIN: o lado da curva é o A/D segurado na hora de soltar. O
+-- servidor lia o MoveDirection dele e falhava; agora o cliente manda o movimento
+-- (MoveDirection; sem ele, as teclas A/D/setas pelo lado da câmera).
+local function movimentoDoChute()
+	local hum = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
+	local mov = hum and hum.MoveDirection or Vector3.zero
+	if mov.Magnitude < 0.2 then
+		local cam = workspace.CurrentCamera
+		local direitaCam = cam and Vector3.new(cam.CFrame.RightVector.X, 0, cam.CFrame.RightVector.Z) or Vector3.zero
+		if direitaCam.Magnitude > 0.01 then
+			local esq = UserInputService:IsKeyDown(Enum.KeyCode.A) or UserInputService:IsKeyDown(Enum.KeyCode.Left)
+			local dir = UserInputService:IsKeyDown(Enum.KeyCode.D) or UserInputService:IsKeyDown(Enum.KeyCode.Right)
+			if esq and not dir then mov = -direitaCam.Unit elseif dir and not esq then mov = direitaCam.Unit end
+		end
+	end
+	return mov
+end
+
 local function releaseKick()
 	if not isCharging then return end
 	isCharging = false
@@ -670,7 +688,7 @@ local function releaseKick()
 	-- ⚠️ v84: sem spin — o chute normal sai reto na direção mirada (ver o
 	-- comentário no final de Remotes.KickBall em BallController).
 	-- ⚠️ v105: manda se está no ar — voleio (sem posse) só vale pulando
-	Remotes.KickBall:FireServer(currentForce, computeAimPoint(), _G.EstouNoAr and _G.EstouNoAr() or false)
+	Remotes.KickBall:FireServer(currentForce, computeAimPoint(), _G.EstouNoAr and _G.EstouNoAr() or false, movimentoDoChute())
 end
 
 -- ===== ⚠️ v105 — CABEÇADA E VOLEIO NO AR =====

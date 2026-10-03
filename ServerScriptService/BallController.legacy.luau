@@ -3603,7 +3603,7 @@ Remotes.UpdateKickCharging.OnServerEvent:Connect(function(player, carregando)
 end)
 
 -- (⚠️ v120b: com nome em _G pra dar pra testar o chute pelo servidor; sem local novo no topo)
-_G.ProcessarChuteServidor = function(player, chargedForce, targetPoint, noAr, tentativaGuardada)
+_G.ProcessarChuteServidor = function(player, chargedForce, targetPoint, noAr, tentativaGuardada, movimentoCliente)
 	if _G.HissatsuCutsceneActive then return end -- ⚠️ v87: ninguém age durante a cutscene de Hissatsu
 	if isStunned(player) then return end
 	-- ⚠️ v24: com uma Hissatsu de bola em andamento, a bola não sai do pé por
@@ -3659,7 +3659,7 @@ _G.ProcessarChuteServidor = function(player, chargedForce, targetPoint, noAr, te
 			-- CHUTE_ANTECIPADO_SEG; se ela chegar nesse tempo, o chute sai sozinho
 			if tentativaGuardada then return "fora" end
 			if _G.GuardarChuteAntecipado then
-				_G.GuardarChuteAntecipado(player, chargedForce, targetPoint, noAr)
+				_G.GuardarChuteAntecipado(player, chargedForce, targetPoint, noAr, movimentoCliente)
 			end
 			-- ⚠️ v85 — PEDIDO: "se eu chutar sem a bola, a animação de chutar
 			-- não sai... a animação de chute precisa sair mesmo sem a bola".
@@ -3914,7 +3914,7 @@ _G.ProcessarChuteServidor = function(player, chargedForce, targetPoint, noAr, te
 	local curvaDoChute = armaDoChute and armaDoChute.Curva
 		or (kickTrigger and _G.CurvaDaArmaEquipada and _G.CurvaDaArmaEquipada(player, kickTrigger))
 	if curvaDoChute and _G.ArmaAplicarCurva then
-		_G.ArmaAplicarCurva(player, targetPoint, curvaDoChute, kickTrigger == "KickAtGoal")
+		_G.ArmaAplicarCurva(player, targetPoint, curvaDoChute, kickTrigger == "KickAtGoal", movimentoCliente)
 	end
 	if armaDoChute and armaDoChute.CompanheiroForcaMult and kickTrigger == "KickAtTeammate" and _G.SetPulseTeammateBuff then
 		local maisPerto, menor = nil, 18
@@ -3929,21 +3929,26 @@ _G.ProcessarChuteServidor = function(player, chargedForce, targetPoint, noAr, te
 		if maisPerto then _G.SetPulseTeammateBuff(maisPerto, armaDoChute.CompanheiroForcaMult, 6) end
 	end
 end
-Remotes.KickBall.OnServerEvent:Connect(function(...) return _G.ProcessarChuteServidor(...) end)
+-- ⚠️ v122: parâmetros explícitos — o cliente não pode mandar `tentativaGuardada`; o 4º
+-- valor dele é o MOVIMENTO (A/D) na hora de soltar, que escolhe o lado da curva
+Remotes.KickBall.OnServerEvent:Connect(function(player, forca, alvo, noAr, movimento)
+	if typeof(movimento) ~= "Vector3" or movimento.Magnitude > 1.5 then movimento = nil end
+	return _G.ProcessarChuteServidor(player, forca, alvo, noAr, false, movimento)
+end)
 
 -- ⚠️ v121 — CHUTE ANTECIPADO (ver Config.CHUTE_ANTECIPADO_SEG): o pedido fica guardado
 -- e é tentado de novo todo quadro até a bola chegar (posse, primeiro toque ou voleio).
 do
 	local guardados = {} -- [player] = { Forca, Alvo, NoAr, Ate }
-	_G.GuardarChuteAntecipado = function(player, forca, alvo, noAr)
-		guardados[player] = { Forca = forca, Alvo = alvo, NoAr = noAr, Ate = tick() + (Config.CHUTE_ANTECIPADO_SEG or 0.35) }
+	_G.GuardarChuteAntecipado = function(player, forca, alvo, noAr, movimento)
+		guardados[player] = { Forca = forca, Alvo = alvo, NoAr = noAr, Mov = movimento, Ate = tick() + (Config.CHUTE_ANTECIPADO_SEG or 0.35) }
 	end
 	RunService.Heartbeat:Connect(function()
 		for player, g in pairs(guardados) do
 			if tick() > g.Ate or not player.Parent then
 				guardados[player] = nil
 			else
-				local r = _G.ProcessarChuteServidor(player, g.Forca, g.Alvo, g.NoAr, true)
+				local r = _G.ProcessarChuteServidor(player, g.Forca, g.Alvo, g.NoAr, true, g.Mov)
 				if r ~= "fora" then guardados[player] = nil end
 			end
 		end
@@ -6822,7 +6827,7 @@ end)()
 	-- dentro do canto mirado. A/D só manda se você estiver andando CLARAMENTE
 	-- de lado (não na diagonal da corrida).
 	-- =====================================================================
-	_G.ArmaAplicarCurva = function(player, targetPoint, curva, chuteAGol)
+	_G.ArmaAplicarCurva = function(player, targetPoint, curva, chuteAGol, movimentoCliente)
 		local _, root = getCharacterParts(player)
 		if not root then return end
 		local horizontal = Vector3.new(ball.AssemblyLinearVelocity.X, 0, ball.AssemblyLinearVelocity.Z)
@@ -6873,11 +6878,23 @@ end)()
 		-- ao lado do ponto mirado. O lado é pra onde você está andando (A/D); parado,
 		-- o lado livre. O PASSE do Sae continua com a curva de antes (abre e volta).
 		if chuteAGol then
-			local hum2 = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
-			local mov2 = hum2 and hum2.MoveDirection or Vector3.zero
-			if mov2.Magnitude > 0.2 and math.abs(mov2:Dot(direita)) > 0.25 then
-				lado = mov2:Dot(direita) >= 0 and 1 or -1
+			-- ⚠️ v122 — PEDIDO: "o chute de um amigo vai pra esquerda/direita do nada" +
+			-- "indo pro lado (A/D), segurando e soltando, não faz curva; pode voltar pra
+			-- 24°, mas tem que curvar de verdade". O lado AUTOMÁTICO (adversário no
+			-- caminho / de fora pra dentro) curvava TODO chute a gol de quem tinha a
+			-- arma — era o "vai pro lado sozinho". E o MoveDirection lido no servidor
+			-- falhava. Agora: a curva só existe com A/D segurado na hora de soltar, e o
+			-- lado vem do CLIENTE (movimento na hora de soltar; MoveDirection só de reserva).
+			local mov2 = movimentoCliente
+			if not mov2 then
+				local hum2 = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
+				mov2 = hum2 and hum2.MoveDirection or Vector3.zero
 			end
+			local lateral2 = Vector3.new(mov2.X, 0, mov2.Z):Dot(direita)
+			if math.abs(lateral2) < 0.3 then
+				return nil -- sem A/D: chute RETO, sem curva
+			end
+			lado = lateral2 >= 0 and 1 or -1
 			-- ⚠️ v120b — PEDIDO: "o chute do Rin não tá fazendo curva nenhuma. A partir
 			-- de uns 35-45% da trajetória ela começa a virar o eixo pro lado (esquerda ou
 			-- direita, conforme você anda); passou mais um pouco, vira mais... até uns
@@ -6886,7 +6903,7 @@ end)()
 			-- RUMO da bola que gira: 0° até 35% do caminho, sobe suave até o máximo em
 			-- 70% e daí segue RETA no rumo novo (vale pra chute fraco ou forte — conta
 			-- pela distância andada até o ponto mirado).
-			local anguloMax = math.rad(math.clamp(10 * curva, 12, 34)) -- Rin (Curva 3) = 30° (⚠️ v120b: era 24°, "a curva não aparece")
+			local anguloMax = math.rad(math.clamp(8 * curva, 12, 26)) -- Rin (Curva 3) = 24° (⚠️ v122: "pode voltar pra 24°"; v120b era 30°)
 			curveGeneration += 1
 			local minhaCurvaGol = curveGeneration
 			local origem = ball.Position
