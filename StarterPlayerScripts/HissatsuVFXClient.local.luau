@@ -695,6 +695,11 @@ VFX["Bola Ilusão@clones"] = function(ch, root, dados)
 	end
 	ch.Archivable = antes
 	fumaca(noChao(root.Position, 0.5), cores({ { 0, rgb(210, 170, 255) }, { 1, rgb(120, 60, 200) } }), 12, 2, 5)
+	-- ⚠️ v120b: TROCA de lugar — "some" na nuvem e as três figuras saem dela juntas
+	if dados.Trocou then
+		fumaca(noChao(root.Position, 1.5), cores({ { 0, rgb(235, 215, 255) }, { 1, rgb(140, 80, 220) } }), 26, 4, 3)
+		faiscas(root.Position, rgb(210, 160, 255), 30, 12)
+	end
 	local raioBola = bolaReal and bolaReal.Size.X / 2 or 0.85
 	durante(dur, function(t)
 		for _, cp in ipairs(copias) do

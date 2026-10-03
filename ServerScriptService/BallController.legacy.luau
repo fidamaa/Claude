@@ -6282,6 +6282,7 @@ _G.PulseApplyAreaStun = function(player, radius, duration)
 		if not otherRoot then continue end
 		if (otherRoot.Position - root.Position).Magnitude <= radius then
 			stunPlayer(plr, duration)
+			if _G.MostrarTontura then _G.MostrarTontura(plr, duration) end -- ⚠️ v120b: tontura onde atordoa
 		end
 	end
 end

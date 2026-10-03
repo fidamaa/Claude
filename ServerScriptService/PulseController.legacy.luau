@@ -1301,13 +1301,27 @@ local function applyExtraEffectKeys(player, slot, def, effect)
 		if root then
 			local look = Vector3.new(root.CFrame.LookVector.X, 0, root.CFrame.LookVector.Z)
 			look = look.Magnitude > 0.01 and look.Unit or Vector3.new(0, 0, -1)
+			-- ⚠️ v120b — PEDIDO: "transforma em TRÊS clones (um é provisório): quando você
+			-- usa, ele TROCA a sua posição com um dos três — some o seu personagem e
+			-- aparece em algum dos três, e o cara não sabe qual é você; você pode continuar
+			-- andando reto fingindo que é outro". As 3 figuras saem juntas (frente e as duas
+			-- diagonais); a sua é sorteada: as cópias fazem as outras duas e você é
+			-- empurrado pelo caminho da sua, no mesmo ritmo, com a bola de verdade.
 			local angulos = { 0, 40, -40 }
-			table.remove(angulos, math.random(1, 3)) -- a direção que sobra é a "sua"
-			local dirs = {}
-			for i, a in ipairs(angulos) do dirs[i] = CFrame.Angles(0, math.rad(a), 0):VectorToWorldSpace(look) end
+			local meu = math.random(1, 3)
+			local dur = effect.Ilusao.Duracao or 1.5
+			local dist = effect.Ilusao.Distancia or 22
+			local dirs, minhaDir = {}, nil
+			for i, a in ipairs(angulos) do
+				local d = CFrame.Angles(0, math.rad(a), 0):VectorToWorldSpace(look)
+				if i == meu then minhaDir = d else table.insert(dirs, d) end
+			end
 			if Remotes.HissatsuVFX then
 				Config.DispararVFX("HissatsuVFX", player.Character, "Bola Ilusão@clones", def.Element,
-					{ Dirs = dirs, Duracao = effect.Ilusao.Duracao or 1.5, Distancia = effect.Ilusao.Distancia or 22 })
+					{ Dirs = dirs, Duracao = dur, Distancia = dist, Trocou = true })
+			end
+			if minhaDir and Remotes.ApplyDisplacement then
+				Remotes.ApplyDisplacement:FireClient(player, minhaDir * dist, dur)
 			end
 		end
 	end

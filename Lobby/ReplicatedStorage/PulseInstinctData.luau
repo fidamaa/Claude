@@ -760,7 +760,7 @@ Data.Pulses = {
 		Image = "rbxassetid://88339078899907", -- ⚠️ v118: arte do artista (pacote "Imagens (4)")
 		Rarity = "Rare",
 		Element = "Natureza",
-		Description = "Bola Ilusão cria duas CÓPIAS suas com bola que saem em direções sorteadas (frente e diagonais) — você é a terceira e anda livre. Em 1,5s as cópias somem numa nuvem.",
+		Description = "Bola Ilusão: TRÊS figuras suas com bola saem juntas (pra frente e nas duas diagonais) e você TROCA de lugar com uma delas, sorteada — ninguém sabe qual é você. Continue no caminho dela fingindo ser cópia; em 1,5s as cópias somem numa nuvem.",
 		-- ⚠️ v113 — PEDIDO: "Ilusão de bolas: 3 clones, um deles é você (aleatório);
 		-- os clones vão pra frente, diagonal direita e diagonal esquerda; você anda
 		-- livre; os clones somem em 1,5s com animação". Instantânea (sem o arranque
