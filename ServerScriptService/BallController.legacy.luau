@@ -303,14 +303,27 @@ end
 local kickSound = Instance.new("Sound")
 kickSound.Name = "KickSound"
 kickSound.SoundId = Config.SOUNDS.Kick
-kickSound.Volume = 0.6
+kickSound.Volume = 0.5 -- ⚠️ v124: som de chute novo ("não precisa ser muito alto")
 kickSound.Parent = ball
 
 local tackleSound = Instance.new("Sound")
 tackleSound.Name = "TackleSound"
 tackleSound.SoundId = Config.SOUNDS.Tackle
-tackleSound.Volume = 0.6
+tackleSound.Volume = 0.7
 tackleSound.Parent = ball
+-- ⚠️ v124: o deslize tem 3.4s — toca ~1s e some num fade (todo tackleSound:Play())
+tackleSound.Played:Connect(function()
+	tackleSound.Volume = 0.7
+	task.delay(0.75, function()
+		for i = 1, 6 do
+			if not tackleSound.IsPlaying then break end
+			tackleSound.Volume = 0.7 * (1 - i / 6)
+			task.wait(0.05)
+		end
+		tackleSound:Stop()
+		tackleSound.Volume = 0.7
+	end)
+end)
 
 local function playKickFeedback(force)
 	trail.Enabled = force >= Config.BALL_TRAIL_MIN_FORCE

@@ -2505,7 +2505,10 @@ Config.WHISTLE_FALLBACK_SECONDS = 1.6 -- usado só se o som não tiver carregado
 -- (rbxasset://sounds/..., testados carregando). Pra usar os seus, cole o
 -- rbxassetid:// do áudio aqui.
 Config.SOUNDS = {
-	Kick = "rbxasset://sounds/hit.wav",
+	-- ⚠️ v124 — PEDIDO: "o chute tem que ser um som de chute, tipo pá, uma pancada, não
+	-- muito alto, com efeito de grama". Pro Sound Effects "Soccer Ball Kicks On Surfaces 9"
+	-- (era rbxasset://sounds/hit.wav).
+	Kick = "rbxassetid://9119327493",
 	Goal = "rbxasset://sounds/electronicpingshort.wav",
 	-- ⚠️ v30 — PEDIDO: "vou baixar um som de apito pra quando o jogo começar,
 	-- ou a bola sair, ou quando acabar cada tempo. Separe um local específico
@@ -2520,7 +2523,10 @@ Config.SOUNDS = {
 	-- Aceita com ou sem o prefixo (ver Config.NormalizeAnimationId — a
 	-- mesma normalização vale pra som).
 	Whistle = "rbxassetid://86973351197753",
-	Tackle = "rbxasset://sounds/collide.wav",
+	-- ⚠️ v124 — PEDIDO: "o som do carrinho parece uma batida no ferro, uma explosão; faz
+	-- um som de carrinho tradicional, deslizando". Pro Sound Effects "Baseball Runner
+	-- Slide On Dirt" (3.4s — o BallController corta em ~1s com fade). Era collide.wav.
+	Tackle = "rbxassetid://9125380604",
 
 	-- PEDIDO: "quero mudar o som de passos, remova-o por enquanto, mas
 	-- coloque um espaço pra eu poder alterá-lo, junto com o de pulo
