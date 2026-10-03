@@ -613,12 +613,20 @@ local function loosenCondition(condition)
 	return loosened
 end
 
-Remotes.ActivateInstinctMode.OnServerEvent:Connect(function(player)
+Remotes.ActivateInstinctMode.OnServerEvent:Connect(function(player, aimPoint)
 	if _G.HissatsuCutsceneActive then return end -- ⚠️ v87: ninguém age durante a cutscene de Hissatsu
 	local charge = InstinctCharge[player] or 0
 	if charge < 100 then return end -- medidor não cheio — cliente já trava o botão, isso é defesa em profundidade
 	if _G.IsInInstinctMode(player) then return end -- já ativo
 	if FlowsUsados[player] then return end -- ⚠️ v113: 1 Flow por partida
+	-- ⚠️ v124 — FLOW COM CHUTE (Shidou): o Flow é o próprio chute, então precisa da bola.
+	-- Sem ela nada é gasto (o medidor continua cheio) e o jogador é avisado.
+	local exigeBola = _G.FlowExigeBola and _G.FlowExigeBola(player)
+	if exigeBola and not (_G.GetBallOwner and _G.GetBallOwner() == player) then
+		Remotes.InstinctModeFeedback:FireClient(player, "FlowPrecisaBola")
+		return
+	end
+	if exigeBola and typeof(aimPoint) ~= "Vector3" then aimPoint = nil end -- (sem mira: a cena olha pra frente)
 	-- ⚠️ v120b — PEDIDO: "ninguém pode usar um Flow em cima do outro: quem tiver com
 	-- Flow ativo vai durar a duração do Flow". Com o Flow (ou a cena) de outro
 	-- jogador valendo, o medidor fica cheio e ele tenta de novo depois.
@@ -635,10 +643,7 @@ Remotes.ActivateInstinctMode.OnServerEvent:Connect(function(player)
 	Remotes.InstinctModeFeedback:FireClient(player, "MeterUpdate", 0)
 	-- ⚠️ v113: primeiro a CENA do Flow (congela a partida, ver PulseController
 	-- _G.TocarCenaFlow); os 9s de Flow só começam quando ela acaba
-	local cena = _G.TocarCenaFlow and _G.TocarCenaFlow(player) or 0
-	-- trava contra apertar de novo durante a cena
-	InstinctModeState[player] = { ExpiresAt = tick() + cena + INSTINCT_MODE_DURATION }
-	task.delay(cena, function()
+	local function comecarFlow()
 		if not player.Parent then return end
 		InstinctModeState[player] = { ExpiresAt = tick() + INSTINCT_MODE_DURATION }
 		Remotes.InstinctModeFeedback:FireClient(player, "ModeActivated", INSTINCT_MODE_DURATION)
@@ -652,7 +657,19 @@ Remotes.ActivateInstinctMode.OnServerEvent:Connect(function(player)
 				Remotes.InstinctModeFeedback:FireClient(player, "ModeEnded")
 			end
 		end)
-	end)
+	end
+	-- ⚠️ v124: a cena do Flow com chute (Shidou) liga o Flow sozinha no último quadro,
+	-- junto com o chute (segundo retorno = true); as outras seguem como antes
+	local cena, ligaSozinha = 0, false
+	if _G.TocarCenaFlow then
+		cena, ligaSozinha = _G.TocarCenaFlow(player, aimPoint, comecarFlow)
+		cena = cena or 0
+	end
+	-- trava contra apertar de novo durante a cena
+	InstinctModeState[player] = { ExpiresAt = tick() + cena + INSTINCT_MODE_DURATION }
+	if not ligaSozinha then
+		task.delay(cena, comecarFlow)
+	end
 end)
 
 local function otherTeamName(teamName)

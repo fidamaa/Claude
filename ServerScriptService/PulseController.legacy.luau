@@ -2020,7 +2020,22 @@ end
 -- cena, o Flow começa na hora). O Flow só começa DEPOIS (InstinctController).
 local CosmeticosFlow = nil
 pcall(function() CosmeticosFlow = require(ReplicatedStorage:WaitForChild("Cosmeticos", 5)) end)
-_G.TocarCenaFlow = function(player)
+-- ⚠️ v124 — FLOW COM CHUTE (Shidou). PEDIDO: "o flow dele vai vir com a ação de chute
+-- dele: pra onde a pessoa mirar o jogador vai usar o flow e dar a cutscene pra chutar e
+-- ativar o flow ao mesmo tempo". Uma cena com ChuteNoFlow precisa da bola (o
+-- InstinctController confere antes de gastar o medidor); ela olha pra mira, e no último
+-- quadro a bola sai (Big Bang Drive) e o Flow começa no mesmo instante.
+_G.FlowExigeBola = function(player)
+	local item = CosmeticosFlow and (CosmeticosFlow.Equipado(player, "Flow") or CosmeticosFlow.Item("Flow_Isagi"))
+	local spec = item and HissatsuCutscenes[item.Id]
+	return spec ~= nil and spec.ChuteNoFlow == true
+end
+
+-- aimPoint (opcional) = onde ele mirava ao apertar; aoFim (opcional) = o que ativa o Flow,
+-- chamado no último quadro, ANTES do chute (assim os bônus do Flow valem no próprio chute).
+-- Devolve a duração e se a própria cena chama o aoFim (true só no Flow com chute).
+local FLOW_CHUTE_EFEITO = { ForceMult = 1.15, AimDeviationMult = 0.35 }
+_G.TocarCenaFlow = function(player, aimPoint, aoFim)
 	if _G.HissatsuCutsceneActive then return 0 end
 	local item = CosmeticosFlow and (CosmeticosFlow.Equipado(player, "Flow") or CosmeticosFlow.Item("Flow_Isagi"))
 	local spec = item and HissatsuCutscenes[item.Id]
@@ -2028,7 +2043,16 @@ _G.TocarCenaFlow = function(player)
 	if not spec or not root then return 0 end
 	local duration = spec.Duration
 	local ball = workspace:FindFirstChild(Config.BALL_NAME)
-	local flat = Vector3.new(root.CFrame.LookVector.X, 0, root.CFrame.LookVector.Z)
+	-- Flow com chute: só com a bola; a cena olha pra mira (achatada no chão), igual à Hissatsu
+	local chute = spec.ChuteNoFlow == true and ball ~= nil and _G.GetBallOwner ~= nil and _G.GetBallOwner() == player
+	if chute and typeof(aimPoint) == "Vector3" then
+		LastAimPoint[player] = aimPoint
+	end
+	local alvo = chute and LastAimPoint[player] or nil
+	local flat = alvo and Vector3.new(alvo.X - root.Position.X, 0, alvo.Z - root.Position.Z) or nil
+	if not flat or flat.Magnitude < 0.5 then
+		flat = Vector3.new(root.CFrame.LookVector.X, 0, root.CFrame.LookVector.Z)
+	end
 	if flat.Magnitude < 0.01 then flat = Vector3.new(0, 0, -1) end
 	local startCFrame = CFrame.lookAt(root.Position, root.Position + flat.Unit)
 	_G.HissatsuCutsceneActive = { Player = player, Until = tick() + duration, Flow = true }
@@ -2094,8 +2118,17 @@ _G.TocarCenaFlow = function(player)
 			if r.Parent then r.Anchored = false end
 		end
 		if root.Parent then
-			root.CFrame = startCFrame
+			if chute then
+				-- onde a coreografia termina (no chão, X/Z do salto; nunca abaixo da altura de pé)
+				local fim = spec.RootPosition(duration)
+				root.CFrame = startCFrame * CFrame.new(fim.X, math.max(fim.Y, 0), fim.Z)
+			else
+				root.CFrame = startCFrame
+			end
 			root.AssemblyLinearVelocity = Vector3.zero
+		end
+		if chute and ball and ball.Parent then
+			ball.CFrame = CFrame.new(startCFrame:PointToWorldSpace(spec.BallPosition(duration, ballLocal)))
 		end
 		if ball and ball.Parent then
 			if congelouBola and _G.ReleaseBallFromQTE then
@@ -2105,8 +2138,20 @@ _G.TocarCenaFlow = function(player)
 			end
 		end
 		_G.HissatsuCutsceneActive = nil
+		if chute then
+			-- ⚠️ v124: o Flow começa e o chute sai NO MESMO INSTANTE (o Flow primeiro: os
+			-- atributos dele — Chute +20 — já valem na força do Big Bang Drive)
+			if aoFim then
+				local okFim, erroFim = pcall(aoFim)
+				if not okFim then warn("[Flow] ativar o Flow no fim da cena falhou: " .. tostring(erroFim)) end
+			end
+			local okChute, erroChute = pcall(function()
+				if _G.PulseExecuteShot then _G.PulseExecuteShot(player, FLOW_CHUTE_EFEITO, "Legendary") end
+			end)
+			if not okChute then warn("[Flow] o chute do Big Bang Drive falhou: " .. tostring(erroChute)) end
+		end
 	end)
-	return duration
+	return duration, chute
 end
 
 -- ⚠️ v103 — CUTSCENE DE DEFESA. PEDIDO: "a Hissatsu de GK e de defensor

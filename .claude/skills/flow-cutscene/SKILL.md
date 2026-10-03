@@ -243,3 +243,24 @@ outras somem (fade in no começo, fade out no fim); no gol ela abaixa um pouco".
   Play, subir imagem, e copiar scripts de `StarterPlayerScripts` do Game pro
   Studio (essa pasta não sincroniza sozinha). ReplicatedStorage e
   ServerScriptService do Game, e o Lobby inteiro, sincronizam do disco.
+
+## Flow que É um chute (padrão do Shidou, v124)
+
+PEDIDO: "o flow dele vem com a ação de chute dele: pra onde a pessoa mirar o jogador
+vai usar o flow e dar a cutscene pra chutar e ativar o flow ao mesmo tempo".
+Pra um Flow assim (Shidou, e candidatos: Kaiser, Rin, Barou...):
+
+- Na coreografia: `ChuteNoFlow = true`, `KickFoot`, `KickContactDir` (bola cola no pé de
+  verdade a partir de `Phases.Kick[1] - 0.15`) e `BallPosition(t)` que, depois do
+  `ImpactTime`, SAI pra frente (-Z = a mira; a cena já nasce virada pra mira). A bola de
+  verdade é movida pela coreografia; o servidor a coloca em `BallPosition(Duration)`.
+- Tudo é automático: o cliente manda a mira junto com a tecla do Flow
+  (`InstinctModeInput` → `_G.HissatsuComputeAimPoint`); o `InstinctController` recusa
+  (sem gastar o medidor) se não tiver a bola (`FlowPrecisaBola`);
+  `_G.TocarCenaFlow(player, mira, aoFim)` gira a cena pra mira e, no último quadro,
+  liga o Flow (`aoFim`) e DEPOIS dispara `_G.PulseExecuteShot` — os bônus do Flow já
+  valem na força do chute. Nada a mudar por Flow: só `ChuteNoFlow = true`.
+- Close que o vídeo tem e o Roblox não aguenta: esconda a bola nos closes de rosto/peito
+  (`BallVisible`), senão ela tampa a câmera.
+- NUNCA copie do vídeo cenas de óvulo/espermatozoide/biologia (o jogo é Roblox, o usuário
+  pediu pra tirar): corte e anote na tabela de planos com ✂️ o intervalo cortado.

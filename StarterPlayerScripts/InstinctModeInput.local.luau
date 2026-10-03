@@ -42,8 +42,28 @@ InstinctModeFeedback.OnClientEvent:Connect(function(kind, extra)
 				Duration = 2.5,
 			})
 		end)
+	elseif kind == "FlowPrecisaBola" then
+		-- ⚠️ v124: o Flow do Shidou é o próprio chute (Big Bang Drive) — só com a bola
+		pcall(function()
+			StarterGui:SetCore("SendNotification", {
+				Title = "Flow",
+				Text = "Este Flow é um chute: pegue a bola e mire pra onde quer chutar.",
+				Duration = 3,
+			})
+		end)
 	end
 end)
+
+-- ⚠️ v124 — FLOW COM CHUTE (Shidou): manda pra onde ele está mirando (a MESMA mira da
+-- Hissatsu, ver HissatsuInput.local.luau). Os outros Flows ignoram o argumento.
+local function pontoDeMira()
+	local calcular = _G.HissatsuComputeAimPoint
+	if calcular then
+		local ok, ponto = pcall(calcular)
+		if ok and typeof(ponto) == "Vector3" then return ponto end
+	end
+	return nil
+end
 
 local lastPress = 0
 UserInputService.InputBegan:Connect(function(input, gameProcessedEvent)
@@ -63,7 +83,7 @@ UserInputService.InputBegan:Connect(function(input, gameProcessedEvent)
 		return
 	end
 
-	ActivateInstinctMode:FireServer()
+	ActivateInstinctMode:FireServer(pontoDeMira())
 end)
 
 -- ⚠️ MOBILE: exposto pro botão de Instinct Mode (V) de MobileControls.
@@ -83,5 +103,5 @@ _G.MobileActivateInstinctMode = function()
 		return
 	end
 
-	ActivateInstinctMode:FireServer()
+	ActivateInstinctMode:FireServer(pontoDeMira())
 end

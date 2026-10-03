@@ -5760,63 +5760,461 @@ function E.FlowBarou(ctx)
 end
 
 
--- 💥 FLOW DO SHIDOU (⚠️ v113): estrelas rosa/amarelas, o BIG BANG (esfera que
--- cresce, anéis, raios de luz saindo), faíscas no mortal, olhos rosa.
+-- ============================================================
+-- 💥 FLOW DO SHIDOU — "BIG BANG DRIVE" (⚠️ v124) — ver a coreografia Flow_Shidou
+-- ============================================================
+-- PEDIDO: Flow do Shidou no padrão do Isagi, baseado no vídeo "Shidou's Big Bang Drive
+-- Goal" (0-1:08), SEM as cenas de óvulo/espermatozoide ("é um jogo no roblox"); e o
+-- Flow vem COM o chute dele (ver HissatsuCutscenes: ChuteNoFlow). Por fase:
+--   Chega    gramado de dia, a bola cai na frente dele
+--   Aura     a aura rosa EXPLODE (flash); palco escuro de estrelas; contorno rosa;
+--            fogo rosa com faíscas ciano EM VOLTA do corpo todo (presa ao corpo)
+--   Rosto    close no rosto (câmera segue a cabeça de verdade)
+--   Olho     extremo close: os olhos BRANCOS acendem e brilham (cabelo semitransparente)
+--   Tunel    tela preta → o branco do olho cresce no centro e toma a tela
+--   Peito    de frente: o risco rosa atravessa o peito e a aura ESTOURA (raios, onda)
+--   Chamas   no ar, de baixo: chamas rosa escorrendo e RAIOS DE LUZ atrás (ciano/rosa)
+--   BigBang  estádio ESCURO com brilhos; a bola sobe com a aura rosa
+--   Kick     mortal e voleio de bicicleta: estrela rosa estoura na bola
+--   Impact   a bola sai pra onde ele mirou, com rastro de fogo rosa
+-- TUDO que é criado no corpo (emissores), na câmera ou no PlayerGui entra em
+-- `prender` e some junto com a cena.
 function E.FlowShidou(ctx)
-	local pasta, spec = ctx.Pasta, ctx.Spec
-	local ROSA, AMARELO, BRANCO = rgb(255, 110, 190), rgb(255, 230, 90), rgb(255, 250, 240)
-	local base = flowBase(ctx, {
-		Sala = rgb(22, 8, 22), SalaCor2 = rgb(60, 20, 45), SalaVira = { spec.Explode, spec.Explode + 0.3 },
-		Contorno = ROSA, ContornoDe = 3.5, Olhos = ROSA, OlhosDe = 2.4,
-		Aura = { AMARELO, ROSA, rgb(70, 0, 40) }, AuraDe = 8.6, Rosto = { { 2, 3.5 }, { 9, 12 } },
-		Particulas = { Textura = TEX.Faisca, Cor = cores({ { 0, AMARELO }, { 1, ROSA } }), Tamanho = numeros({ { 0, 0.35 }, { 1, 0 } }), Taxa = 45, Vel = { 0.2, 1 }, Acel = V3(0, 0, 0) },
+	local pasta, spec, inicio = ctx.Pasta, ctx.Spec, ctx.Inicio
+	local ph = spec.Phases
+	local ROSA, MAGENTA = rgb(255, 80, 200), rgb(200, 15, 150)
+	local AMARELO, CIANO, VERDE = rgb(255, 230, 90), rgb(110, 225, 255), rgb(90, 255, 190)
+	local BRANCO, ESCURO = rgb(255, 250, 252), rgb(8, 6, 24)
+	local character = ctx.Character
+	local head = character:FindFirstChild("Head")
+	local torso = character:FindFirstChild("Torso") or character:FindFirstChild("UpperTorso")
+	local peD = character:FindFirstChild("Right Leg") or character:FindFirstChild("RightFoot")
+	local F, R, U = inicio.LookVector, inicio.RightVector, Vector3.yAxis
+
+	local noCorpo = {}
+	local function prender(x) table.insert(noCorpo, x) return x end
+	pasta.Destroying:Connect(function()
+		for _, x in ipairs(noCorpo) do if x.Parent then x:Destroy() end end
+	end)
+
+	-- correção de cor DESTA cena, presa na câmera
+	local cc = prender(Instance.new("ColorCorrectionEffect"))
+	cc.Name = "FlowShidouCor"
+	cc.Parent = workspace.CurrentCamera
+
+	-- palco escuro (só nas fases do "espaço"; no gramado e no estádio ele some)
+	local sala = salaEscura(pasta, "SalaFlowShidou", ESCURO, inicio * CFrame.new(0, 20, -8), 150, ctx.ChaoY + 0.25 - 20)
+	sala.Transparency = 1
+
+	-- contorno rosa do corpo (silhueta)
+	local contorno = Instance.new("Highlight")
+	contorno.Adornee = character
+	contorno.FillTransparency = 1
+	contorno.OutlineColor = ROSA
+	contorno.OutlineTransparency = 1
+	contorno.DepthMode = Enum.HighlightDepthMode.Occluded
+	contorno.Parent = pasta
+
+	-- ===== estrelas do palco e brilhos do estádio =====
+	local caixaEstrelas = parte(pasta, "EstrelasShidou", { Size = V3(70, 34, 70) })
+	caixaEstrelas.CFrame = inicio * CFrame.new(0, 8, -10)
+	local estrelas = emissor(caixaEstrelas, {
+		Textura = TEX.Estrela, Cor = cores({ { 0, BRANCO }, { 1, CIANO } }), Brilho = 1,
+		Tamanho = numeros({ { 0, 0 }, { 0.5, 0.32 }, { 1, 0 } }), Vida = { 2, 4 }, Vel = { 0.2, 1 }, Spread = 180, RotVel = 40,
+		Forma = Enum.ParticleEmitterShape.Box, Estilo = Enum.ParticleEmitterShapeStyle.Volume, Taxa = 70,
 	})
-	local bola = bolaDeCena(ctx)
-	local nucleo = esfera(pasta, "BigBangNucleo", BRANCO)
-	local casca = esfera(pasta, "BigBangCasca", ROSA)
-	local raios = {}
-	for i = 1, 14 do raios[i] = parte(pasta, "RaioBigBang" .. i, { Color = i % 2 == 0 and AMARELO or ROSA }) end
-	local explodiu = false
+	estrelas.Enabled = false
+	local caixaBrilhos = parte(pasta, "BrilhosEstadio", { Size = V3(90, 14, 90) })
+	caixaBrilhos.CFrame = inicio * CFrame.new(0, ctx.ChaoY + 5, -22)
+	local brilhosEstadio = emissor(caixaBrilhos, {
+		Textura = TEX.Estrela, Cor = cores({ { 0, BRANCO }, { 1, rgb(190, 230, 255) } }), Brilho = 1,
+		Tamanho = numeros({ { 0, 0 }, { 0.5, 1.5 }, { 1, 0 } }), Vida = { 0.5, 1.2 }, Vel = { 0, 0.4 }, Spread = 180, RotVel = 30,
+		Forma = Enum.ParticleEmitterShape.Box, Estilo = Enum.ParticleEmitterShapeStyle.Volume, Taxa = 26,
+	})
+	brilhosEstadio.Enabled = false
+
+	-- ===== a AURA: fogo rosa + faíscas ciano EM VOLTA do corpo todo (presa ao corpo) =====
+	-- (anime: chamas rosa-choque com bordas ciano/verde. LockedToPart + Box/Volume, nunca
+	-- saindo de um ponto)
+	local auraFogo, auraFaisca = {}, {}
+	for _, nome in ipairs(PARTES_CORPO) do
+		local p = character:FindFirstChild(nome)
+		if p and p:IsA("BasePart") then
+			local fogo = prender(emissor(p, {
+				Textura = TEX.Fogo, Cor = cores({ { 0, rgb(255, 230, 250) }, { 0.35, ROSA }, { 1, MAGENTA } }), Brilho = 0.8,
+				Tamanho = numeros({ { 0, 1.1 }, { 1, 0.2 } }), Transp = numeros({ { 0, 0.25 }, { 1, 1 } }), Vida = { 0.4, 0.75 },
+				Vel = { 0.5, 2.2 }, Spread = 180, Acel = V3(0, 7, 0), Travado = true,
+				Forma = Enum.ParticleEmitterShape.Box, Estilo = Enum.ParticleEmitterShapeStyle.Volume, Direcao = Enum.NormalId.Top,
+			}))
+			fogo.Rate = 0
+			fogo.Enabled = true
+			table.insert(auraFogo, fogo)
+			local faisca = prender(emissor(p, {
+				Textura = TEX.Faisca, Cor = cores({ { 0, BRANCO }, { 0.5, CIANO }, { 1, VERDE } }), Brilho = 1,
+				Tamanho = numeros({ { 0, 0.3 }, { 1, 0 } }), Vida = { 0.3, 0.6 }, Vel = { 3, 8 }, Spread = 180, Travado = true, RotVel = 300,
+				Forma = Enum.ParticleEmitterShape.Box, Estilo = Enum.ParticleEmitterShapeStyle.Volume,
+			}))
+			faisca.Rate = 0
+			faisca.Enabled = true
+			table.insert(auraFaisca, faisca)
+		end
+	end
+	local function aura(taxaFogo, taxaFaisca)
+		for _, e in ipairs(auraFogo) do e.Rate = taxaFogo end
+		for _, e in ipairs(auraFaisca) do e.Rate = taxaFaisca end
+	end
+
+	-- luz rosa em volta dele
+	local luzAnc = parte(pasta, "LuzShidou")
+	local luzRosa = luz(luzAnc, ROSA, 0, 3)
+
+	-- ===== OLHOS: brancos (Olho) → rosa (Flow) =====
+	local olhos = { esfera(pasta, "OlhoShidou1", BRANCO), esfera(pasta, "OlhoShidou2", BRANCO) }
+	local brilhosOlho = {}
+	for i, o in ipairs(olhos) do
+		local bb = placaFlow(o, 1.5, 1.5, { { Imagem = TEX_FLOW.Brilho, Cor = BRANCO, Transp = 0.1 } })
+		brilhosOlho[i] = bb
+	end
+	-- cabelo semitransparente nos closes dos olhos
+	local cabelos = {}
+	for _, a in ipairs(character:GetChildren()) do
+		if a:IsA("Accessory") then
+			local h = a:FindFirstChild("Handle")
+			if h then table.insert(cabelos, h) end
+		end
+	end
+	local function cabeloTransp(v)
+		for _, h in ipairs(cabelos) do h.LocalTransparencyModifier = v end
+	end
+	pasta.Destroying:Connect(function() cabeloTransp(0) end)
+
+	-- ===== TELA: preto → branco do olho cresce → branco total =====
+	local playerGui = Players.LocalPlayer and Players.LocalPlayer:FindFirstChildOfClass("PlayerGui")
+	local tela = prender(Instance.new("ScreenGui"))
+	tela.Name = "FlowShidouTela"
+	tela.IgnoreGuiInset = true
+	tela.ResetOnSpawn = false
+	tela.DisplayOrder = 40
+	tela:SetAttribute("VisivelNaCutscene", true) -- (o motor esconde toda GUI sem isso)
+	tela.Parent = playerGui
+	local function chapado(cor, z)
+		local f = Instance.new("Frame")
+		f.BorderSizePixel = 0
+		f.BackgroundColor3 = cor
+		f.BackgroundTransparency = 1
+		f.Size = UDim2.fromScale(1, 1)
+		f.ZIndex = z
+		f.Parent = tela
+		return f
+	end
+	local telaPreta = chapado(rgb(0, 0, 0), 1)
+	local brilhoTela = Instance.new("ImageLabel")
+	brilhoTela.BackgroundTransparency = 1
+	brilhoTela.Image = TEX_FLOW.Brilho
+	brilhoTela.ImageColor3 = BRANCO
+	brilhoTela.ImageTransparency = 1
+	brilhoTela.AnchorPoint = Vector2.new(0.5, 0.5)
+	brilhoTela.Position = UDim2.fromScale(0.5, 0.5)
+	brilhoTela.SizeConstraint = Enum.SizeConstraint.RelativeXX -- quadrado, pela largura
+	brilhoTela.Size = UDim2.fromScale(0.05, 0.05)
+	brilhoTela.ZIndex = 2
+	brilhoTela.Parent = tela
+	local telaBranca = chapado(BRANCO, 3)
+
+	-- ===== Peito: o risco rosa e a explosão =====
+	local risco = parte(pasta, "RiscoPeito", { Color = ROSA })
+	local raiosPeito = { novoRaio(pasta, ROSA, 0.16), novoRaio(pasta, CIANO, 0.12), novoRaio(pasta, BRANCO, 0.1) }
+	local ancPeito = parte(pasta, "FaiscasPeito")
+	local faiscasPeito = emissor(ancPeito, {
+		Textura = TEX.Faisca, Cor = cores({ { 0, BRANCO }, { 0.4, ROSA }, { 1, CIANO } }), Brilho = 1,
+		Tamanho = numeros({ { 0, 0.7 }, { 1, 0 } }), Vida = { 0.5, 1.0 }, Vel = { 14, 30 }, Spread = 180, RotVel = 400, Drag = 3,
+	})
+
+	-- ===== Chamas: raios de luz atrás dele (ciano / verde / rosa) =====
+	local raiosLuz = {}
+	for i = 1, 18 do
+		raiosLuz[i] = parte(pasta, "RaioLuz" .. i, { Color = (i % 3 == 0) and ROSA or ((i % 3 == 1) and CIANO or VERDE) })
+	end
+
+	-- ===== bola de cena: aura rosa antes do voleio, estrela no impacto, cauda depois =====
+	local destaqueBola = nil
+	if ctx.Ball then
+		destaqueBola = Instance.new("Highlight")
+		destaqueBola.Adornee = ctx.Ball
+		destaqueBola.FillColor = ROSA
+		destaqueBola.OutlineColor = BRANCO
+		destaqueBola.FillTransparency = 0.45
+		destaqueBola.OutlineTransparency = 0.1
+		destaqueBola.DepthMode = Enum.HighlightDepthMode.Occluded
+		destaqueBola.Enabled = false
+		destaqueBola.Parent = pasta
+	end
+	local rastroPe = peD and rastroDuplo(peD, 0.7, ROSA, BRANCO, 0.4) or nil
+	if rastroPe then
+		-- (o rastro cria anexos e Trails NA PERNA: somem junto com a cena)
+		for _, tr in ipairs({ rastroPe.Halo, rastroPe.Miolo }) do
+			prender(tr)
+			prender(tr.Attachment0)
+			prender(tr.Attachment1)
+		end
+	end
+	local estrelaAnc = parte(pasta, "EstrelaImpacto")
+	local estrelaBB, estrelaCamadas = placaFlow(estrelaAnc, 1, 1, {
+		{ Imagem = TEX_FLOW.Estrela, Cor = ROSA },
+		{ Imagem = TEX_FLOW.Estrela, Cor = BRANCO, Escala = 0.55 },
+		{ Imagem = TEX_FLOW.Brilho, Cor = AMARELO, Transp = 0.4, Escala = 1.2 },
+	})
+	local ancCauda = parte(pasta, "CaudaBola")
+	local caudaFogo = emissor(ancCauda, {
+		Textura = TEX.Fogo, Cor = cores({ { 0, BRANCO }, { 0.4, ROSA }, { 1, MAGENTA } }), Brilho = 0.9,
+		Tamanho = numeros({ { 0, 1.6 }, { 1, 0.2 } }), Transp = numeros({ { 0, 0.15 }, { 1, 1 } }), Vida = { 0.3, 0.6 }, Vel = { 1, 4 }, Spread = 40,
+	})
+	local caudaEstrelas = emissor(ancCauda, {
+		Textura = TEX.Estrela, Cor = cores({ { 0, BRANCO }, { 1, AMARELO } }), Brilho = 1,
+		Tamanho = numeros({ { 0, 0.6 }, { 1, 0 } }), Vida = { 0.4, 0.8 }, Vel = { 2, 7 }, Spread = 180, RotVel = 200,
+	})
+	local ancImpacto = parte(pasta, "FaiscasImpacto")
+	local faiscasImpacto = emissor(ancImpacto, {
+		Textura = TEX.Faisca, Cor = cores({ { 0, BRANCO }, { 0.5, ROSA }, { 1, AMARELO } }), Brilho = 1,
+		Tamanho = numeros({ { 0, 0.9 }, { 1, 0 } }), Vida = { 0.5, 1.1 }, Vel = { 20, 44 }, Spread = 180, RotVel = 500, Drag = 3,
+	})
+
+	local auraFeita, estourou, bateu = false, false, false
+	local tImpacto = nil
 	local efeitos = {}
+
 	function efeitos.Quadro(t, _dt, s)
-		base.Atualizar(t)
-		-- a bola espera lá no alto, na frente dele, até o voleio
-		local ponto = ctx.Mundo(V3(0, 8.4, -5.2))
-		bola.CFrame = CFrame.new(ponto) * CFrame.Angles(t * 5, 0, 0)
-		bola.Transparency = (t >= 4.4 and t < spec.Explode) and 0 or 1
-		local k = phase(t, spec.Explode, spec.Explode + 1.4)
-		if k > 0 and k < 1 then
-			local tam = 2 + 26 * easeOut(k)
-			nucleo.Size = Vector3.one * tam * 0.45
-			nucleo.CFrame = CFrame.new(ponto)
-			nucleo.Transparency = 0.05 + 0.9 * k
-			casca.Size = Vector3.one * tam
-			casca.CFrame = CFrame.new(ponto)
-			casca.Transparency = 0.45 + 0.55 * k
-			for i, r in ipairs(raios) do
-				local a1, a2 = (i / #raios) * math.pi * 2, math.sin(i * 1.7) * 0.9
-				local dir = V3(math.cos(a1) * math.cos(a2), math.sin(a2), math.sin(a1) * math.cos(a2))
-				local comp = 30 * easeOut(k)
-				r.Size = V3(0.35, 0.35, comp)
-				r.CFrame = CFrame.lookAt(ponto + dir * comp / 2, ponto + dir * comp)
-				r.Transparency = 0.1 + 0.9 * k
-			end
+		local rootPos = ctx.Root.Position
+
+		-- cor da cena
+		if t < ph.Aura[1] then
+			cc.TintColor, cc.Saturation, cc.Contrast, cc.Brightness = Color3.new(1, 1, 1), 0.05, 0.05, 0
+		elseif t < 8.4 then
+			cc.TintColor, cc.Saturation, cc.Contrast, cc.Brightness = rgb(255, 238, 255), 0.25, 0.2, 0
 		else
-			nucleo.Transparency, casca.Transparency = 1, 1
-			for _, r in ipairs(raios) do r.Transparency = 1 end
+			-- estádio escuro (vídeo 42-47s): tudo azul-escuro e brilhos
+			local k = smooth(phase(t, 8.4, 8.8))
+			cc.TintColor = Color3.new(1, 1, 1):Lerp(rgb(165, 205, 225), k)
+			cc.Saturation = 0.25 - 0.5 * k
+			cc.Contrast = 0.2 + 0.1 * k
+			cc.Brightness = -0.28 * k
 		end
-		if not explodiu and t >= spec.Explode then
-			explodiu = true
-			ctx.Flash(BRANCO, 0, 0.5)
-			ctx.Tremer(1.3, 0.6)
-			onda(pasta, ponto, Vector3.yAxis, ROSA, 60, 0.7, 0.8)
-			onda(pasta, ponto, ctx.Inicio.LookVector, AMARELO, 50, 0.6, 0.6)
-			anelVazado(pasta, ponto, ctx.Inicio.RightVector, BRANCO, 4, 45, 0.7, 0.5)
+
+		-- palco de estrelas (Aura → antes do estádio escuro)
+		local noEspaco = t >= ph.Aura[1] + 0.05 and t < 8.55
+		sala.Transparency = noEspaco and 0 or 1
+		sala.Color = ESCURO:Lerp(rgb(34, 6, 36), smooth(phase(t, 6.9, 7.2)) * (1 - smooth(phase(t, 7.4, 8.4))))
+		estrelas.Enabled = noEspaco
+		brilhosEstadio.Enabled = t >= 8.5
+		caixaBrilhos.CFrame = inicio * CFrame.new(0, ctx.ChaoY + 5, -22)
+
+		-- a aura explode (1.4s)
+		if not auraFeita and t >= ph.Aura[1] then
+			auraFeita = true
+			ctx.Flash(ROSA, 0.1, 0.5)
+			ctx.Tremer(1.0, 0.45)
+			onda(pasta, rootPos, U, ROSA, 36, 0.5, 0.4)
+			anelVazado(pasta, rootPos, U, BRANCO, 2, 22, 0.5, 0.3)
+		end
+		contorno.OutlineTransparency = (t >= ph.Aura[1] and t < 8.55) and 0 or ((t >= 8.55) and 0.45 or 1)
+		if t < ph.Aura[1] then
+			aura(0, 0)
+		elseif t < ph.Peito[1] then
+			aura(14, 10)
+		elseif t < 7.0 then
+			aura(30, 22)
+		elseif t < ph.Chamas[2] then
+			aura(46, 30) -- chamas escorrendo
+		else
+			aura(24, 18)
+		end
+		if torso then
+			luzAnc.CFrame = CFrame.new(torso.Position + F * 2.2)
+			luzRosa.Range = (t >= ph.Aura[1] and t < 8.55) and 16 or ((t >= 9.3) and 12 or 0)
+		end
+
+		-- olhos: brancos acendendo (4.0-6.3), depois ROSA (Flow) até o fim
+		if head then
+			local o = FlowCenaOlhos(head)
+			local branco = smooth(phase(t, 4.0, 4.7)) * (1 - smooth(phase(t, 6.3, 6.9)))
+			local rosaN = smooth(phase(t, 6.6, 7.2))
+			local nivel = math.max(branco, rosaN)
+			local tam = (t >= ph.Olho[1] and t < ph.Peito[1]) and 0.4 or 0.3
+			for i, e in ipairs(olhos) do
+				e.Size = V3(tam, tam * 0.55, 0.08)
+				e.CFrame = head.CFrame * CFrame.new(o[i])
+				e.Color = BRANCO:Lerp(ROSA, rosaN)
+				e.Transparency = nivel > 0.02 and (1 - nivel) or 1
+				brilhosOlho[i].Enabled = nivel > 0.02
+				for _, g in ipairs(brilhosOlho[i]:GetChildren()) do
+					if g:IsA("ImageLabel") then
+						g.ImageColor3 = BRANCO:Lerp(ROSA, rosaN)
+						g.ImageTransparency = 1 - 0.9 * nivel
+					end
+				end
+			end
+		end
+		cabeloTransp(0.75 * smooth(phase(t, 4.2, 4.6)) * (1 - smooth(phase(t, 5.8, 6.3))))
+
+		-- tela: preto → o branco do olho cresce → branco total
+		local preta = smooth(phase(t, ph.Tunel[1], ph.Tunel[1] + 0.12)) * (1 - smooth(phase(t, ph.Tunel[2], ph.Tunel[2] + 0.2)))
+		telaPreta.BackgroundTransparency = 1 - preta
+		local cresce = easeOut(phase(t, 5.55, 6.2))
+		local lado = 0.06 + 3.4 * cresce * cresce
+		brilhoTela.Size = UDim2.fromScale(lado, lado)
+		brilhoTela.ImageTransparency = (t >= 5.5 and t < ph.Tunel[2] + 0.2) and 0 or 1
+		local branca = smooth(phase(t, 6.0, ph.Tunel[2])) * (1 - smooth(phase(t, ph.Tunel[2], ph.Tunel[2] + 0.28)))
+		telaBranca.BackgroundTransparency = 1 - branca
+
+		-- Peito: o risco rosa atravessa o peito (6.45-6.9) e a aura ESTOURA
+		if torso then
+			local larg = 8 * easeOut(phase(t, 6.45, 6.7))
+			local grossura = 0.12 + 0.2 * phase(t, 6.7, 6.9)
+			local p = torso.Position + F * 0.75
+			risco.Size = V3(math.max(larg, 0.05), grossura, grossura)
+			risco.CFrame = CFrame.fromMatrix(p, R, U)
+			risco.Transparency = (t >= 6.45 and t < 6.95) and 0 or 1
+			ancPeito.CFrame = CFrame.new(p)
+			if not estourou and t >= 6.9 then
+				estourou = true
+				ctx.Flash(rgb(255, 150, 225), 0.05, 0.6)
+				ctx.Tremer(1.5, 0.6)
+				faiscasPeito:Emit(120)
+				onda(pasta, p, F, ROSA, 46, 0.55, 0.5)
+				anelVazado(pasta, p, F, BRANCO, 3, 40, 0.6, 0.4)
+			end
+			-- raios (eletricidade rosa/ciano) saindo do peito logo depois do estouro
+			if t >= 6.9 and t < 7.6 then
+				for i, r in ipairs(raiosPeito) do
+					if math.random() < 0.8 then
+						local d = (R * (math.random() * 2 - 1) + U * (math.random() * 2 - 1) + F * (math.random() * 1.2 - 0.2))
+						if d.Magnitude < 0.05 then d = R end
+						r.Desenhar(p, p + d.Unit * (3 + 3 * math.random()), 6, 0.7, 0.12 - i * 0.015, 0.05)
+					else
+						r.Apagar()
+					end
+				end
+			else
+				for _, r in ipairs(raiosPeito) do r.Apagar() end
+			end
+		end
+
+		-- Chamas: raios de luz irradiando ATRÁS dele (vistos pela câmera de baixo)
+		local ligaRaios = phase(t, ph.Chamas[1] - 0.1, ph.Chamas[1] + 0.25) * (1 - phase(t, ph.Chamas[2] - 0.2, ph.Chamas[2] + 0.1))
+		local camera = workspace.CurrentCamera
+		local paraCam = (camera.CFrame.Position - rootPos)
+		paraCam = paraCam.Magnitude > 0.1 and paraCam.Unit or -F
+		local eixoA = paraCam:Cross(U)
+		if eixoA.Magnitude < 0.05 then eixoA = R end
+		eixoA = eixoA.Unit
+		local eixoB = paraCam:Cross(eixoA).Unit
+		local centro = rootPos - paraCam * 3
+		for i, r in ipairs(raiosLuz) do
+			if ligaRaios > 0.01 then
+				local ang = (i / #raiosLuz) * math.pi * 2 + math.sin(t * 2 + i) * 0.05
+				local dir = eixoA * math.cos(ang) + eixoB * math.sin(ang)
+				local ini = 3 + (i % 3) * 1.5
+				local fim = 34 + (i % 4) * 6
+				r.Size = V3(0.14 + (i % 3) * 0.08, 0.14 + (i % 3) * 0.08, fim - ini)
+				r.CFrame = CFrame.lookAt(centro + dir * (ini + fim) / 2, centro + dir * fim)
+				r.Transparency = 1 - ligaRaios * (0.45 + 0.4 * math.abs(math.sin(t * 9 + i * 1.7)))
+			else
+				r.Transparency = 1
+			end
+		end
+
+		-- bola: aura rosa a partir do Big Bang; foot glow no voleio
+		if destaqueBola then
+			destaqueBola.Enabled = t >= ph.BigBang[1] and s.BolaVisivel
+		end
+		if rastroPe then rastroPe.Ligar(t >= 9.7 and t < 10.9) end
+
+		-- estrela do voleio (cresce até 9 studs; mais que isso a câmera entra no raio e some)
+		if bateu then
+			local k = phase(t, tImpacto, tImpacto + 0.55)
+			local lado2 = 1 + 8 * easeOut(k)
+			estrelaAnc.CFrame = CFrame.new(s.BolaMundo)
+			estrelaBB.Size = UDim2.fromScale(lado2, lado2)
+			estrelaBB.Enabled = k < 1
+			for _, g in ipairs(estrelaCamadas) do
+				g.Rotation = (t - tImpacto) * 90
+				g.ImageTransparency = math.max(k * k, 0)
+			end
+			ancImpacto.CFrame = CFrame.new(s.BolaMundo)
+			-- cauda de fogo rosa seguindo a bola
+			ancCauda.CFrame = CFrame.new(s.BolaMundo)
+			caudaFogo.Enabled = true
+			caudaFogo.Rate = 120
+			caudaEstrelas.Enabled = true
+			caudaEstrelas.Rate = 40
+		else
+			caudaFogo.Enabled = false
+			caudaEstrelas.Enabled = false
 		end
 	end
-	function efeitos.Impacto(_s)
-		ctx.Flash(rgb(255, 225, 240), 0.2, 0.4)
+
+	function efeitos.Impacto(s)
+		bateu = true
+		tImpacto = spec.ImpactTime
+		ctx.Flash(rgb(255, 235, 250), 0.1, 0.45)
+		ctx.Tremer(1.4, 0.5)
+		faiscasImpacto:Emit(140)
+		onda(pasta, s.BolaMundo, F, ROSA, 40, 0.5, 0.45)
+		onda(pasta, s.BolaMundo, U, AMARELO, 28, 0.4, 0.3)
+		anelVazado(pasta, s.BolaMundo, F, BRANCO, 2, 30, 0.55, 0.35)
 	end
+
+	-- depois da cutscene a bola segue em fogo rosa no voo de verdade
+	function efeitos.Voo(ball, duracao)
+		efeitoDeVoo(ball, duracao, function(a, coisas)
+			emissor(a, {
+				Textura = TEX.Fogo, Cor = cores({ { 0, BRANCO }, { 0.4, ROSA }, { 1, MAGENTA } }), Brilho = 0.9,
+				Tamanho = numeros({ { 0, 1.5 }, { 1, 0.2 } }), Transp = numeros({ { 0, 0.15 }, { 1, 1 } }), Vida = { 0.3, 0.55 },
+				Vel = { 1, 4 }, Spread = 40, Taxa = 110,
+			})
+			emissor(a, {
+				Textura = TEX.Estrela, Cor = cores({ { 0, BRANCO }, { 1, AMARELO } }), Brilho = 1,
+				Tamanho = numeros({ { 0, 0.55 }, { 1, 0 } }), Vida = { 0.4, 0.8 }, Vel = { 3, 9 }, Spread = 180, RotVel = 200, Taxa = 36,
+			})
+			luz(a, ROSA, 16, 4)
+			local a0 = Instance.new("Attachment") a0.Position = V3(0, -0.9, 0) a0.Parent = ball
+			local a1 = Instance.new("Attachment") a1.Position = V3(0, 0.9, 0) a1.Parent = ball
+			local tr = Instance.new("Trail")
+			tr.Attachment0, tr.Attachment1 = a0, a1
+			tr.Lifetime = 0.4
+			tr.LightEmission = 1
+			tr.LightInfluence = 0
+			tr.FaceCamera = true
+			tr.Color = cores({ { 0, BRANCO }, { 0.4, ROSA }, { 1, MAGENTA } })
+			tr.Transparency = numeros({ { 0, 0 }, { 1, 1 } })
+			tr.WidthScale = numeros({ { 0, 1.7 }, { 1, 0.1 } })
+			tr.Parent = ball
+			table.insert(coisas, a0)
+			table.insert(coisas, a1)
+			table.insert(coisas, tr)
+			table.insert(coisas, destaque(ball, ROSA, BRANCO, 0.4))
+		end)
+	end
+
+	-- CÂMERA em coordenadas de MUNDO (closes que seguem a cabeça de verdade, qualquer avatar)
+	local function cam(pos, alvo, fov)
+		return CFrame.lookAt(pos, alvo), fov
+	end
+	function efeitos.CameraMundo(t)
+		if not head or t < ph.Rosto[1] or t >= ph.Peito[1] then return nil end
+		local o = FlowCenaOlhos(head)
+		local meio = head.CFrame:PointToWorldSpace((o[1] + o[2]) / 2)
+		local Lh = head.CFrame.LookVector
+		if t < ph.Olho[1] then
+			-- Rosto: de frente, um pouco de lado e abaixo
+			local u = smooth(phase(t, ph.Rosto[1], ph.Olho[1]))
+			return cam(meio + Lh * lerp(3.4, 2.4, u) + R * lerp(0.35, 0.2, u) - U * 0.1, meio, lerp(38, 34, u))
+		end
+		-- Olho/Tunel: zoom até ~1.1 stud (mais perto o brilho do olho some)
+		local u = smooth(phase(t, ph.Olho[1], ph.Tunel[1]))
+		return cam(meio + Lh * lerp(2.4, 1.15, u) + R * lerp(0.2, 0.05, u), meio, lerp(34, 24, u))
+	end
+
 	return efeitos
 end
 

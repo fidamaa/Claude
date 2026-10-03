@@ -480,7 +480,7 @@ C.Flow = {
 		Atributos = { Kick = 25, Physical = 15 },
 		Tema = { Cor = rgb(255, 205, 60), Cor2 = rgb(30, 20, 10), Motivo = "Coroa" } },
 	{ Id = "Flow_Shidou", Nome = "Flow do Shidou", Raridade = "Legendary", Personagem = "Shidou Ryusei",
-		Descricao = "Big Bang: chute explosivo de qualquer lugar e mais velocidade.",
+		Descricao = "Big Bang Drive: ativar o Flow é CHUTAR — com a bola, a cena sai pra onde você mira (voleio de bicicleta, chute explosivo). Chute e Velocidade sobem.",
 		Atributos = { Kick = 20, Speed = 10 },
 		Tema = { Cor = rgb(255, 110, 190), Cor2 = rgb(255, 240, 120), Motivo = "Explosao" } },
 	{ Id = "Flow_Sae", Nome = "Flow do Sae", Raridade = "Legendary", Personagem = "Itoshi Sae",
