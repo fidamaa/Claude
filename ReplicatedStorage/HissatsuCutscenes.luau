@@ -277,50 +277,58 @@ local POSE_KEYS = {
 		RHip = { 55, 0, 0 }, LHip = { 55, 0, 0 }, RKnee = { -95, 0, 0 }, LKnee = { -95, 0, 0 },
 		RShoulder = { -40, 0, 30 }, LShoulder = { -40, 0, -30 },
 	} },
-	-- decolagem: estica, braços abrem, joelho esquerdo sobe (a perna em chamas)
+	-- ⚠️ v122 — PEDIDO: "no Tornado de Fogo (e no Dragão, e em quem usa): na SUBIDA ele
+	-- vai abrindo as pernas DEVAGAR; no chute SÓ a perna do chute mexe e a outra vai pra
+	-- TRÁS — pose de bicicleta". Antes as pernas já saíam do chão em tesoura e, no chute,
+	-- o corpo inteiro (Root 26 → -25) e a perna de apoio (50 → -30) giravam junto com a
+	-- do chute. Agora: decola de pernas juntas, elas abrem aos poucos até armar; a perna
+	-- DIREITA vai pra trás no armar e fica parada (no mundo, ~45° pra trás); o tronco
+	-- fica quase fixo e só a ESQUERDA chicoteia (mesmo ângulo final no mundo de antes:
+	-- Root + LHip = 80, então o pé chega no mesmo lugar da bola). R6: joelho não existe.
+	-- decolagem: estica, braços abrem, pernas ainda JUNTAS
 	{ 1.05, {
 		Root = { 6, 0, 0 }, Neck = { 30, 0, 0 },
-		RHip = { -8, 0, 0 }, RKnee = { -15, 0, 0 },
-		LHip = { 45, 0, 0 }, LKnee = { -75, 0, 0 },
+		RHip = { -4, 0, 2 }, RKnee = { -15, 0, 0 },
+		LHip = { 12, 0, -2 }, LKnee = { -40, 0, 0 },
 		RShoulder = { 25, 0, 95 }, LShoulder = { 25, 0, -95 },
 	} },
-	-- subindo em espiral: braços abertos pro giro, perna esquerda dobrada
+	-- subindo em espiral: braços abertos pro giro, as pernas vão abrindo devagar
 	{ 1.60, {
 		Root = { -4, 0, 0 }, Neck = { 25, 0, 0 },
-		RHip = { 12, 0, 0 }, RKnee = { -35, 0, 0 },
-		LHip = { 65, 0, 0 }, LKnee = { -95, 0, 0 },
+		RHip = { -14, 0, 7 }, RKnee = { -30, 0, 0 },
+		LHip = { 32, 0, -7 }, LKnee = { -70, 0, 0 },
 		RShoulder = { 10, 0, 85 }, LShoulder = { 10, 0, -85 }, RElbow = { 15, 0, 0 }, LElbow = { 15, 0, 0 },
 	} },
 	{ 2.35, {
 		Root = { -6, 0, 0 }, Neck = { 10, 0, 0 },
-		RHip = { 20, 0, 0 }, RKnee = { -45, 0, 0 },
-		LHip = { 70, 0, 0 }, LKnee = { -100, 0, 0 },
+		RHip = { -26, 0, 12 }, RKnee = { -40, 0, 0 },
+		LHip = { 52, 0, -12 }, LKnee = { -90, 0, 0 },
 		RShoulder = { 15, 0, 90 }, LShoulder = { 15, 0, -90 }, RElbow = { 20, 0, 0 }, LElbow = { 20, 0, 0 },
 	} },
-	-- por cima da bola: inclina pra trás e ARMA a perna esquerda
+	-- por cima da bola: ARMA a perna esquerda; a direita vai pra trás e PARA ali
 	{ 2.75, {
-		Root = { 22, 0, 0 }, Waist = { 8, 0, 0 }, Neck = { -20, 0, 0 },
-		RHip = { 55, 0, 0 }, RKnee = { -70, 0, 0 },
-		LHip = { -65, 0, 0 }, LKnee = { -85, 0, 0 },
+		Root = { 12, 0, 0 }, Waist = { 6, 0, 0 }, Neck = { -15, 0, 0 },
+		RHip = { -57, 0, 10 }, RKnee = { -30, 0, 0 },
+		LHip = { -62, 0, -6 }, LKnee = { -85, 0, 0 },
 		RShoulder = { 30, 0, 120 }, LShoulder = { -35, 0, -65 }, RElbow = { 20, 0, 0 },
 	} },
 	{ 3.00, {
-		Root = { 26, 0, 0 }, Waist = { 10, 0, 0 }, Neck = { -25, 0, 0 },
-		RHip = { 50, 0, 0 }, RKnee = { -75, 0, 0 },
-		LHip = { -85, 0, 0 }, LKnee = { -100, 0, 0 },
+		Root = { 14, 0, 0 }, Waist = { 8, 0, 0 }, Neck = { -20, 0, 0 },
+		RHip = { -59, 0, 10 }, RKnee = { -30, 0, 0 },
+		LHip = { -73, 0, -6 }, LKnee = { -100, 0, 0 },
 		RShoulder = { 35, 0, 125 }, LShoulder = { -40, 0, -70 }, RElbow = { 25, 0, 0 },
 	} },
-	-- CHUTE: a perna esquerda chicoteia por cima da bola, pra baixo
+	-- CHUTE: só a perna esquerda chicoteia por cima da bola, pra baixo
 	{ FT.ImpactTime, {
-		Root = { -25, 0, 0 }, Waist = { -8, 0, 0 }, Neck = { -30, 0, 0 },
-		LHip = { 105, 0, 0 }, LKnee = { -4, 0, 0 },
-		RHip = { -30, 0, 0 }, RKnee = { -50, 0, 0 },
+		Root = { 8, 0, 0 }, Waist = { -4, 0, 0 }, Neck = { -26, 0, 0 },
+		LHip = { 72, 0, -4 }, LKnee = { -4, 0, 0 },
+		RHip = { -53, 0, 10 }, RKnee = { -30, 0, 0 },
 		RShoulder = { -50, 0, 100 }, LShoulder = { 50, 0, -80 }, LElbow = { 20, 0, 0 },
 	} },
 	{ 3.60, {
-		Root = { -28, 0, 0 }, Waist = { -10, 0, 0 }, Neck = { -32, 0, 0 },
-		LHip = { 110, 0, 0 }, LKnee = { -2, 0, 0 },
-		RHip = { -34, 0, 0 }, RKnee = { -52, 0, 0 },
+		Root = { 6, 0, 0 }, Waist = { -6, 0, 0 }, Neck = { -28, 0, 0 },
+		LHip = { 80, 0, -4 }, LKnee = { -2, 0, 0 },
+		RHip = { -51, 0, 10 }, RKnee = { -32, 0, 0 },
 		RShoulder = { -52, 0, 102 }, LShoulder = { 52, 0, -80 }, LElbow = { 22, 0, 0 },
 	} },
 }
