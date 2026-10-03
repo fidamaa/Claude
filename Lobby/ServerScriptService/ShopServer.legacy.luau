@@ -39,6 +39,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local LobbyConfig = require(ReplicatedStorage:WaitForChild("LobbyConfig"))
 local SHOP = LobbyConfig.SHOP
+local Cosmeticos = require(ReplicatedStorage:WaitForChild("Cosmeticos")) -- ⚠️ v110
 
 -- ========================================
 -- Remotes
@@ -65,6 +66,20 @@ local buyResetSlotFunc = getOrCreateRemoteFunction("BuyResetSlot")
 local buyCatalogItemFunc = getOrCreateRemoteFunction("BuyCatalogItem")
 local equipCosmeticFunc = getOrCreateRemoteFunction("EquipCosmetic")
 
+-- ⚠️ v110 — EMOTES NO LOBBY: o cliente pede (tecla G / botão), o servidor
+-- confere se o emote está equipado e avisa todo mundo (cada cliente toca a
+-- pose no personagem, ver CosmeticosLobbyClient).
+local function getOrCreateRemoteEvent(name)
+	local existing = eventsFolder:FindFirstChild(name)
+	if existing then return existing end
+	local remote = Instance.new("RemoteEvent")
+	remote.Name = name
+	remote.Parent = eventsFolder
+	return remote
+end
+local tocarEmoteLobby = getOrCreateRemoteEvent("TocarEmoteLobby")
+local emoteLobby = getOrCreateRemoteEvent("EmoteLobby")
+
 -- NOTA: "BuyRoll" não existe mais aqui — o RemoteFunction de mesmo nome
 -- agora vive em ReplicatedStorage.RollEvents (criado por RollServer.lua),
 -- já que a compra de Roll com dinheiro saiu da Loja e foi pra dentro da
@@ -77,6 +92,108 @@ local itemById = {}
 for _, item in ipairs(SHOP.Items) do
 	itemById[item.Id] = item
 end
+
+-- ========================================
+-- ⚠️ v110 — COSMÉTICOS EQUIPADOS VIRAM ATRIBUTOS DO JOGADOR ("Cosm_<Slot>")
+-- — é o que a placa de nome, o chat, a aura e os emotes leem (e o que vai
+-- pra partida junto do TeleportData, ver Matchmaker). O Flow sempre tem
+-- um: sem escolha, é o do Isagi (grátis).
+-- ========================================
+local function possui(playerData, item)
+	return playerData.OwnedCosmetics[item.Id] == true or item.Free == true
+end
+
+local function equipadoNoSlot(playerData, slot)
+	local id = playerData.EquippedCosmetics[slot]
+	if slot == "Flow" and not id then id = "Flow_Isagi" end
+	return id
+end
+
+-- ⚠️ v117 — RODA DE EMOTES. PEDIDO: "uma roda com até 6 espaços" pra trocar entre os
+-- emotes e escolher na loja. Emotes e Comemorações viraram uma lista só; cada casa da
+-- roda fica em EquippedCosmetics["EmoteSlot<i>"] (e vai pro Game junto do
+-- TeleportData como "Cosm_EmoteSlot<i>"). A casa 1 é a comemoração do gol.
+local RODA = Cosmeticos.RODA_TAMANHO or 6
+local function chaveRoda(i) return "EmoteSlot" .. i end
+local function listaDaRoda(playerData)
+	local r = {}
+	for i = 1, RODA do r[i] = playerData.EquippedCosmetics[chaveRoda(i)] or false end
+	return r
+end
+-- quem equipou Comemoração/Emote antes da roda não perde: a Comemoração vira a casa 1
+-- e o Emote a casa seguinte
+local function migrarRoda(playerData)
+	local eq = playerData.EquippedCosmetics
+	if not (eq.Celebration or eq.Emote) then return end
+	local tem = false
+	for i = 1, RODA do
+		if eq[chaveRoda(i)] then tem = true break end
+	end
+	if not tem then
+		if eq.Celebration and Cosmeticos.Item(eq.Celebration) then eq[chaveRoda(1)] = eq.Celebration end
+		if eq.Emote and Cosmeticos.Item(eq.Emote) then eq[chaveRoda(eq[chaveRoda(1)] and 2 or 1)] = eq.Emote end
+	end
+	eq.Celebration = nil
+	eq.Emote = nil
+end
+-- compra/baú: o emote novo entra na primeira casa vazia (se a roda estiver cheia, só fica no armário)
+local function equiparAoObter(playerData, item)
+	if item.Slot == "Emote" then
+		local eq = playerData.EquippedCosmetics
+		for i = 1, RODA do
+			if eq[chaveRoda(i)] == item.Id then return end
+		end
+		for i = 1, RODA do
+			if not eq[chaveRoda(i)] then
+				eq[chaveRoda(i)] = item.Id
+				return
+			end
+		end
+		return
+	end
+	if item.Slot then playerData.EquippedCosmetics[item.Slot] = item.Id end
+end
+
+local function aplicarAtributos(player)
+	local playerData = _G.GetPlayerData and _G.GetPlayerData(player)
+	if not playerData then return end
+	migrarRoda(playerData)
+	for _, slot in ipairs(Cosmeticos.CATEGORIAS) do
+		player:SetAttribute("Cosm_" .. slot, equipadoNoSlot(playerData, slot))
+	end
+	for i = 1, RODA do
+		player:SetAttribute("Cosm_EmoteSlot" .. i, playerData.EquippedCosmetics[chaveRoda(i)])
+	end
+	if _G.UpdatePlayerNametag and player.Character then
+		task.spawn(_G.UpdatePlayerNametag, player)
+	end
+end
+_G.AplicarCosmeticosLobby = aplicarAtributos
+
+Players.PlayerAdded:Connect(function(player)
+	local limite = os.clock() + 30
+	while player.Parent and os.clock() < limite do
+		if _G.GetPlayerData and _G.GetPlayerData(player) then break end
+		task.wait(0.5)
+	end
+	if player.Parent then aplicarAtributos(player) end
+end)
+for _, player in ipairs(Players:GetPlayers()) do
+	task.spawn(aplicarAtributos, player)
+end
+
+local ultimoEmote = {}
+tocarEmoteLobby.OnServerEvent:Connect(function(player, indice)
+	if os.clock() - (ultimoEmote[player] or 0) < 1 then return end
+	indice = tonumber(indice)
+	if not indice or indice % 1 ~= 0 or indice < 1 or indice > RODA then return end
+	ultimoEmote[player] = os.clock()
+	local item = Cosmeticos.CasaDaRoda(player, indice)
+	if item and item.Slot == "Emote" and player.Character then
+		emoteLobby:FireAllClients(player.Character, item.Id)
+	end
+end)
+Players.PlayerRemoving:Connect(function(player) ultimoEmote[player] = nil end)
 
 -- ========================================
 -- Preço do próximo slot a destravar (nil se já tem os 5)
@@ -109,9 +226,18 @@ getShopDataFunc.OnServerInvoke = function(player)
 			Name = item.Name,
 			Cost = item.Cost,
 			Type = item.Type,
-			Owned = item.Type == "Cosmetic" and (playerData.OwnedCosmetics[item.Id] == true) or nil,
-			Equipped = item.Slot and (playerData.EquippedCosmetics[item.Slot] == item.Id) or nil,
+			Rarity = item.Rarity,
+			Description = item.Description,
+			Owned = item.Type == "Cosmetic" and possui(playerData, item) or nil,
+			Equipped = item.Slot and (equipadoNoSlot(playerData, item.Slot) == item.Id) or nil,
 		})
+		if item.Slot == "Emote" then
+			local naRoda = false
+			for i = 1, RODA do
+				if playerData.EquippedCosmetics[chaveRoda(i)] == item.Id then naRoda = true break end
+			end
+			resolvedItems[#resolvedItems].Equipped = naRoda
+		end
 	end
 
 	local resolvedRobux = {}
@@ -139,6 +265,12 @@ getShopDataFunc.OnServerInvoke = function(player)
 		},
 		Categories = SHOP.Categories,
 		Items = resolvedItems,
+		EmoteWheel = listaDaRoda(playerData), -- ⚠️ v117: ids por casa (false = vazia)
+		-- ⚠️ v110: nome do personagem ativo (prévia da placa no Armário)
+		SlotName = (function()
+			local s = playerData.CharacterSlots[playerData.ActiveSlot or 1]
+			return type(s) == "table" and s.SlotName or player.DisplayName
+		end)(),
 		RobuxProducts = resolvedRobux,
 		Boosts = {
 			MoneyBoostActive = (playerData.Boosts.MoneyBoostExpiresAt or 0) > now,
@@ -269,7 +401,7 @@ buyCatalogItemFunc.OnServerInvoke = function(player, itemId)
 		return false, "Loja indisponível no momento"
 	end
 
-	if item.Type == "Cosmetic" and playerData.OwnedCosmetics[item.Id] then
+	if item.Type == "Cosmetic" and possui(playerData, item) then
 		return false, "Você já tem esse item"
 	end
 
@@ -285,7 +417,7 @@ buyCatalogItemFunc.OnServerInvoke = function(player, itemId)
 		-- Slot, se houver) — o jogador pode trocar de novo depois via
 		-- EquipCosmetic.
 		if item.Slot then
-			playerData.EquippedCosmetics[item.Slot] = item.Id
+			equiparAoObter(playerData, item) -- ⚠️ v117: emote entra na roda
 		end
 	elseif item.Type == "Consumable" then
 		if item.Effect == "RollPack" then
@@ -320,7 +452,7 @@ buyCatalogItemFunc.OnServerInvoke = function(player, itemId)
 				-- (de graça, sem custo — é o "prêmio bom" do baú).
 				local candidates = {}
 				for _, catalogItem in ipairs(SHOP.Items) do
-					if catalogItem.Type == "Cosmetic" and not playerData.OwnedCosmetics[catalogItem.Id] then
+					if catalogItem.Type == "Cosmetic" and catalogItem.Category == "Cosmeticos" and not possui(playerData, catalogItem) then
 						table.insert(candidates, catalogItem)
 					end
 				end
@@ -328,7 +460,7 @@ buyCatalogItemFunc.OnServerInvoke = function(player, itemId)
 					local won = candidates[math.random(1, #candidates)]
 					playerData.OwnedCosmetics[won.Id] = true
 					if won.Slot then
-						playerData.EquippedCosmetics[won.Slot] = won.Id
+						equiparAoObter(playerData, won)
 					end
 				elseif _G.AddMoney then
 					_G.AddMoney(player, 300) -- já tem todos os cosméticos: vira dinheiro
@@ -354,6 +486,7 @@ buyCatalogItemFunc.OnServerInvoke = function(player, itemId)
 	task.spawn(function()
 		_G.SavePlayerData(player)
 	end)
+	aplicarAtributos(player) -- ⚠️ v110: a placa/aura/Flow já mudam na hora
 
 	print(string.format("🛒 %s comprou '%s' por $%d", player.Name, item.Name, item.Cost))
 
@@ -364,7 +497,7 @@ end
 -- EquipCosmetic: troca (ou desequipa, clicando de novo) um cosmético já
 -- comprado. Um item equipado por Slot.
 -- ========================================
-equipCosmeticFunc.OnServerInvoke = function(player, itemId)
+equipCosmeticFunc.OnServerInvoke = function(player, itemId, casaDaRoda)
 	if typeof(itemId) ~= "string" then
 		return false, "Item inválido"
 	end
@@ -377,12 +510,42 @@ equipCosmeticFunc.OnServerInvoke = function(player, itemId)
 	local playerData = _G.GetPlayerData and _G.GetPlayerData(player)
 	if not playerData then return false, "Dados não carregados" end
 
-	if not playerData.OwnedCosmetics[itemId] then
+	if not possui(playerData, item) then
 		return false, "Você ainda não tem esse item"
 	end
 
-	if playerData.EquippedCosmetics[item.Slot] == itemId then
-		playerData.EquippedCosmetics[item.Slot] = nil -- clicar de novo desequipa
+	-- ⚠️ v117: emote vai pra RODA (casa escolhida, ou a primeira vazia); clicar num que já
+	-- está na roda tira dela
+	if item.Slot == "Emote" then
+		migrarRoda(playerData)
+		local eq = playerData.EquippedCosmetics
+		local atual
+		for i = 1, RODA do
+			if eq[chaveRoda(i)] == itemId then atual = i break end
+		end
+		casaDaRoda = tonumber(casaDaRoda)
+		if casaDaRoda and (casaDaRoda % 1 ~= 0 or casaDaRoda < 1 or casaDaRoda > RODA) then casaDaRoda = nil end
+		if atual and (not casaDaRoda or casaDaRoda == atual) then
+			eq[chaveRoda(atual)] = nil
+		else
+			local destino = casaDaRoda
+			if not destino then
+				for i = 1, RODA do
+					if not eq[chaveRoda(i)] then destino = i break end
+				end
+			end
+			if not destino then return false, "A roda está cheia — escolha uma casa pra trocar." end
+			if atual then eq[chaveRoda(atual)] = nil end
+			eq[chaveRoda(destino)] = itemId
+		end
+		task.spawn(function() _G.SavePlayerData(player) end)
+		aplicarAtributos(player)
+		return true, { Slot = "Emote", Roda = listaDaRoda(playerData) }
+	end
+
+	if equipadoNoSlot(playerData, item.Slot) == itemId then
+		-- clicar de novo desequipa (menos o Flow: sempre tem um escolhido)
+		if item.Slot ~= "Flow" then playerData.EquippedCosmetics[item.Slot] = nil end
 	else
 		playerData.EquippedCosmetics[item.Slot] = itemId
 	end
@@ -390,8 +553,9 @@ equipCosmeticFunc.OnServerInvoke = function(player, itemId)
 	task.spawn(function()
 		_G.SavePlayerData(player)
 	end)
+	aplicarAtributos(player) -- ⚠️ v110
 
-	return true, { Slot = item.Slot, Equipped = playerData.EquippedCosmetics[item.Slot] }
+	return true, { Slot = item.Slot, Equipped = equipadoNoSlot(playerData, item.Slot) }
 end
 
 -- ========================================

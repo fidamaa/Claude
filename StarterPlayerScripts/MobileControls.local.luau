@@ -20,9 +20,12 @@
 	(ver isShootPress em FootballClient.local.luau) — criar um botão fixo
 	pra isso quebraria a mira, que segue o dedo/mouse.
 
-	O cluster Z/X/C troca sozinho entre "Finta" (jogador de linha) e
+	O cluster ◀ ▲ ▶ troca sozinho entre "Finta" (jogador de linha) e
 	"Mergulho" (goleiro efetivo) dependendo de GKAreaUtil.IsEffectiveGK —
-	igual ao teclado, onde as MESMAS teclas significam coisas diferentes.
+	igual ao teclado, onde o MESMO Q significa coisas diferentes.
+	⚠️ NOVO: no PC a finta/mergulho virou Q + direção do WASD; no celular os
+	botões de direção fixa continuam (o servidor aceita os dois jeitos).
+	O botão SPRINT saiu (não existe mais sprint).
 ]]
 
 local Players = game:GetService("Players")
@@ -106,7 +109,7 @@ local kickButton = makeButton({
 	Name = "Kick",
 	Text = "CHUTE",
 	TextSize = 15,
-	-- Fica na fileira de baixo, à esquerda do SPRINT: é a faixa mais
+	-- Fica na fileira de baixo (onde antes ficava ao lado do SPRINT): é a faixa mais
 	-- alcançável pelo polegar direito, e a única livre desse tamanho (o
 	-- canto inferior direito é do botão de PULAR nativo do Roblox, que não
 	-- dá pra ocupar). Posição conferida contra todos os outros botões — sem
@@ -126,27 +129,10 @@ kickButton.MouseLeave:Connect(function()
 	_G.MobileKickRelease()
 end)
 
--- ===== SPRINT (segurar) =====
-local sprintButton = makeButton({
-	Name = "Sprint",
-	Text = "SPRINT",
-	TextSize = 13,
-	Size = UDim2.fromOffset(76, 76),
-	AnchorPoint = Vector2.new(1, 1),
-	-- ⚠️ Deslocado pro lado (mais pra esquerda) pra não ficar em cima do
-	-- botão de PULAR nativo do Roblox, que fica no canto inferior direito.
-	Position = UDim2.new(1, -130, 1, -20),
-	Color = Color3.fromRGB(40, 110, 200),
-})
-sprintButton.MouseButton1Down:Connect(function()
-	_G.MobileSetSprinting(true)
-end)
-sprintButton.MouseButton1Up:Connect(function()
-	_G.MobileSetSprinting(false)
-end)
-sprintButton.MouseLeave:Connect(function()
-	_G.MobileSetSprinting(false)
-end)
+-- ===== SPRINT =====
+-- ⚠️ NOVO: botão SPRINT REMOVIDO — PEDIDO: "Não haverá botão de corrida/
+-- sprint". O personagem corre na velocidade do atributo Velocidade só com
+-- o joystick (ver getRunSpeed em PlayerSystems.legacy.luau).
 
 -- ===== SHIFT LOCK (toggle) =====
 local shiftLockButton = makeButton({
@@ -305,7 +291,7 @@ cButton.MouseButton1Click:Connect(onC)
 -- Agora ele tem o próprio, e o botão de drible volta a ser só drible.
 local tackleButton = makeButton({
 	Name = "Tackle",
-	Text = "CARRINHO",
+	Text = "CARRINHO", -- ⚠️ v86: carrinho = tecla Q (sem bola) no PC; o dash ganhou botão próprio abaixo
 	TextSize = 10,
 	Size = UDim2.fromOffset(62, 62),
 	AnchorPoint = Vector2.new(0.5, 1),
@@ -315,6 +301,23 @@ local tackleButton = makeButton({
 })
 tackleButton.MouseButton1Click:Connect(function()
 	_G.MobileTackle()
+end)
+
+-- ===== DASH (⚠️ v86, tecla F no PC) =====
+-- Arranque curto na direção do analógico, com ou sem bola. Fica logo acima
+-- do carrinho, na mesma coluna.
+local dashButton = makeButton({
+	Name = "Dash",
+	Text = "DASH",
+	TextSize = 10,
+	Size = UDim2.fromOffset(54, 54),
+	AnchorPoint = Vector2.new(0.5, 1),
+	Position = UDim2.new(1, -272, 1, -320),
+	Color = Color3.fromRGB(60, 120, 190),
+	Visible = false,
+})
+dashButton.MouseButton1Click:Connect(function()
+	if _G.MobileDash then _G.MobileDash() end
 end)
 
 -- ===== SÓ GOLEIRO: mergulhos diagonais (E/Q) e dash (F) =====
@@ -399,6 +402,7 @@ RunService.Heartbeat:Connect(function()
 	-- Carrinho: só faz sentido pra jogador de linha SEM a bola (é a regra que
 	-- o servidor já aplica em _G.MobileTackle).
 	tackleButton.Visible = (not isGK) and (not temPosse)
+	dashButton.Visible = not isGK -- ⚠️ v86: dash vale com ou sem bola
 end)
 
 print("✅ MobileControls (Game) carregado — controles touch ativos.")

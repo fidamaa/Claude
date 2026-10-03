@@ -142,8 +142,24 @@ end
 -- geração mudou e desiste, em vez de retomar a música errada por cima.
 local faixaAtual = 0
 local geracaoDaFaixa = 0
+-- ⚠️ v120b: estado da música do Flow (ver mais abaixo) — declarado aqui porque a
+-- prorrogação (logo abaixo) precisa saber se ela está tocando
+local flowTocando = false
+local prorrogacaoPendente = false
 
 local tocarFaixa -- declarada antes: agendarFimDaFaixa chama ela de volta
+
+-- ⚠️ v110 FIX: esta função era chamada mas nunca tinha sido criada ("attempt
+-- to call a nil value" na linha do agendarFimDaFaixa — a faixa nunca era
+-- cortada/emendada). Espera o áudio carregar (até 15s) pra ler o TimeLength.
+local function esperarCarregar(som)
+	if not som then return false end
+	local limite = os.clock() + 15
+	while not som.IsLoaded and os.clock() < limite do
+		task.wait(0.1)
+	end
+	return som.IsLoaded and som.TimeLength > 0
+end
 
 local function agendarFimDaFaixa(minhaGeracao, inicioSegundos)
 	task.spawn(function()
@@ -260,7 +276,14 @@ local function entrarNaProrrogacao()
 end
 
 if Remotes.OvertimeStarted then
-	Remotes.OvertimeStarted.OnClientEvent:Connect(entrarNaProrrogacao)
+	Remotes.OvertimeStarted.OnClientEvent:Connect(function(...)
+		-- ⚠️ v120b: com a música do Flow tocando, a prorrogação entra quando ela acabar
+		if flowTocando then
+			prorrogacaoPendente = true
+			return
+		end
+		entrarNaProrrogacao(...)
+	end)
 end
 
 -- ===== MÚSICA DE GOL (curta, com fade-out) =====
@@ -312,7 +335,126 @@ local lastGoalMusicAt = -math.huge
 -- comemorando toca por cima) e devolve ela ao volume normal sozinha
 -- depois — usa os mesmos tempos do fade da própria música de gol
 -- (GOAL_MUSIC_DURATION/GOAL_MUSIC_FADE_SECONDS) pra ficar tudo sincronizado.
+-- ============================================================
+-- ⚠️ v120b — MÚSICA DO FLOW. PEDIDO: "quando a música tema do Flow estiver
+-- rolando, o restante das músicas vai se dissipar; fade in pra começar e fade out
+-- no final. Na comemoração do gol ela abaixa um pouquinho. Ela tem prioridade
+-- maior que a música de fundo: a de fundo acaba quando ela começa."
+-- Cada Flow tem Musica = { Id, Volume } em Cosmeticos. Começa junto com a CENA
+-- do Flow (Remotes.HissatsuCutscene "Flow_...", sincronizada pelo horário do
+-- servidor — a batida forte cai na pisada) e vai até o Flow acabar (atributo
+-- FlowAtivo do jogador some) ou um teto de segurança.
+-- ============================================================
+local Players = game:GetService("Players")
+local Cosmeticos = nil
+pcall(function() Cosmeticos = require(ReplicatedStorage:WaitForChild("Cosmeticos", 10)) end)
+flowTocando = false
+local musicaFlow = nil
+local geracaoFlow = 0
+local FADE_FLOW = 1.2
+local entrarNaProrrogacaoFn -- (definida mais acima; ligada no fim do arquivo)
+
+local function pararMusicaFlow()
+	if not flowTocando then return end
+	flowTocando = false
+	geracaoFlow += 1
+	local som = musicaFlow
+	musicaFlow = nil
+	if som then
+		TweenService:Create(som, TweenInfo.new(FADE_FLOW, Enum.EasingStyle.Linear), { Volume = 0 }):Play()
+		task.delay(FADE_FLOW + 0.05, function() som:Destroy() end)
+	end
+	-- a música de fundo volta de onde parou, com fade
+	if prorrogacaoPendente and entrarNaProrrogacaoFn then
+		prorrogacaoPendente = false
+		entrarNaProrrogacaoFn()
+	elseif secondaryMusic then
+		geracaoDaFaixa += 1
+		local minha = geracaoDaFaixa
+		secondaryMusic.Volume = 0
+		secondaryMusic:Resume()
+		TweenService:Create(secondaryMusic, TweenInfo.new(FADE_FLOW * 1.5, Enum.EasingStyle.Linear), { Volume = alvoDaMusica() }):Play()
+		agendarFimDaFaixa(minha, secondaryMusic.TimePosition)
+	end
+end
+
+local function tocarMusicaFlow(item, quem, horario, duracaoCena)
+	local musica = item and item.Musica
+	if typeof(musica) ~= "table" or typeof(musica.Id) ~= "string" or musica.Id == "" then return end
+	if flowTocando then pararMusicaFlow() end
+	flowTocando = true
+	geracaoFlow += 1
+	local minha = geracaoFlow
+	-- a de fundo some (pausa, pra voltar do mesmo ponto)
+	if secondaryMusic then
+		geracaoDaFaixa += 1 -- cancela o corte agendado da faixa atual
+		local sm = secondaryMusic
+		TweenService:Create(sm, TweenInfo.new(FADE_FLOW, Enum.EasingStyle.Linear), { Volume = 0 }):Play()
+		task.delay(FADE_FLOW, function()
+			if flowTocando and geracaoFlow == minha then sm:Pause() end
+		end)
+	end
+	local som = Instance.new("Sound")
+	som.Name = "MusicaDoFlow"
+	som.SoundId = musica.Id
+	som.Volume = 0
+	som.Parent = SoundService
+	musicaFlow = som
+	local alvo = musica.Volume or 0.6
+	som:Play()
+	-- sincroniza com a cena (quem entrou atrasado começa do ponto certo)
+	local atraso = math.max(workspace:GetServerTimeNow() - (horario or workspace:GetServerTimeNow()), 0)
+	if atraso > 0.05 then som.TimePosition = atraso end
+	TweenService:Create(som, TweenInfo.new(0.5, Enum.EasingStyle.Linear), { Volume = alvo }):Play()
+	som:SetAttribute("VolumeAlvo", alvo)
+	-- fim: quando o Flow do jogador acabar (FlowAtivo some depois de ter aparecido)
+	if typeof(quem) == "Instance" and quem:IsA("Player") then
+		local viuAtivo = false
+		local con
+		con = quem:GetAttributeChangedSignal("FlowAtivo"):Connect(function()
+			if geracaoFlow ~= minha then con:Disconnect() return end
+			if quem:GetAttribute("FlowAtivo") then
+				viuAtivo = true
+			elseif viuAtivo then
+				con:Disconnect()
+				pararMusicaFlow()
+			end
+		end)
+	end
+	-- teto de segurança: cena + Flow (25s) + folga, ou o fim do próprio áudio
+	task.delay((duracaoCena or 12) + 27, function()
+		if geracaoFlow == minha then pararMusicaFlow() end
+	end)
+	som.Ended:Connect(function()
+		if geracaoFlow == minha then pararMusicaFlow() end
+	end)
+end
+
+if Remotes.HissatsuCutscene then
+	Remotes.HissatsuCutscene.OnClientEvent:Connect(function(nome, quem, _inicio, _bola, horario, _titulo, duracao)
+		if typeof(nome) ~= "string" or nome:sub(1, 5) ~= "Flow_" or not Cosmeticos then return end
+		local item = Cosmeticos.Item(nome)
+		pcall(tocarMusicaFlow, item, quem, horario, duracao)
+	end)
+end
+
+-- na comemoração do gol a música do Flow abaixa um pouco e volta
+local function duckMusicaFlowParaGol()
+	local som = musicaFlow
+	if not som then return end
+	local alvo = som:GetAttribute("VolumeAlvo") or 0.6
+	local duration = Config.GOAL_MUSIC_DURATION or 5
+	TweenService:Create(som, TweenInfo.new(0.6, Enum.EasingStyle.Linear), { Volume = alvo * 0.55 }):Play()
+	task.delay(duration, function()
+		if musicaFlow == som then
+			TweenService:Create(som, TweenInfo.new(1.2, Enum.EasingStyle.Linear), { Volume = alvo }):Play()
+		end
+	end)
+end
+
 local function duckSecondaryMusicForGoal()
+	duckMusicaFlowParaGol()
+	if flowTocando then return end -- (a de fundo está pausada pela música do Flow)
 	if not secondaryMusic then return end
 
 	local duration = Config.GOAL_MUSIC_DURATION or 5
@@ -323,6 +465,7 @@ local function duckSecondaryMusicForGoal()
 	task.delay(duration, function()
 		if not secondaryMusic then return end
 		secondaryDucked = false
+		if flowTocando then return end
 		TweenService:Create(secondaryMusic, TweenInfo.new(fadeSeconds, Enum.EasingStyle.Linear), { Volume = alvoDaMusica() }):Play()
 	end)
 end
@@ -377,5 +520,8 @@ end
 Remotes.GoalScored.OnClientEvent:Connect(function(_scoringTeam, _scorer, _score)
 	playGoalMusic()
 end)
+
+-- (a prorrogação que chegar durante a música do Flow espera ela acabar)
+entrarNaProrrogacaoFn = entrarNaProrrogacao
 
 print("✅ MusicClient carregado.")

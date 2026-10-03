@@ -76,9 +76,15 @@ end)
 
 -- ===== QUAL PASSIVO ESTÁ EQUIPADO (consulta o servidor) =====
 local passivoAtual = nil -- nil | "TrajectorySight" | "Metavision"
+-- ⚠️ v106 — "a Metavisão não está funcionando". Isto lia result.Instinct, que
+-- deixou de existir quando a Arma virou 2 slots (o servidor manda Instinct1 e
+-- Instinct2) — o passivo vinha SEMPRE nil: Metavisão e a marca da Zona de Ouro
+-- nunca ligavam. Agora é o CONJUNTO dos passivos das Armas equipadas.
+local passivos = {} -- [nomeDoPassivo] = true
 
 local function passiveOf(name)
 	if not name then return nil end
+	if PulseData.ResolveName then name = PulseData.ResolveName(name) end
 	for _, def in ipairs(PulseData.Instincts) do
 		if def.Name == name then return def.Passive end
 	end
@@ -90,7 +96,13 @@ local function refreshEquipped()
 		return Remotes.GetMyAbilities:InvokeServer()
 	end)
 	if ok and typeof(result) == "table" then
-		passivoAtual = passiveOf(result.Instinct)
+		local novos = {}
+		for _, campo in ipairs({ "Instinct1", "Instinct2", "Instinct" }) do
+			local pas = passiveOf(result[campo])
+			if pas then novos[pas] = true end
+		end
+		passivos = novos
+		passivoAtual = (novos.Metavision and "Metavision") or (novos.TrajectorySight and "TrajectorySight") or nil
 	end
 end
 
@@ -134,21 +146,31 @@ local COR_TRAJETORIA = Color3.fromRGB(127, 212, 255)
 local PONTOS_MAX = 60          -- teto de passos da simulação
 local PASSO = 0.06             -- segundos por passo
 
+-- ⚠️ v108 — PEDIDO: "aumenta a Metavisão, mal dá pra ver onde a bola vai cair".
+-- Pontos 0.3 -> 0.55; marca do ponto de queda 4 -> 10 studs, mais opaca, com um
+-- anel externo pulsando e uma coluna de luz fina (dá pra ver de longe).
 local pontos = {}
 for i = 1, PONTOS_MAX do
-	pontos[i] = novaParte("Ponto" .. i, COR_TRAJETORIA, Vector3.new(0.3, 0.3, 0.3))
+	pontos[i] = novaParte("Ponto" .. i, COR_TRAJETORIA, Vector3.new(0.55, 0.55, 0.55))
 	pontos[i].Shape = Enum.PartType.Ball
 end
 
-local marcadorFinal = novaParte("PontoFinal", COR_TRAJETORIA, Vector3.new(4, 0.15, 4))
+local marcadorFinal = novaParte("PontoFinal", COR_TRAJETORIA, Vector3.new(0.2, 10, 10))
 marcadorFinal.Shape = Enum.PartType.Cylinder
-marcadorFinal.Transparency = 0.35
+marcadorFinal.Transparency = 0.25
+local anelFinal = novaParte("AnelFinal", Color3.fromRGB(230, 248, 255), Vector3.new(0.12, 12, 12))
+anelFinal.Shape = Enum.PartType.Cylinder
+anelFinal.Material = Enum.Material.ForceField
+local colunaFinal = novaParte("ColunaFinal", COR_TRAJETORIA, Vector3.new(0.35, 18, 0.35))
+colunaFinal.Transparency = 0.45
 
 local function esconderTrajetoria()
 	for _, p in ipairs(pontos) do
 		if p.Parent then p.Parent = nil end
 	end
-	if marcadorFinal.Parent then marcadorFinal.Parent = nil end
+	for _, p in ipairs({ marcadorFinal, anelFinal, colunaFinal }) do
+		if p.Parent then p.Parent = nil end
+	end
 end
 
 -- Simula um projétil a partir de UMA posição/velocidade inicial dadas até
@@ -206,12 +228,36 @@ local function desenharCaminho(caminho)
 
 	local final = caminho[#caminho]
 	if final then
-		marcadorFinal.CFrame = CFrame.new(final) * CFrame.Angles(0, 0, math.rad(90))
-		if not marcadorFinal.Parent then marcadorFinal.Parent = pasta end
+		local deitado = CFrame.new(final) * CFrame.Angles(0, 0, math.rad(90))
+		marcadorFinal.CFrame = deitado
+		local pulso = (os.clock() * 1.6) % 1
+		anelFinal.Size = Vector3.new(0.12, 10 + 6 * pulso, 10 + 6 * pulso)
+		anelFinal.CFrame = deitado
+		anelFinal.Transparency = 0.2 + 0.8 * pulso
+		colunaFinal.CFrame = CFrame.new(final + Vector3.new(0, 9, 0))
+		for _, p in ipairs({ marcadorFinal, anelFinal, colunaFinal }) do
+			if not p.Parent then p.Parent = pasta end
+		end
 	end
 end
 
+-- ⚠️ v109 — PEDIDO: "o indicativo de onde a bola vai cair tá aparecendo mesmo
+-- conduzindo a bola. Só aparece se a bola estiver off-ball." Quem é o dono
+-- agora (qualquer jogador) — com dono, nada de marca.
+local donoDaBolaAgora = nil
+Remotes.PossessionChanged.OnClientEvent:Connect(function(quem, ganhou)
+	if ganhou then
+		donoDaBolaAgora = quem
+	elseif donoDaBolaAgora == quem then
+		donoDaBolaAgora = nil
+	end
+end)
+
 local function desenharTrajetoria()
+	if donoDaBolaAgora ~= nil then
+		esconderTrajetoria()
+		return
+	end
 	local velocidade = ball.AssemblyLinearVelocity
 	if velocidade.Magnitude < Config.TRAJECTORY_SIGHT_MIN_SPEED then
 		esconderTrajetoria()
@@ -245,9 +291,93 @@ local function desenharPreviaDeMira(info)
 	direcao = direcao.Unit
 
 	local forca = info.Force or Config.KICK_MIN_FORCE
-	local velocidade = direcao * forca + Vector3.new(0, forca * (Config.KICK_UPWARD_BOOST or 0), 0)
+	-- ⚠️ v97: mesma conta do servidor agora (parábola que passa pelo ponto
+	-- mirado — ver _G.VelocidadeBalistica em BallController). Cópia local
+	-- porque _G do servidor não chega aqui.
+	local velocidade
+	do
+		local g = workspace.Gravity * Config.BALL_GRAVITY_MULTIPLIER
+		local d = alvo - origem
+		local plano = Vector3.new(d.X, 0, d.Z)
+		local x = plano.Magnitude
+		if x >= 0.5 and g > 0 then
+			local v2 = forca * forca
+			local disc = v2 * v2 - g * (g * x * x + 2 * d.Y * v2)
+			local ang = disc >= 0 and math.atan((v2 - math.sqrt(disc)) / (g * x)) or (math.atan2(d.Y, x) + math.rad(5))
+			ang = math.clamp(ang, math.rad(-70), math.rad(70))
+			velocidade = plano.Unit * (forca * math.cos(ang)) + Vector3.new(0, forca * math.sin(ang), 0)
+		else
+			velocidade = direcao * forca + Vector3.new(0, forca * (Config.KICK_UPWARD_BOOST or 0), 0)
+		end
+	end
 	desenharCaminho(simularCaminho(origem, velocidade))
 end
+
+-- ===== ⚠️ v108 — LINHA DE MIRA DE QUEM ESTÁ COM A BOLA =====
+-- PEDIDO: "coloca pra saber exatamente, a cada tick, aonde o jogador que está
+-- com a bola está olhando — uma linha reta, fina, até o final — pra conseguir
+-- interceptar. É meta pra goleiro, mas serve pra jogador também." O dono manda a
+-- mira (Remotes.MiraDoDono) e o servidor grava em Player:GetAttribute("MiraBola").
+-- Aqui: linha fina da bola até o ponto mirado + um alvo pequeno no fim.
+local COR_MIRA = Color3.fromRGB(255, 90, 90)
+local linhaMira = novaParte("LinhaMira", COR_MIRA, Vector3.new(0.12, 0.12, 1))
+linhaMira.Transparency = 0.2
+local alvoMira = novaParte("AlvoMira", COR_MIRA, Vector3.new(0.15, 2.4, 2.4))
+alvoMira.Shape = Enum.PartType.Cylinder
+alvoMira.Transparency = 0.3
+local donoDaBola = nil
+Remotes.PossessionChanged.OnClientEvent:Connect(function(quem, ganhou)
+	if ganhou then
+		donoDaBola = quem
+	elseif donoDaBola == quem then
+		donoDaBola = nil
+	end
+end)
+local miraSuave = nil
+local function esconderMira()
+	if linhaMira.Parent then linhaMira.Parent = nil end
+	if alvoMira.Parent then alvoMira.Parent = nil end
+	miraSuave = nil
+end
+-- ⚠️ v109 — PEDIDO: "no Flow aparece a linha, só que maior — até o final do
+-- campo, de um lado ao outro, pra saber exatamente onde o cara tá olhando. E
+-- tem que ir exatamente onde ele mira com o mouse, atualizando a cada instante."
+-- A mira chega TODO QUADRO por Remotes.MiraDoDonoU (sem suavizar: é a posição
+-- exata); a linha sai da bola na direção da mira (no plano do campo) e corre
+-- COMPRIMENTO_LINHA studs; o alvo fica no ponto exato mirado.
+local COMPRIMENTO_LINHA = 700
+local miraPorJogador = {}
+Remotes.MiraDoDonoU.OnClientEvent:Connect(function(quem, ponto)
+	if typeof(quem) == "Instance" and typeof(ponto) == "Vector3" then
+		miraPorJogador[quem] = ponto
+	end
+end)
+Players.PlayerRemoving:Connect(function(p) miraPorJogador[p] = nil end)
+
+local function desenharMiraDoDono()
+	local dono = donoDaBola
+	if not dono or dono == LocalPlayer or not dono.Parent then return esconderMira() end
+	local mira = miraPorJogador[dono]
+	if typeof(mira) ~= "Vector3" then return esconderMira() end
+	local origem = ball.Position
+	local plano = Vector3.new(mira.X - origem.X, 0, mira.Z - origem.Z)
+	if plano.Magnitude < 0.5 then return esconderMira() end
+	local dir = plano.Unit
+	local fim = origem + dir * COMPRIMENTO_LINHA
+	linhaMira.Size = Vector3.new(0.14, 0.14, COMPRIMENTO_LINHA)
+	linhaMira.CFrame = CFrame.lookAt(origem, fim) * CFrame.new(0, 0, -COMPRIMENTO_LINHA / 2)
+	alvoMira.CFrame = CFrame.lookAt(mira, mira + dir) * CFrame.Angles(0, math.rad(90), 0)
+	if not linhaMira.Parent then linhaMira.Parent = pasta end
+	if not alvoMira.Parent then alvoMira.Parent = pasta end
+end
+RunService.RenderStepped:Connect(function()
+	-- só com Metavisão E no Flow (Instinct Mode)
+	-- ⚠️ v111: ou com o Sexto Sentido do goleiro (sempre, sem o Flow)
+	local sexto = passivos.SextoSentido and LocalPlayer:GetAttribute("Role") == "GK"
+	if not sexto and (passivoAtual ~= "Metavision" or not instinctModeActive) then return esconderMira() end
+	local ok = pcall(desenharMiraDoDono)
+	if not ok then esconderMira() end
+end)
 
 -- ⚠️ v5.7: seção "2) MAIOR ESPAÇO ABERTO (triangulação)" REMOVIDA a pedido
 -- — o desenho ligando os jogadores em campo atrapalhava a visão durante a
@@ -326,15 +456,8 @@ RunService.RenderStepped:Connect(function()
 		return
 	end
 
-	-- ⚠️ v5.4: só a Metavisão ganha a prévia de mira (TrajectorySight
-	-- continua só reagindo à bola já em movimento, como sempre foi).
-	if passivoAtual == "Metavision" and _G.GetKickChargeInfo then
-		local info = _G.GetKickChargeInfo()
-		if info and info.Charging then
-			desenharPreviaDeMira(info)
-			return
-		end
-	end
+	-- ⚠️ v109: a prévia de mira ao carregar o chute SAIU — carregar é estar com
+	-- a bola, e o pedido é "só aparece com a bola off-ball".
 
 	desenharTrajetoria()
 end)
@@ -523,7 +646,7 @@ task.spawn(function()
 	-- coisa (ele roda no spawn e a cada 4s).
 	task.wait(2)
 	while true do
-		if passivoAtual == "GoldenZoneSight" then
+		if passivos.GoldenZoneSight then
 			local ok, err = pcall(desenharZonaDeOuro)
 			if not ok then goldenWarnOnce("draw", "erro ao desenhar: " .. tostring(err)) end
 		else

@@ -26,6 +26,16 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 
+-- ⚠️ v110: string.upper não põe acento em maiúscula ("Fúria" virava "FúRIA").
+-- Converte também as letras acentuadas (UTF-8 à..þ → À..Þ).
+local function maiusculas(s)
+	s = string.upper(tostring(s))
+	return (s:gsub("\195([\160-\190])", function(c)
+		local b = string.byte(c)
+		if b ~= 183 then return "\195" .. string.char(b - 32) end
+	end))
+end
+
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
@@ -38,29 +48,39 @@ local UpdateSlotName = eventsFolder:WaitForChild("UpdateSlotName")
 local UpdateLevelDataEvent = eventsFolder:WaitForChild("UpdateLevelData")
 local SetSlotRoleRemote = eventsFolder:WaitForChild("SetSlotRole")
 
--- ⚠️ v10 — PEDIDO: "remova a opção de selecionar role no lobby, apenas ao
--- goleiro, como a checkbox pedida". DF/MF/FW saíram: a posição de linha
--- agora é sugerida automaticamente no matchmaking a partir dos Pulsos
--- equipados (ver derivePreferredRole em MatchDataTransfer.legacy.luau) —
--- só GK continua sendo escolha manual, feita abaixo como um checkbox
--- único, não mais um seletor de 4 botões.
+-- ⚠️ v102 — VISUAL NOVO DA FICHA. PEDIDO: "melhore a HUD dos atributos...
+-- tira esses emojis, eu odeio emoji... faz o negócio mais bonitinho, combina
+-- com o restante das HUDs". Mesma paleta/tipografia do Roll, Missões,
+-- Matchmaking e diálogo (ver a skill ui-lobby). Nada de emoji: elemento vira
+-- um chip colorido com o nome, "sorte" vira 5 barrinhas, cadeado vira texto.
+-- A lógica (remotes, render da teia, slots) continua a mesma de antes.
 local ROLE_LABELS = { GK = "GOL", LINE = "LINHA" }
 
--- ⚠️ NOVO: ícones dos elementos (Config.ELEMENTS, LobbyConfig.luau) —
--- só emoji, sem asset nenhum pra criar.
-local ELEMENT_ICONS = {
-	Natureza = "🌿",
-	Fogo = "🔥",
-	Vento = "🌪️",
-	Luz = "✨",
-	Void = "🌑",
+-- paleta do Lobby
+local COR_PAINEL      = Color3.fromRGB(13, 15, 22)
+local COR_CARTAO      = Color3.fromRGB(21, 24, 34)
+local COR_CARTAO_ALT  = Color3.fromRGB(27, 31, 43)
+local COR_BORDA       = Color3.fromRGB(34, 38, 52)
+local COR_ACENTO      = Color3.fromRGB(76, 156, 255)
+local COR_ACENTO_CLARO = Color3.fromRGB(125, 185, 255)
+local COR_OK          = Color3.fromRGB(64, 196, 122)
+local COR_OURO        = Color3.fromRGB(255, 200, 70)
+local COR_TEXTO       = Color3.fromRGB(238, 241, 248)
+local COR_TEXTO_MEDIO = Color3.fromRGB(190, 197, 212)
+local COR_TEXTO_FRACO = Color3.fromRGB(120, 128, 148)
+
+-- cor de cada elemento (Config.ELEMENTS no LobbyConfig) — no lugar do emoji
+local ELEMENT_COLORS = {
+	Natureza = Color3.fromRGB(110, 210, 110),
+	Fogo = Color3.fromRGB(255, 120, 60),
+	Vento = Color3.fromRGB(90, 220, 200),
+	Luz = Color3.fromRGB(255, 215, 90),
+	Void = Color3.fromRGB(170, 110, 255),
 }
 
--- ===== ATRIBUTOS (só os normais de futebol — Aura/BallControl/
--- CrossingSkill foram removidos; Speed e Kick entraram no lugar) =====
--- ⚠️ NOVO: Energy entrou como 6º atributo (alimenta o sistema de Pulsos)
--- — a teia agora é um HEXÁGONO em vez de pentágono (ver ATTR_ANGLES
--- abaixo, que já usa #ATTRIBUTE_ORDER em vez de "5" fixo).
+-- ===== ATRIBUTOS =====
+-- ⚠️ v98 — TÉCNICA REMOVIDA (o que ela fazia virou do Drible). A teia é um
+-- hexágono (ATTR_ANGLES deriva de #ATTRIBUTE_ORDER).
 local ATTRIBUTE_ORDER = { "Physical", "DribbleSkill", "Speed", "Kick", "Energy", "Stamina" }
 local ATTRIBUTE_LABELS = {
 	Physical = "FÍSICO",
@@ -70,20 +90,23 @@ local ATTRIBUTE_LABELS = {
 	Energy = "ENERGIA",
 	Stamina = "FÔLEGO",
 }
-local ATTRIBUTE_COLOR = Color3.fromRGB(90, 200, 255)
-local ATTRIBUTE_COLOR_BRIGHT = Color3.fromRGB(140, 225, 255)
+-- o que cada um faz (aparece embaixo da teia ao passar o mouse/tocar)
+local ATTRIBUTE_DESCRIPTIONS = {
+	Physical = "Segura carrinho, ganha disputa de corpo e fortalece as Hissatsus de defesa e de goleiro.",
+	DribbleSkill = "Finta, domínio e primeiro toque — e a força das Hissatsus de drible.",
+	Speed = "O quanto você corre.",
+	Kick = "Força e alcance do chute — e a força das Hissatsus de chute.",
+	Energy = "Quantas Hissatsus você consegue soltar numa partida.",
+	Stamina = "Quantas jogadas seguidas você aguenta sem cansar.",
+}
 
--- ===== GEOMETRIA DA TEIA (pentágono) =====
-local WEB_SIZE = Vector2.new(400, 400)
-local WEB_CENTER = Vector2.new(200, 190)
-local WEB_RADIUS = 140
-local WEB_MIN_FRACTION = 0.1 -- nunca deixa o polígono de valor colapsar num ponto
-local WEB_VALUE_CAP = 100 -- fração visual satura em 100, mas o número mostrado não tem teto
+-- ===== GEOMETRIA DA TEIA =====
+local WEB_SIZE = Vector2.new(400, 340)
+local WEB_CENTER = Vector2.new(200, 168)
+local WEB_RADIUS = 122 -- (135 encostava o nó de baixo na descrição)
+local WEB_MIN_FRACTION = 0.1
+local WEB_VALUE_CAP = 100
 
--- ⚠️ NOVO: ângulo por vértice agora deriva de #ATTRIBUTE_ORDER (era "5"/
--- "72" fixos, específico de pentágono) — com Energy virou hexágono (6
--- vértices, 60° cada), mas continua funcionando pra qualquer quantidade
--- de atributos se mudar de novo no futuro.
 local ATTR_ANGLES = {}
 local ATTR_COUNT = #ATTRIBUTE_ORDER
 local ATTR_ANGLE_STEP = 360 / ATTR_COUNT
@@ -100,7 +123,6 @@ local function drawLine(parent, pointA, pointB, thickness, color, transparency, 
 	local delta = pointB - pointA
 	local distance = math.max(delta.Magnitude, 0.01)
 	local angle = math.deg(math.atan2(delta.Y, delta.X))
-
 	local line = Instance.new("Frame")
 	line.Name = "Line"
 	line.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -115,164 +137,197 @@ local function drawLine(parent, pointA, pointB, thickness, color, transparency, 
 	return line
 end
 
+local function cantos(inst, raio)
+	local c = Instance.new("UICorner")
+	c.CornerRadius = UDim.new(0, raio)
+	c.Parent = inst
+	return c
+end
+local function contorno(inst, cor, espessura, transparencia)
+	local s = Instance.new("UIStroke")
+	s.Color = cor
+	s.Thickness = espessura or 1
+	s.Transparency = transparencia or 0
+	s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	s.Parent = inst
+	return s
+end
+local function texto(pai, props)
+	local l = Instance.new("TextLabel")
+	l.BackgroundTransparency = 1
+	l.Font = Enum.Font.GothamMedium
+	l.TextColor3 = COR_TEXTO
+	l.TextXAlignment = Enum.TextXAlignment.Left
+	for k, v in pairs(props) do l[k] = v end
+	l.Parent = pai
+	return l
+end
+
 -- ===== GUI RAIZ =====
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "CharacterGui"
 screenGui.ResetOnSpawn = false
+screenGui.IgnoreGuiInset = true
 screenGui.Enabled = false
 screenGui.Parent = playerGui
 
--- Botão flutuante pra abrir/fechar
--- ⚠️ v68 — O BOTÃO FLUTUANTE "PERSONAGEM (P)" FOI REMOVIDO.
--- PEDIDO: "tira esse botão e coloca pro meu npc kogamalotigo dizer algo na
--- fala e abrir isso."
---
--- Um botão retangular escrito "PERSONAGEM (P)" colado no canto é exatamente
--- o tipo de coisa que denuncia UI feita por conveniência: ocupa tela o jogo
--- inteiro pra uma ação que se usa de vez em quando, e ainda ensina um atalho
--- de teclado que não existe no celular.
---
--- Agora quem abre a ficha é o próprio kogamalotigo, conversando (ver
--- DialogueData.Kogamalotigo e a ação OpenCharacter no DialogueClient). A
--- tecla P continua funcionando pra quem joga no PC e já se acostumou — ela
--- só deixou de ser anunciada na tela.
---
--- `toggleButton` sobrevive como objeto-ponte porque há conexões a ele mais
--- abaixo neste arquivo; assim elas continuam válidas sem eu precisar caçar
--- cada uma e arriscar deixar uma pendurada.
+-- ⚠️ v68: o botão flutuante "PERSONAGEM (P)" foi removido — quem abre a
+-- ficha é o kogamalotigo (DialogueData, ação OpenCharacter); a tecla P
+-- continua funcionando no PC. `toggleButton` fica como objeto-ponte.
 local toggleButton = { MouseButton1Click = { Connect = function() end } }
 
+local PAINEL_W, PAINEL_H = 940, 600
 local mainFrame = Instance.new("Frame")
 mainFrame.Name = "MainFrame"
-mainFrame.Size = UDim2.fromOffset(920, 560)
-mainFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
+mainFrame.Size = UDim2.fromOffset(PAINEL_W, PAINEL_H)
+mainFrame.Position = UDim2.fromScale(0.5, 0.5)
 mainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
-mainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 28)
+mainFrame.BackgroundColor3 = COR_PAINEL
 mainFrame.Visible = false
 mainFrame.Parent = screenGui
-Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 18)
-local mainStroke = Instance.new("UIStroke", mainFrame)
-mainStroke.Color = Color3.fromRGB(60, 60, 80)
-mainStroke.Thickness = 1.5
+cantos(mainFrame, 10)
+contorno(mainFrame, COR_BORDA, 1, 0.15)
 
-local title = Instance.new("TextLabel")
-title.Size = UDim2.new(1, -40, 0, 40)
-title.Position = UDim2.new(0, 20, 0, 14)
-title.BackgroundTransparency = 1
-title.Text = "PERSONAGEM"
-title.TextColor3 = Color3.new(1, 1, 1)
-title.Font = Enum.Font.GothamBlack
-title.TextSize = 24
-title.TextXAlignment = Enum.TextXAlignment.Left
-title.Parent = mainFrame
+-- cabe em qualquer tela (celular incluso), e cresce um pouco em tela grande
+local escala = Instance.new("UIScale")
+escala.Parent = mainFrame
+local function ajustarEscala()
+	local v = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize
+	if not v or v.X <= 0 then return end
+	escala.Scale = math.min(1.15, (v.X - 32) / PAINEL_W, (v.Y - 32) / PAINEL_H)
+end
+ajustarEscala()
+if workspace.CurrentCamera then
+	workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(ajustarEscala)
+end
+
+-- cabeçalho: | PERSONAGEM ......................... [X]
+local cabecalho = Instance.new("Frame")
+cabecalho.Name = "Cabecalho"
+cabecalho.Size = UDim2.new(1, 0, 0, 56)
+cabecalho.BackgroundColor3 = COR_CARTAO
+cabecalho.BorderSizePixel = 0
+cabecalho.Parent = mainFrame
+cantos(cabecalho, 10)
+local cabecalhoBase = Instance.new("Frame") -- tira o arredondado de baixo do cabeçalho
+cabecalhoBase.BackgroundColor3 = COR_CARTAO
+cabecalhoBase.BorderSizePixel = 0
+cabecalhoBase.Position = UDim2.new(0, 0, 1, -10)
+cabecalhoBase.Size = UDim2.new(1, 0, 0, 10)
+cabecalhoBase.Parent = cabecalho
+
+local barraTitulo = Instance.new("Frame")
+barraTitulo.BackgroundColor3 = COR_ACENTO
+barraTitulo.BorderSizePixel = 0
+barraTitulo.AnchorPoint = Vector2.new(0, 0.5)
+barraTitulo.Position = UDim2.new(0, 20, 0.5, 0)
+barraTitulo.Size = UDim2.fromOffset(4, 22)
+barraTitulo.Parent = cabecalho
+cantos(barraTitulo, 2)
+
+local title = texto(cabecalho, {
+	AnchorPoint = Vector2.new(0, 0.5), Position = UDim2.new(0, 34, 0.5, 0), Size = UDim2.fromOffset(400, 30),
+	Font = Enum.Font.GothamBlack, TextSize = 20, Text = "PERSONAGEM",
+})
 
 local closeButton = Instance.new("TextButton")
-closeButton.Size = UDim2.fromOffset(32, 32)
-closeButton.Position = UDim2.new(1, -48, 0, 16)
-closeButton.BackgroundColor3 = Color3.fromRGB(60, 40, 45)
+closeButton.AnchorPoint = Vector2.new(1, 0.5)
+closeButton.Position = UDim2.new(1, -12, 0.5, 0)
+closeButton.Size = UDim2.fromOffset(34, 34)
+closeButton.BackgroundColor3 = COR_CARTAO_ALT
 closeButton.Text = "X"
-closeButton.TextColor3 = Color3.new(1, 1, 1)
+closeButton.TextColor3 = COR_TEXTO
 closeButton.Font = Enum.Font.GothamBold
 closeButton.TextSize = 16
-closeButton.Parent = mainFrame
-Instance.new("UICorner", closeButton).CornerRadius = UDim.new(0, 8)
+closeButton.Parent = cabecalho
+cantos(closeButton, 17)
 
 -- ===== SIDEBAR (SLOTS) =====
 local sidebar = Instance.new("Frame")
 sidebar.Name = "Sidebar"
-sidebar.Size = UDim2.fromOffset(280, 480)
-sidebar.Position = UDim2.fromOffset(20, 64)
+sidebar.Size = UDim2.fromOffset(290, PAINEL_H - 56 - 32)
+sidebar.Position = UDim2.fromOffset(16, 56 + 16)
 sidebar.BackgroundTransparency = 1
 sidebar.Parent = mainFrame
 
 local slotListLayout = Instance.new("UIListLayout")
-slotListLayout.Padding = UDim.new(0, 10)
+slotListLayout.Padding = UDim.new(0, 8)
+slotListLayout.SortOrder = Enum.SortOrder.LayoutOrder
 slotListLayout.Parent = sidebar
 
-local slotCards = {} -- [index] = { Frame, NameLabel, InfoLabel, ActiveTag, LockIcon }
+local slotCards = {}
 
 local function createSlotCard(index)
 	local card = Instance.new("TextButton")
 	card.Name = "Slot" .. index
-	card.Size = UDim2.new(1, 0, 0, 96)
-	card.BackgroundColor3 = Color3.fromRGB(32, 32, 44)
+	card.Size = UDim2.new(1, 0, 0, 74)
+	card.BackgroundColor3 = COR_CARTAO
 	card.AutoButtonColor = false
 	card.Text = ""
 	card.LayoutOrder = index
 	card.Parent = sidebar
-	Instance.new("UICorner", card).CornerRadius = UDim.new(0, 12)
+	cantos(card, 8)
+	local stroke = contorno(card, COR_BORDA, 1, 0)
 
-	local stroke = Instance.new("UIStroke", card)
-	stroke.Color = Color3.fromRGB(55, 55, 70)
-	stroke.Thickness = 1.5
+	local nameLabel = texto(card, {
+		Position = UDim2.fromOffset(14, 10), Size = UDim2.new(1, -96, 0, 20),
+		Font = Enum.Font.GothamBlack, TextSize = 15, Text = "—", TextTruncate = Enum.TextTruncate.AtEnd,
+	})
+	local infoLabel = texto(card, {
+		Position = UDim2.fromOffset(14, 32), Size = UDim2.new(1, -28, 0, 16),
+		TextSize = 12, TextColor3 = COR_TEXTO_MEDIO, RichText = true, Text = "",
+	})
 
-	local nameLabel = Instance.new("TextLabel")
-	nameLabel.Size = UDim2.new(1, -90, 0, 24)
-	nameLabel.Position = UDim2.new(0, 14, 0, 10)
-	nameLabel.BackgroundTransparency = 1
-	nameLabel.Text = "—"
-	nameLabel.TextColor3 = Color3.new(1, 1, 1)
-	nameLabel.Font = Enum.Font.GothamBold
-	nameLabel.TextSize = 16
-	nameLabel.TextXAlignment = Enum.TextXAlignment.Left
-	nameLabel.TextTruncate = Enum.TextTruncate.AtEnd
-	nameLabel.Parent = card
+	-- sorte (1-5): 5 barrinhas douradas no lugar das estrelas
+	local sorte = Instance.new("Frame")
+	sorte.Name = "Sorte"
+	sorte.BackgroundTransparency = 1
+	sorte.Position = UDim2.fromOffset(14, 54)
+	sorte.Size = UDim2.fromOffset(120, 8)
+	sorte.Parent = card
+	local sorteLayout = Instance.new("UIListLayout")
+	sorteLayout.FillDirection = Enum.FillDirection.Horizontal
+	sorteLayout.Padding = UDim.new(0, 4)
+	sorteLayout.Parent = sorte
+	local pips = {}
+	for p = 1, 5 do
+		local pip = Instance.new("Frame")
+		pip.Size = UDim2.fromOffset(18, 6)
+		pip.BorderSizePixel = 0
+		pip.BackgroundColor3 = COR_CARTAO_ALT
+		pip.LayoutOrder = p
+		pip.Parent = sorte
+		cantos(pip, 3)
+		pips[p] = pip
+	end
+	local sorteRotulo = texto(card, {
+		Position = UDim2.fromOffset(136, 49), Size = UDim2.fromOffset(80, 16),
+		TextSize = 11, TextColor3 = COR_TEXTO_FRACO, Text = "",
+	})
 
-	local infoLabel = Instance.new("TextLabel")
-	infoLabel.Size = UDim2.new(1, -28, 0, 20)
-	infoLabel.Position = UDim2.new(0, 14, 0, 38)
-	infoLabel.BackgroundTransparency = 1
-	infoLabel.Text = ""
-	infoLabel.TextColor3 = Color3.fromRGB(170, 170, 185)
-	infoLabel.Font = Enum.Font.Gotham
-	infoLabel.TextSize = 13
-	infoLabel.TextXAlignment = Enum.TextXAlignment.Left
-	infoLabel.Parent = card
+	local activeTag = texto(card, {
+		AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -12, 0, 10), Size = UDim2.fromOffset(60, 20),
+		BackgroundTransparency = 0, BackgroundColor3 = COR_OK, TextXAlignment = Enum.TextXAlignment.Center,
+		Font = Enum.Font.GothamBlack, TextSize = 11, Text = "ATIVO", Visible = false,
+	})
+	cantos(activeTag, 6)
 
-	-- ⭐ Estrelas de Sorte do slot (1-5, refletem o teto de atributos que
-	-- dá pra maxar nesse personagem — ver Luck no PlayerDataManager.lua)
-	local starsLabel = Instance.new("TextLabel")
-	starsLabel.Size = UDim2.new(1, -28, 0, 16)
-	starsLabel.Position = UDim2.new(0, 14, 0, 58)
-	starsLabel.BackgroundTransparency = 1
-	starsLabel.Text = ""
-	starsLabel.TextColor3 = Color3.fromRGB(255, 205, 60)
-	starsLabel.Font = Enum.Font.GothamBold
-	starsLabel.TextSize = 12
-	starsLabel.TextXAlignment = Enum.TextXAlignment.Left
-	starsLabel.Parent = card
-
-	local activeTag = Instance.new("TextLabel")
-	activeTag.Size = UDim2.fromOffset(60, 20)
-	activeTag.Position = UDim2.new(1, -74, 0, 10)
-	activeTag.BackgroundColor3 = Color3.fromRGB(85, 200, 120)
-	activeTag.Text = "ATIVO"
-	activeTag.TextColor3 = Color3.new(1, 1, 1)
-	activeTag.Font = Enum.Font.GothamBold
-	activeTag.TextSize = 11
-	activeTag.Visible = false
-	activeTag.Parent = card
-	Instance.new("UICorner", activeTag).CornerRadius = UDim.new(0, 6)
-
-	local lockIcon = Instance.new("TextLabel")
-	lockIcon.Size = UDim2.new(1, 0, 1, 0)
-	lockIcon.BackgroundTransparency = 1
-	lockIcon.Text = "🔒 BLOQUEADO"
-	lockIcon.TextColor3 = Color3.fromRGB(130, 130, 140)
-	lockIcon.Font = Enum.Font.GothamBold
-	lockIcon.TextSize = 14
-	lockIcon.Visible = false
-	lockIcon.Parent = card
+	local lockIcon = texto(card, {
+		Size = UDim2.fromScale(1, 1), TextXAlignment = Enum.TextXAlignment.Center,
+		Font = Enum.Font.GothamBlack, TextSize = 13, TextColor3 = COR_TEXTO_FRACO, RichText = true,
+		Text = 'BLOQUEADO<br/><font size="11" weight="medium" color="#788094">destrave na Loja</font>', Visible = false,
+	})
 
 	slotCards[index] = {
-		Frame = card,
-		Stroke = stroke,
-		NameLabel = nameLabel,
-		InfoLabel = infoLabel,
-		StarsLabel = starsLabel,
-		ActiveTag = activeTag,
-		LockIcon = lockIcon,
+		Frame = card, Stroke = stroke, NameLabel = nameLabel, InfoLabel = infoLabel,
+		Pips = pips, SorteRotulo = sorteRotulo, Sorte = sorte, ActiveTag = activeTag, LockIcon = lockIcon,
 	}
+	card.MouseEnter:Connect(function()
+		if not lockIcon.Visible then card.BackgroundColor3 = COR_CARTAO_ALT end
+	end)
+	card.MouseLeave:Connect(function()
+		card.BackgroundColor3 = COR_CARTAO
+	end)
 	return card
 end
 
@@ -280,22 +335,29 @@ for i = 1, 5 do
 	createSlotCard(i)
 end
 
+local function setStars(card, stars)
+	for p, pip in ipairs(card.Pips) do
+		pip.BackgroundColor3 = p <= stars and COR_OURO or COR_CARTAO_ALT
+	end
+	card.SorteRotulo.Text = string.format("sorte %d/5", stars)
+end
+
 local playButton = Instance.new("TextButton")
 playButton.Name = "PlayButton"
-playButton.Size = UDim2.new(1, 0, 0, 46)
+playButton.Size = UDim2.new(1, 0, 0, 40)
 playButton.LayoutOrder = 99
-playButton.BackgroundColor3 = Color3.fromRGB(85, 170, 255)
+playButton.BackgroundColor3 = COR_ACENTO
 playButton.Text = "JOGAR COM ESTE"
 playButton.TextColor3 = Color3.new(1, 1, 1)
 playButton.Font = Enum.Font.GothamBlack
-playButton.TextSize = 15
+playButton.TextSize = 14
 playButton.Visible = false
 playButton.Parent = sidebar
-Instance.new("UICorner", playButton).CornerRadius = UDim.new(0, 10)
+cantos(playButton, 8)
 
 local renameRow = Instance.new("Frame")
 renameRow.Name = "RenameRow"
-renameRow.Size = UDim2.new(1, 0, 0, 40)
+renameRow.Size = UDim2.new(1, 0, 0, 36)
 renameRow.LayoutOrder = 100
 renameRow.BackgroundTransparency = 1
 renameRow.Visible = false
@@ -303,81 +365,71 @@ renameRow.Parent = sidebar
 
 local renameBox = Instance.new("TextBox")
 renameBox.Size = UDim2.new(1, -84, 1, 0)
-renameBox.BackgroundColor3 = Color3.fromRGB(32, 32, 44)
-renameBox.TextColor3 = Color3.new(1, 1, 1)
+renameBox.BackgroundColor3 = COR_CARTAO
+renameBox.TextColor3 = COR_TEXTO
 renameBox.PlaceholderText = "Renomear personagem..."
-renameBox.PlaceholderColor3 = Color3.fromRGB(130, 130, 140)
-renameBox.Font = Enum.Font.Gotham
-renameBox.TextSize = 14
+renameBox.PlaceholderColor3 = COR_TEXTO_FRACO
+renameBox.Font = Enum.Font.GothamMedium
+renameBox.TextSize = 13
 renameBox.ClearTextOnFocus = false
 renameBox.Parent = renameRow
-Instance.new("UICorner", renameBox).CornerRadius = UDim.new(0, 8)
+cantos(renameBox, 8)
+contorno(renameBox, COR_BORDA, 1, 0)
+local renamePad = Instance.new("UIPadding")
+renamePad.PaddingLeft = UDim.new(0, 10)
+renamePad.Parent = renameBox
 
 local renameButton = Instance.new("TextButton")
 renameButton.Size = UDim2.new(0, 76, 1, 0)
 renameButton.Position = UDim2.new(1, -76, 0, 0)
-renameButton.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
+renameButton.BackgroundColor3 = COR_CARTAO_ALT
 renameButton.Text = "SALVAR"
-renameButton.TextColor3 = Color3.new(1, 1, 1)
-renameButton.Font = Enum.Font.GothamBold
+renameButton.TextColor3 = COR_ACENTO_CLARO
+renameButton.Font = Enum.Font.GothamBlack
 renameButton.TextSize = 12
 renameButton.Parent = renameRow
-Instance.new("UICorner", renameButton).CornerRadius = UDim.new(0, 8)
+cantos(renameButton, 8)
+contorno(renameButton, COR_ACENTO, 1, 0.5)
 
--- ===== PAINEL DA TEIA DE HABILIDADE =====
+-- ===== PAINEL DA TEIA =====
 local webPanel = Instance.new("Frame")
 webPanel.Name = "WebPanel"
-webPanel.Size = UDim2.fromOffset(580, 480)
-webPanel.Position = UDim2.fromOffset(320, 64)
-webPanel.BackgroundColor3 = Color3.fromRGB(26, 26, 36)
+webPanel.Size = UDim2.fromOffset(PAINEL_W - 290 - 16 * 3, PAINEL_H - 56 - 32)
+webPanel.Position = UDim2.fromOffset(16 + 290 + 16, 56 + 16)
+webPanel.BackgroundColor3 = COR_CARTAO
 webPanel.Parent = mainFrame
-Instance.new("UICorner", webPanel).CornerRadius = UDim.new(0, 14)
+cantos(webPanel, 10)
+contorno(webPanel, COR_BORDA, 1, 0.25)
 
-local slotTitleLabel = Instance.new("TextLabel")
-slotTitleLabel.Size = UDim2.new(1, -40, 0, 30)
-slotTitleLabel.Position = UDim2.new(0, 20, 0, 14)
-slotTitleLabel.BackgroundTransparency = 1
-slotTitleLabel.Text = "Selecione um personagem"
-slotTitleLabel.TextColor3 = Color3.new(1, 1, 1)
-slotTitleLabel.Font = Enum.Font.GothamBold
-slotTitleLabel.TextSize = 19
-slotTitleLabel.TextXAlignment = Enum.TextXAlignment.Left
-slotTitleLabel.Parent = webPanel
+local slotTitleLabel = texto(webPanel, {
+	Position = UDim2.fromOffset(20, 16), Size = UDim2.new(1, -240, 0, 26),
+	Font = Enum.Font.GothamBlack, TextSize = 20, Text = "Selecione um personagem", TextTruncate = Enum.TextTruncate.AtEnd,
+})
 
-local levelBadge = Instance.new("TextLabel")
-levelBadge.Size = UDim2.fromOffset(90, 26)
-levelBadge.Position = UDim2.new(1, -110, 0, 16)
-levelBadge.BackgroundColor3 = Color3.fromRGB(50, 50, 68)
-levelBadge.Text = "Nv. —"
-levelBadge.TextColor3 = Color3.fromRGB(255, 215, 0)
-levelBadge.Font = Enum.Font.GothamBold
-levelBadge.TextSize = 14
-levelBadge.Parent = webPanel
-Instance.new("UICorner", levelBadge).CornerRadius = UDim.new(0, 8)
+-- chips à direita: [NÍVEL 50] [FOGO]
+local levelBadge = texto(webPanel, {
+	AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -16, 0, 16), Size = UDim2.fromOffset(96, 26),
+	BackgroundTransparency = 0, BackgroundColor3 = COR_CARTAO_ALT, TextXAlignment = Enum.TextXAlignment.Center,
+	Font = Enum.Font.GothamBlack, TextSize = 13, TextColor3 = COR_OURO, Text = "NÍVEL —",
+})
+cantos(levelBadge, 6)
+contorno(levelBadge, COR_OURO, 1, 0.6)
 
--- ⚠️ NOVO: badge do elemento do slot (Config.ELEMENTS) — ao lado do
--- badge de nível.
-local elementBadge = Instance.new("TextLabel")
-elementBadge.Name = "ElementBadge"
-elementBadge.Size = UDim2.fromOffset(90, 26)
-elementBadge.Position = UDim2.new(1, -110, 0, 46)
-elementBadge.BackgroundColor3 = Color3.fromRGB(50, 50, 68)
-elementBadge.Text = ""
-elementBadge.TextColor3 = Color3.fromRGB(220, 220, 230)
-elementBadge.Font = Enum.Font.GothamBold
-elementBadge.TextSize = 13
-elementBadge.Parent = webPanel
-Instance.new("UICorner", elementBadge).CornerRadius = UDim.new(0, 8)
+local elementBadge = texto(webPanel, {
+	Name = "ElementBadge", AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -120, 0, 16), Size = UDim2.fromOffset(96, 26),
+	BackgroundTransparency = 0, BackgroundColor3 = COR_CARTAO_ALT, TextXAlignment = Enum.TextXAlignment.Center,
+	Font = Enum.Font.GothamBlack, TextSize = 13, Text = "",
+})
+cantos(elementBadge, 6)
+local elementStroke = contorno(elementBadge, COR_BORDA, 1, 0.4)
 
--- ===== CHECKBOX DE GOLEIRO (⚠️ v10 — substitui o seletor de 4 botões
--- GK/DF/MF/FW; ver comentário perto de ROLE_LABELS no topo do arquivo) =====
+-- checkbox de goleiro
 local roleRow = Instance.new("Frame")
 roleRow.Name = "GKCheckboxRow"
-roleRow.Size = UDim2.new(1, -40, 0, 30)
-roleRow.Position = UDim2.new(0, 20, 0, 48)
+roleRow.Size = UDim2.new(1, -40, 0, 26)
+roleRow.Position = UDim2.fromOffset(20, 50)
 roleRow.BackgroundTransparency = 1
 roleRow.Parent = webPanel
-
 local roleRowLayout = Instance.new("UIListLayout")
 roleRowLayout.FillDirection = Enum.FillDirection.Horizontal
 roleRowLayout.VerticalAlignment = Enum.VerticalAlignment.Center
@@ -386,63 +438,44 @@ roleRowLayout.Parent = roleRow
 
 local gkCheckboxButton = Instance.new("TextButton")
 gkCheckboxButton.Name = "GKCheckbox"
-gkCheckboxButton.Size = UDim2.fromOffset(26, 26)
-gkCheckboxButton.BackgroundColor3 = Color3.fromRGB(40, 40, 54)
+gkCheckboxButton.Size = UDim2.fromOffset(22, 22)
+gkCheckboxButton.BackgroundColor3 = COR_CARTAO_ALT
 gkCheckboxButton.Text = ""
-gkCheckboxButton.Font = Enum.Font.GothamBold
-gkCheckboxButton.TextSize = 16
+gkCheckboxButton.Font = Enum.Font.GothamBlack
+gkCheckboxButton.TextSize = 14
 gkCheckboxButton.TextColor3 = Color3.new(1, 1, 1)
 gkCheckboxButton.Parent = roleRow
-Instance.new("UICorner", gkCheckboxButton).CornerRadius = UDim.new(0, 6)
-local gkCheckboxStroke = Instance.new("UIStroke", gkCheckboxButton)
-gkCheckboxStroke.Color = Color3.fromRGB(70, 70, 90)
-gkCheckboxStroke.Thickness = 1.5
+cantos(gkCheckboxButton, 6)
+local gkCheckboxStroke = contorno(gkCheckboxButton, COR_BORDA, 1.5, 0)
 
-local gkCheckboxLabel = Instance.new("TextLabel")
-gkCheckboxLabel.Name = "GKCheckboxLabel"
-gkCheckboxLabel.Size = UDim2.fromOffset(190, 26)
-gkCheckboxLabel.BackgroundTransparency = 1
-gkCheckboxLabel.Text = "Quer ser Goleiro?"
-gkCheckboxLabel.TextColor3 = Color3.new(1, 1, 1)
-gkCheckboxLabel.Font = Enum.Font.GothamBold
-gkCheckboxLabel.TextSize = 13
-gkCheckboxLabel.TextXAlignment = Enum.TextXAlignment.Left
-gkCheckboxLabel.Parent = roleRow
+texto(roleRow, {
+	Name = "GKCheckboxLabel", Size = UDim2.fromOffset(220, 22),
+	Font = Enum.Font.GothamBold, TextSize = 13, TextColor3 = COR_TEXTO_MEDIO, Text = "Jogar como goleiro",
+})
 
--- Container da teia (pentágono)
+-- a teia
 local webContainer = Instance.new("Frame")
 webContainer.Name = "Web"
 webContainer.Size = UDim2.fromOffset(WEB_SIZE.X, WEB_SIZE.Y)
-webContainer.Position = UDim2.new(0.5, -WEB_SIZE.X / 2, 0, 74)
+webContainer.Position = UDim2.new(0.5, -WEB_SIZE.X / 2, 0, 76)
 webContainer.BackgroundTransparency = 1
 webContainer.Parent = webPanel
 
--- Anéis de fundo da teia (25%, 50%, 75%, 100%) — o visual de "rede"
 local ringsFolder = Instance.new("Folder", webContainer)
 ringsFolder.Name = "Rings"
 for _, fraction in ipairs({ 0.25, 0.5, 0.75, 1 }) do
 	for i = 1, ATTR_COUNT do
 		local nextI = (i % ATTR_COUNT) + 1
-		drawLine(
-			ringsFolder,
-			pointOnWeb(i, fraction),
-			pointOnWeb(nextI, fraction),
-			1,
-			Color3.fromRGB(70, 70, 90),
-			fraction == 1 and 0.2 or 0.55,
-			2
-		)
+		drawLine(ringsFolder, pointOnWeb(i, fraction), pointOnWeb(nextI, fraction), 1,
+			fraction == 1 and Color3.fromRGB(60, 68, 92) or COR_BORDA, fraction == 1 and 0 or 0.1, 2)
 	end
 end
-
--- Raios do centro até cada vértice
 local spokesFolder = Instance.new("Folder", webContainer)
 spokesFolder.Name = "Spokes"
 for i = 1, ATTR_COUNT do
-	drawLine(spokesFolder, WEB_CENTER, pointOnWeb(i, 1), 1, Color3.fromRGB(70, 70, 90), 0.5, 2)
+	drawLine(spokesFolder, WEB_CENTER, pointOnWeb(i, 1), 1, COR_BORDA, 0.1, 2)
 end
 
--- Polígono de VALOR (recriado a cada atualização)
 local valuePolygonFolder = Instance.new("Folder", webContainer)
 valuePolygonFolder.Name = "ValuePolygon"
 
@@ -452,98 +485,93 @@ local function clearFolder(folder)
 	end
 end
 
--- Nós dos atributos (botão + valor + botão "+")
-local attributeNodes = {} -- [attrName] = { NodeButton, ValueLabel, PlusButton }
+-- descrição do atributo sob o mouse
+local attrDescLabel = texto(webPanel, {
+	Name = "AtributoDescricao", Position = UDim2.new(0, 20, 1, -100), Size = UDim2.new(1, -40, 0, 30),
+	TextSize = 13, TextColor3 = COR_TEXTO_MEDIO, TextWrapped = true, TextYAlignment = Enum.TextYAlignment.Top,
+	RichText = true, Text = "",
+})
+local DICA_PADRAO = '<font color="#788094">passe o mouse (ou toque) num atributo pra ver o que ele faz</font>'
+attrDescLabel.Text = DICA_PADRAO
 
+local attributeNodes = {}
 for i, attrName in ipairs(ATTRIBUTE_ORDER) do
 	local pos = pointOnWeb(i, 1)
-
-	local nodeButton = Instance.new("Frame")
+	local nodeButton = Instance.new("TextButton") -- botão: dá pra tocar no celular pra ver a descrição
 	nodeButton.Name = attrName
-	nodeButton.Size = UDim2.fromOffset(84, 54)
+	nodeButton.Text = ""
+	nodeButton.AutoButtonColor = false
+	nodeButton.Size = UDim2.fromOffset(92, 52)
 	nodeButton.AnchorPoint = Vector2.new(0.5, 0.5)
 	nodeButton.Position = UDim2.fromOffset(pos.X, pos.Y)
-	nodeButton.BackgroundColor3 = Color3.fromRGB(32, 32, 46)
+	nodeButton.BackgroundColor3 = COR_CARTAO_ALT
 	nodeButton.ZIndex = 3
 	nodeButton.Parent = webContainer
-	Instance.new("UICorner", nodeButton).CornerRadius = UDim.new(0, 12)
-	local nodeStroke = Instance.new("UIStroke", nodeButton)
-	nodeStroke.Color = ATTRIBUTE_COLOR
-	nodeStroke.Thickness = 1.5
-	nodeStroke.Transparency = 0.3
+	cantos(nodeButton, 8)
+	local nodeStroke = contorno(nodeButton, COR_BORDA, 1, 0)
 
-	local labelText = Instance.new("TextLabel")
-	labelText.Size = UDim2.new(1, 0, 0, 16)
-	labelText.Position = UDim2.new(0, 0, 0, 4)
-	labelText.BackgroundTransparency = 1
-	labelText.Text = ATTRIBUTE_LABELS[attrName]
-	labelText.TextColor3 = Color3.fromRGB(180, 210, 230)
-	labelText.Font = Enum.Font.GothamBold
-	labelText.TextSize = 11
-	labelText.ZIndex = 3
-	labelText.Parent = nodeButton
-
-	local valueLabel = Instance.new("TextLabel")
-	valueLabel.Size = UDim2.new(1, 0, 0, 24)
-	valueLabel.Position = UDim2.new(0, 0, 0, 20)
-	valueLabel.BackgroundTransparency = 1
-	valueLabel.Text = "0"
-	valueLabel.TextColor3 = Color3.new(1, 1, 1)
-	valueLabel.Font = Enum.Font.GothamBlack
-	valueLabel.TextSize = 20
-	valueLabel.ZIndex = 3
-	valueLabel.Parent = nodeButton
+	texto(nodeButton, {
+		Position = UDim2.fromOffset(0, 6), Size = UDim2.new(1, 0, 0, 14), TextXAlignment = Enum.TextXAlignment.Center,
+		Font = Enum.Font.GothamBlack, TextSize = 11, TextColor3 = COR_ACENTO_CLARO, Text = ATTRIBUTE_LABELS[attrName], ZIndex = 3,
+	})
+	local valueLabel = texto(nodeButton, {
+		Position = UDim2.fromOffset(0, 21), Size = UDim2.new(1, 0, 0, 24), TextXAlignment = Enum.TextXAlignment.Center,
+		Font = Enum.Font.GothamBlack, TextSize = 20, Text = "0", ZIndex = 3,
+	})
 
 	local plusButton = Instance.new("TextButton")
-	plusButton.Size = UDim2.fromOffset(26, 26)
+	plusButton.Size = UDim2.fromOffset(24, 24)
 	plusButton.AnchorPoint = Vector2.new(0.5, 0.5)
-	plusButton.Position = UDim2.new(1, 0, 0, 0)
-	plusButton.BackgroundColor3 = Color3.fromRGB(85, 200, 120)
+	plusButton.Position = UDim2.new(1, -2, 0, 2)
+	plusButton.BackgroundColor3 = COR_OK
 	plusButton.Text = "+"
 	plusButton.TextColor3 = Color3.new(1, 1, 1)
 	plusButton.Font = Enum.Font.GothamBlack
-	plusButton.TextSize = 18
+	plusButton.TextSize = 16
 	plusButton.Visible = false
 	plusButton.ZIndex = 4
 	plusButton.Parent = nodeButton
-	Instance.new("UICorner", plusButton).CornerRadius = UDim.new(1, 0)
+	cantos(plusButton, 12)
+
+	local function mostrar()
+		nodeStroke.Color = COR_ACENTO
+		attrDescLabel.Text = string.format('<font color="#7DB9FF"><b>%s</b></font>  %s', ATTRIBUTE_LABELS[attrName], ATTRIBUTE_DESCRIPTIONS[attrName] or "")
+	end
+	nodeButton.MouseEnter:Connect(mostrar)
+	nodeButton.MouseButton1Click:Connect(mostrar)
+	nodeButton.MouseLeave:Connect(function()
+		nodeStroke.Color = COR_BORDA
+		attrDescLabel.Text = DICA_PADRAO
+	end)
 
 	attributeNodes[attrName] = { NodeButton = nodeButton, ValueLabel = valueLabel, PlusButton = plusButton, Stroke = nodeStroke }
 end
 
--- Pontos disponíveis + barra de XP (embaixo da teia)
-local pointsLabel = Instance.new("TextLabel")
-pointsLabel.Size = UDim2.new(1, -40, 0, 22)
-pointsLabel.Position = UDim2.new(0, 20, 1, -66)
-pointsLabel.BackgroundTransparency = 1
-pointsLabel.Text = ""
-pointsLabel.TextColor3 = Color3.fromRGB(255, 215, 0)
-pointsLabel.Font = Enum.Font.GothamBold
-pointsLabel.TextSize = 14
-pointsLabel.TextXAlignment = Enum.TextXAlignment.Left
-pointsLabel.Parent = webPanel
+-- pontos disponíveis + barra de XP
+local pointsLabel = texto(webPanel, {
+	Position = UDim2.new(0, 20, 1, -62), Size = UDim2.new(1, -40, 0, 18),
+	Font = Enum.Font.GothamBlack, TextSize = 13, TextColor3 = COR_OURO, Text = "",
+})
 
 local xpBarBack = Instance.new("Frame")
-xpBarBack.Size = UDim2.new(1, -40, 0, 14)
+xpBarBack.Size = UDim2.new(1, -40, 0, 18)
 xpBarBack.Position = UDim2.new(0, 20, 1, -36)
-xpBarBack.BackgroundColor3 = Color3.fromRGB(40, 40, 54)
+xpBarBack.BackgroundColor3 = COR_CARTAO_ALT
+xpBarBack.BorderSizePixel = 0
 xpBarBack.Parent = webPanel
-Instance.new("UICorner", xpBarBack).CornerRadius = UDim.new(1, 0)
+cantos(xpBarBack, 9)
 
 local xpBarFill = Instance.new("Frame")
 xpBarFill.Size = UDim2.new(0, 0, 1, 0)
-xpBarFill.BackgroundColor3 = Color3.fromRGB(255, 215, 0)
+xpBarFill.BackgroundColor3 = COR_ACENTO
+xpBarFill.BorderSizePixel = 0
 xpBarFill.Parent = xpBarBack
-Instance.new("UICorner", xpBarFill).CornerRadius = UDim.new(1, 0)
+cantos(xpBarFill, 9)
 
-local xpLabel = Instance.new("TextLabel")
-xpLabel.Size = UDim2.new(1, 0, 1, 0)
-xpLabel.BackgroundTransparency = 1
-xpLabel.Text = ""
-xpLabel.TextColor3 = Color3.new(1, 1, 1)
-xpLabel.Font = Enum.Font.GothamBold
-xpLabel.TextSize = 11
-xpLabel.Parent = xpBarBack
+local xpLabel = texto(xpBarBack, {
+	Size = UDim2.fromScale(1, 1), TextXAlignment = Enum.TextXAlignment.Center,
+	Font = Enum.Font.GothamBold, TextSize = 11, Text = "", ZIndex = 2,
+})
 
 -- ===== ESTADO =====
 local previewSlotIndex = nil
@@ -555,8 +583,8 @@ local lastOverview = nil -- última resposta crua do GetSlotsOverview (pra saber
 -- desmarca o checkbox único de goleiro.
 local function highlightSelectedRole(currentRole)
 	local isGK = currentRole == "GK"
-	gkCheckboxButton.BackgroundColor3 = isGK and Color3.fromRGB(85, 170, 255) or Color3.fromRGB(40, 40, 54)
-	gkCheckboxStroke.Color = isGK and ATTRIBUTE_COLOR_BRIGHT or Color3.fromRGB(70, 70, 90)
+	gkCheckboxButton.BackgroundColor3 = isGK and COR_ACENTO or COR_CARTAO_ALT
+	gkCheckboxStroke.Color = isGK and COR_ACENTO_CLARO or COR_BORDA
 	gkCheckboxButton.Text = isGK and "✓" or ""
 end
 
@@ -566,8 +594,9 @@ local function renderWeb(slotData)
 	clearFolder(valuePolygonFolder)
 
 	if not slotData then
-		levelBadge.Text = "Nv. —"
+		levelBadge.Text = "NÍVEL —"
 		elementBadge.Text = ""
+		elementBadge.Visible = false
 		pointsLabel.Text = ""
 		xpLabel.Text = ""
 		xpBarFill.Size = UDim2.new(0, 0, 1, 0)
@@ -578,27 +607,36 @@ local function renderWeb(slotData)
 		return
 	end
 
-	levelBadge.Text = "Nv. " .. tostring(slotData.Level or 1)
-	elementBadge.Text = slotData.Element and (ELEMENT_ICONS[slotData.Element] .. " " .. slotData.Element) or ""
+	levelBadge.Text = "NÍVEL " .. tostring(slotData.Level or 1)
+	-- elemento: chip colorido só com o nome (sem emoji)
+	local corElemento = slotData.Element and ELEMENT_COLORS[slotData.Element]
+	elementBadge.Visible = slotData.Element ~= nil
+	elementBadge.Text = slotData.Element and maiusculas(slotData.Element) or ""
+	elementBadge.TextColor3 = corElemento or COR_TEXTO_MEDIO
+	elementStroke.Color = corElemento or COR_BORDA
 
 	if slotData.IsMaxLevel then
 		xpBarFill.Size = UDim2.new(1, 0, 1, 0)
-		xpBarFill.BackgroundColor3 = Color3.fromRGB(255, 205, 60)
+		xpBarFill.BackgroundColor3 = COR_OURO
+		xpLabel.TextColor3 = COR_PAINEL -- texto escuro no dourado
 		xpLabel.Text = "NÍVEL MÁXIMO"
 	else
 		local xpNeeded = math.max(slotData.XPNeeded or 1, 1)
 		local xpFraction = math.clamp((slotData.CurrentXP or 0) / xpNeeded, 0, 1)
 		xpBarFill.Size = UDim2.new(xpFraction, 0, 1, 0)
-		xpBarFill.BackgroundColor3 = Color3.fromRGB(255, 215, 0)
+		xpBarFill.BackgroundColor3 = COR_ACENTO
+		xpLabel.TextColor3 = COR_TEXTO
 		xpLabel.Text = string.format("%d / %d XP", slotData.CurrentXP or 0, xpNeeded)
 	end
 
 	local points = slotData.AttributePoints or 0
 	local canEdit = previewSlotIndex ~= nil
 	if points > 0 then
-		pointsLabel.Text = string.format("⭐ %d ponto(s) de atributo disponível(is)", points)
+		pointsLabel.Text = string.format("%d PONTO%s PRA DISTRIBUIR — clique no + do atributo", points, points == 1 and "" or "S")
+		pointsLabel.TextColor3 = COR_OURO
 	else
-		pointsLabel.Text = "Sem pontos disponíveis no momento"
+		pointsLabel.Text = "sem pontos pra distribuir agora — suba de nível pra ganhar mais"
+		pointsLabel.TextColor3 = COR_TEXTO_FRACO
 	end
 
 	local valuePoints = {}
@@ -614,7 +652,8 @@ local function renderWeb(slotData)
 	-- Contorno do polígono de valor (a "teia" preenchida com sua forma)
 	for i = 1, ATTR_COUNT do
 		local nextI = (i % ATTR_COUNT) + 1
-		drawLine(valuePolygonFolder, valuePoints[i], valuePoints[nextI], 3, ATTRIBUTE_COLOR_BRIGHT, 0.05, 3)
+		drawLine(valuePolygonFolder, valuePoints[i], valuePoints[nextI], 3, COR_ACENTO_CLARO, 0, 3)
+		drawLine(valuePolygonFolder, WEB_CENTER, valuePoints[i], 2, COR_ACENTO, 0.55, 2) -- "preenchimento" leve
 	end
 	-- Pontinhos nos vértices do polígono de valor
 	for i = 1, ATTR_COUNT do
@@ -622,7 +661,7 @@ local function renderWeb(slotData)
 		dot.AnchorPoint = Vector2.new(0.5, 0.5)
 		dot.Position = UDim2.fromOffset(valuePoints[i].X, valuePoints[i].Y)
 		dot.Size = UDim2.fromOffset(8, 8)
-		dot.BackgroundColor3 = ATTRIBUTE_COLOR_BRIGHT
+		dot.BackgroundColor3 = COR_TEXTO
 		dot.ZIndex = 3
 		dot.Parent = valuePolygonFolder
 		Instance.new("UICorner", dot).CornerRadius = UDim.new(1, 0)
@@ -646,8 +685,8 @@ end
 local function highlightSelectedCard()
 	for index, card in pairs(slotCards) do
 		local isSelected = index == previewSlotIndex
-		card.Stroke.Color = isSelected and ATTRIBUTE_COLOR_BRIGHT or Color3.fromRGB(55, 55, 70)
-		card.Stroke.Thickness = isSelected and 2.5 or 1.5
+		card.Stroke.Color = isSelected and COR_ACENTO or COR_BORDA
+		card.Stroke.Thickness = isSelected and 2 or 1
 	end
 end
 
@@ -671,22 +710,28 @@ local function renderSlotsOverview(overview)
 		if not info or info.Locked then
 			card.NameLabel.Text = ""
 			card.InfoLabel.Text = ""
-			card.StarsLabel.Text = ""
+			card.Sorte.Visible = false
+			card.SorteRotulo.Text = ""
 			card.ActiveTag.Visible = false
 			card.LockIcon.Visible = true
-			card.Frame.BackgroundColor3 = Color3.fromRGB(24, 24, 32)
+			card.Frame.BackgroundColor3 = COR_CARTAO
 			card.Frame.AutoButtonColor = false
 		else
 			card.LockIcon.Visible = false
-			card.Frame.BackgroundColor3 = Color3.fromRGB(32, 32, 44)
+			card.Sorte.Visible = true
+			card.Frame.BackgroundColor3 = COR_CARTAO
 			card.NameLabel.Text = info.SlotName
 			-- ⚠️ NOVO: elemento reinserido (Config.ELEMENTS) — mostrado aqui
 			-- de novo, dessa vez com utilidade de gameplay de verdade (ver
 			-- Config.PULSE_ELEMENT_SELF_MATCH_MULT no place Game).
-			local elementSuffix = info.Element and (" • " .. ELEMENT_ICONS[info.Element] .. info.Element) or ""
-			card.InfoLabel.Text = string.format("%s • Nv. %d%s", ROLE_LABELS[info.Role] or info.Role, info.Level, elementSuffix)
-			local stars = info.Stars or 1
-			card.StarsLabel.Text = string.rep("★", stars) .. string.rep("☆", 5 - stars)
+			-- (v102: elemento em cor, sem emoji)
+			local elementSuffix = ""
+			if info.Element then
+				local c = ELEMENT_COLORS[info.Element] or COR_TEXTO_MEDIO
+				elementSuffix = string.format('  ·  <font color="#%s">%s</font>', c:ToHex(), info.Element)
+			end
+			card.InfoLabel.Text = string.format("%s  ·  Nv. %d%s", ROLE_LABELS[info.Role] or info.Role, info.Level, elementSuffix)
+			setStars(card, info.Stars or 1)
 			card.ActiveTag.Visible = info.IsActive
 		end
 	end

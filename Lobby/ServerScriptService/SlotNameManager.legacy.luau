@@ -8,6 +8,7 @@
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TextService = game:GetService("TextService")
 local eventsFolder = ReplicatedStorage:WaitForChild("LobbyEvents")
 
 -- Criar RemoteFunction para atualizar nome
@@ -91,6 +92,22 @@ updateSlotNameFunc.OnServerInvoke = function(player, slotIndex, newName)
 	if not isValid then
 		warn(string.format("❌ Nome inválido: %s", errorMsg))
 		return false, errorMsg
+	end
+
+	-- ⚠️ v110: FILTRO OFICIAL DO ROBLOX. O nome do personagem agora aparece
+	-- pra todo mundo (placa no Lobby, placa/chat/GOL na partida) — texto de
+	-- jogador mostrado a outros PRECISA passar pelo TextService (regra da
+	-- plataforma). Se o filtro esconder qualquer parte (vira ###), recusa.
+	local okFiltro, filtrado = pcall(function()
+		local resultado = TextService:FilterStringAsync(newName, player.UserId, Enum.TextFilterContext.PublicChat)
+		return resultado:GetNonChatStringForBroadcastAsync()
+	end)
+	if not okFiltro then
+		warn("❌ Filtro de texto indisponível: " .. tostring(filtrado))
+		return false, "Não deu pra verificar o nome agora, tente de novo"
+	end
+	if filtrado ~= newName then
+		return false, "Esse nome foi bloqueado pelo filtro do Roblox"
 	end
 
 	-- Verificar se PlayerDataManager está carregado

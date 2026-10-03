@@ -2,38 +2,41 @@
 	HissatsuQTEWindow (ModuleScript)
 	LOCAL: ReplicatedStorage (place Game)
 
-	Componente visual dos 3 QTEs NOVOS do lote de Pulsos "Hissatsu" (v6,
-	ver PulseController.legacy.luau -> startHissatsuQTE e
-	PulseInstinctData.luau -> campo QTE de cada Pulso). Mesma ideia do
-	PulsePrecisionWindow.luau (módulo único reutilizável, tudo via
-	Instance.new — GUI não sincroniza pela ponte, só script), só que pros
-	3 tipos NOVOS de minigame pedidos pelo usuário, diferentes do combo de
-	teclas antigo:
+	Componente visual dos 3 QTEs do lote de Pulsos "Hissatsu" (v6, ver
+	PulseController.legacy.luau -> startHissatsuQTE e PulseInstinctData.luau
+	-> campo QTE de cada Pulso). Tudo via Instance.new (GUI não sincroniza
+	pela ponte, só script).
 
-	"Tap" (chutes): depois de PrepTime segundos de preparo (barra
-	amarela "prepara... pode tomar carrinho!"), aparece um alvo circular
-	numa posição ALEATÓRIA dentro de um quadrado fixo no centro da tela
-	(pra nunca nascer num canto esquisito) — clique nele dentro de
-	HitWindow segundos. Metade mais rápida da janela = Perfect.
+	"Tap" (chutes): alvos em posições ALEATÓRIAS dentro de um painel — clique
+	em RequiredHits alvos dentro de HitWindow segundos.
+	"TimingBar" (defesa): marcador indo e voltando numa barra — ESPAÇO (ou
+	clique) quando ele estiver na faixa boa, RequiredHits vezes.
+	"MashAD" (arrancada): alterne A e D até bater RequiredAlternations.
 
-	"TimingBar" (defesa): uma barra enche da esquerda pra direita ao
-	longo de Duration segundos, com uma faixa VERDE (Perfect) e uma
-	faixa AMARELA mais larga ao redor dela (Bom) desenhadas de acordo
-	com PerfectStart/PerfectEnd/GoodPadding — aperte ESPAÇO (ou clique no
-	botão) no momento certo.
+	⚠️ v95 — REDESIGN. PEDIDO: "substitua o quadro de acertar os botões em uma
+	frame na cutscene com background discreto. Melhore também o design dos
+	botões onde você aperta no quick time event, e da barra do quick time
+	event". O que mudou (a LÓGICA é a mesma de antes — só o visual):
+	  • tudo mora num PAINEL: fundo escuro translúcido, cantos arredondados,
+	    borda fina alaranjada, cabeçalho com o nome da técnica. Durante uma
+	    cutscene de Hissatsu (params.EmCutscene) o painel fica no lado DIREITO
+	    da tela, pra não tampar a animação, e por cima das tarjas de cinema;
+	  • ALVO: círculo com gradiente de fogo, anel branco, número da ordem, e
+	    um anel externo "respirando" chamando o clique; ao acertar ele estoura
+	    num anel que se expande e some;
+	  • BARRAS: trilho arredondado com brilho interno e preenchimento em
+	    gradiente; a barra de tempo do Tap esvazia e fica vermelha no fim;
+	  • bolinhas de progresso (uma por acerto necessário) e teclas desenhadas
+	    como keycaps (ESPAÇO, A, D) que acendem quando apertadas.
 
-	"MashAD" (arrancada): alterne A e D o mais rápido possível até bater
-	RequiredAlternations — uma barra de progresso enche a cada troca
-	válida.
-
-	Em QUALQUER Pulse Feedback terminal (Fired/Fizzled/Whiffed) a janela
-	se esconde na hora — ver HissatsuInput.local.luau, que é quem chama
-	Hide() nesses casos.
+	Em QUALQUER Pulse Feedback terminal (Fired/Fizzled/Whiffed) a janela se
+	esconde na hora — ver HissatsuInput.local.luau, que chama Hide().
 ]]
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
 
 local HissatsuQTEWindow = {}
 
@@ -43,11 +46,83 @@ local activeConnections = {} -- lista de RBXScriptConnection pra desconectar tud
 local currentSlot = nil
 local onInputCallback = nil -- function(payload) chamada quando o jogador "responde" o QTE ativo
 
-local COLOR_PREP = Color3.fromRGB(255, 210, 90)
-local COLOR_ACTIVE = Color3.fromRGB(90, 210, 255)
-local COLOR_PERFECT = Color3.fromRGB(90, 220, 120)
-local COLOR_GOOD = Color3.fromRGB(255, 210, 90)
-local COLOR_MISS = Color3.fromRGB(230, 70, 80)
+-- ===== paleta =====
+local COR_PAINEL = Color3.fromRGB(14, 11, 16)
+local COR_TEXTO = Color3.fromRGB(255, 244, 230)
+local COR_TEXTO_SUAVE = Color3.fromRGB(205, 190, 180)
+local COR_TRILHO = Color3.fromRGB(32, 26, 30)
+-- ⚠️ v103 — CORES DA TÉCNICA. PEDIDO: "as cutscenes têm que mudar o QTE... a
+-- aparência. O Tornado de Fogo tá ótimo, laranja... o Fúria Glacial tá na
+-- mesma aparência, laranja também. Muda pra um azul da cor do Fúria Glacial,
+-- a própria cor do anime". As variáveis abaixo NÃO são mais fixas: Show()
+-- troca pelo tema da técnica antes de montar o painel (ver temaDaTecnica).
+-- O padrão continua sendo o fogo do Tornado.
+local COR_BORDA = Color3.fromRGB(255, 140, 50)
+local COR_FOGO_A = Color3.fromRGB(255, 225, 120)
+local COR_FOGO_B = Color3.fromRGB(255, 130, 30)
+local COR_FOGO_C = Color3.fromRGB(215, 45, 20)
+local COR_CONTORNO_TITULO = Color3.fromRGB(60, 10, 0)
+local COR_FUNDO_TINTA = Color3.fromRGB(60, 30, 20)
+local COR_NUMERO = Color3.fromRGB(120, 30, 5)
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+-- ⚠️ v110: string.upper não põe acento em maiúscula ("Fúria" virava "FúRIA").
+-- Converte também as letras acentuadas (UTF-8 à..þ → À..Þ).
+local function maiusculas(s)
+	s = string.upper(tostring(s))
+	return (s:gsub("\195([\160-\190])", function(c)
+		local b = string.byte(c)
+		if b ~= 183 then return "\195" .. string.char(b - 32) end
+	end))
+end
+local okDados, PulseInstinctData = pcall(require, ReplicatedStorage:WaitForChild("PulseInstinctData"))
+local okCut, HissatsuCutscenes = pcall(require, ReplicatedStorage:WaitForChild("HissatsuCutscenes"))
+
+local TEMA_FOGO = {
+	A = Color3.fromRGB(255, 225, 120), B = Color3.fromRGB(255, 130, 30), C = Color3.fromRGB(215, 45, 20),
+	Contorno = Color3.fromRGB(60, 10, 0),
+}
+-- técnica sem cutscene: pela cor do elemento
+local TEMA_ELEMENTO = {
+	Fogo = TEMA_FOGO,
+	Luz = { A = Color3.fromRGB(255, 255, 225), B = Color3.fromRGB(255, 225, 70), C = Color3.fromRGB(255, 160, 0), Contorno = Color3.fromRGB(35, 25, 90) },
+	Vento = { A = Color3.fromRGB(225, 255, 250), B = Color3.fromRGB(90, 220, 200), C = Color3.fromRGB(20, 140, 150), Contorno = Color3.fromRGB(5, 40, 50) },
+	Natureza = { A = Color3.fromRGB(230, 255, 220), B = Color3.fromRGB(110, 210, 110), C = Color3.fromRGB(30, 130, 60), Contorno = Color3.fromRGB(5, 40, 15) },
+	Void = { A = Color3.fromRGB(240, 215, 255), B = Color3.fromRGB(170, 90, 255), C = Color3.fromRGB(90, 20, 160), Contorno = Color3.fromRGB(25, 0, 40) },
+}
+
+local function temaDaTecnica(nome)
+	local def
+	if okDados and type(PulseInstinctData) == "table" and type(PulseInstinctData.Pulses) == "table" then
+		for _, d in ipairs(PulseInstinctData.Pulses) do
+			if d.Name == nome then def = d break end
+		end
+	end
+	if def and def.Cutscene and okCut and type(HissatsuCutscenes) == "table" then
+		local spec = HissatsuCutscenes[def.Cutscene]
+		local tema = spec and spec.Tema
+		if tema and tema.Titulo then
+			return { A = tema.Titulo[1], B = tema.Titulo[2], C = tema.Titulo[3], Contorno = tema.Contorno or TEMA_FOGO.Contorno }
+		end
+		return TEMA_FOGO -- Tornado de Fogo (sem Tema = o fogo de sempre)
+	end
+	return (def and TEMA_ELEMENTO[def.Element]) or TEMA_FOGO
+end
+
+local function aplicarTema(tema)
+	COR_FOGO_A, COR_FOGO_B, COR_FOGO_C = tema.A, tema.B, tema.C
+	COR_BORDA = tema.B
+	COR_CONTORNO_TITULO = tema.Contorno
+	COR_FUNDO_TINTA = tema.C:Lerp(Color3.new(0, 0, 0), 0.7)
+	COR_NUMERO = tema.C:Lerp(Color3.new(0, 0, 0), 0.45)
+end
+local COR_PERFEITO = Color3.fromRGB(110, 235, 150)
+local COR_BOM = Color3.fromRGB(255, 205, 90)
+local COR_FALTANDO = Color3.fromRGB(70, 60, 66)
+
+local FONTE_TITULO = Enum.Font.GothamBlack
+local FONTE_TEXTO = Enum.Font.GothamBold
 
 local function ensureGui()
 	if screenGui and screenGui.Parent then return end
@@ -56,7 +131,11 @@ local function ensureGui()
 	screenGui.Name = "HissatsuQTEWindow"
 	screenGui.ResetOnSpawn = false
 	screenGui.IgnoreGuiInset = true
-	screenGui.DisplayOrder = 55
+	-- ⚠️ v95: acima da cutscene (tarjas/flash estão em 60) e marcada pra a
+	-- cutscene NÃO esconder junto com o resto do HUD (ver esconderHud em
+	-- HissatsuCutsceneClient.local.luau).
+	screenGui.DisplayOrder = 65
+	screenGui:SetAttribute("VisivelNaCutscene", true)
 	screenGui.Enabled = false
 	screenGui.Parent = player:WaitForChild("PlayerGui")
 end
@@ -91,10 +170,226 @@ function HissatsuQTEWindow.Hide()
 end
 
 -- ============================================================
--- "Tap" — alvo numa posição aleatória dentro de um quadrado fixo
+-- PEÇAS DE DESIGN (reaproveitadas pelos 3 QTEs)
 -- ============================================================
-local TAP_ZONE_SIZE = 280 -- lado do quadrado (px) onde o alvo pode nascer
-local TAP_TARGET_SIZE = 64
+local function canto(pai, raio)
+	local c = Instance.new("UICorner")
+	c.CornerRadius = raio or UDim.new(0, 12)
+	c.Parent = pai
+	return c
+end
+
+local function borda(pai, cor, espessura, transparencia)
+	local s = Instance.new("UIStroke")
+	s.Color = cor
+	s.Thickness = espessura or 1.5
+	s.Transparency = transparencia or 0
+	s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	s.Parent = pai
+	return s
+end
+
+local function gradienteFogo(pai, rotacao)
+	local g = Instance.new("UIGradient")
+	g.Color = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, COR_FOGO_A),
+		ColorSequenceKeypoint.new(0.5, COR_FOGO_B),
+		ColorSequenceKeypoint.new(1, COR_FOGO_C),
+	})
+	g.Rotation = rotacao or 0
+	g.Parent = pai
+	return g
+end
+
+local function rotulo(pai, texto, tamanho, cor, fonte)
+	local l = Instance.new("TextLabel")
+	l.BackgroundTransparency = 1
+	l.Text = texto
+	l.TextSize = tamanho
+	l.TextColor3 = cor or COR_TEXTO
+	l.Font = fonte or FONTE_TEXTO
+	l.Parent = pai
+	return l
+end
+
+-- Painel base: fundo escuro translúcido (o "background discreto"), borda
+-- fina alaranjada, cabeçalho com o nome da técnica e uma linha de subtítulo.
+-- Na cutscene fica à direita; fora dela, no centro (um pouco acima).
+local function criarPainel(nomeTecnica, subtitulo, largura, altura, emCutscene)
+	local painel = Instance.new("Frame")
+	painel.Name = "Painel"
+	painel.AnchorPoint = Vector2.new(0.5, 0.5)
+	painel.Position = emCutscene and UDim2.new(0.8, 0, 0.5, 0) or UDim2.new(0.5, 0, 0.55, 0) -- (0.45 encostava no placar)
+	painel.Size = UDim2.fromOffset(largura, altura)
+	painel.BackgroundColor3 = COR_PAINEL
+	painel.BackgroundTransparency = emCutscene and 0.45 or 0.3
+	painel.BorderSizePixel = 0
+	painel.Parent = screenGui
+	canto(painel, UDim.new(0, 18))
+	borda(painel, COR_BORDA, 1.5, 0.55)
+
+	-- brilho sutil de cima pra baixo no fundo
+	local fundoGrad = Instance.new("UIGradient")
+	fundoGrad.Rotation = 90
+	fundoGrad.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0),
+		NumberSequenceKeypoint.new(1, 0.25),
+	})
+	fundoGrad.Color = ColorSequence.new(COR_FUNDO_TINTA, Color3.fromRGB(255, 255, 255))
+	fundoGrad.Parent = painel
+
+	local titulo = rotulo(painel, maiusculas(nomeTecnica or "HISSATSU"), 17, COR_TEXTO, FONTE_TITULO)
+	titulo.Name = "Titulo"
+	titulo.Position = UDim2.fromOffset(0, 12)
+	titulo.Size = UDim2.new(1, 0, 0, 20)
+	gradienteFogo(titulo, 90)
+	local tituloBorda = Instance.new("UIStroke")
+	tituloBorda.Color = COR_CONTORNO_TITULO
+	tituloBorda.Thickness = 1.5
+	tituloBorda.Parent = titulo
+
+	local sub = rotulo(painel, subtitulo or "", 12, COR_TEXTO_SUAVE, FONTE_TEXTO)
+	sub.Name = "Subtitulo"
+	sub.Position = UDim2.fromOffset(0, 34)
+	sub.Size = UDim2.new(1, 0, 0, 16)
+
+	-- entrada: cresce de leve e aparece
+	local escala = Instance.new("UIScale")
+	escala.Scale = 0.85
+	escala.Parent = painel
+	TweenService:Create(escala, TweenInfo.new(0.22, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1 }):Play()
+
+	return painel, sub
+end
+
+-- Barra: trilho escuro arredondado + preenchimento em gradiente de fogo.
+local function criarBarra(pai, posicao, largura, altura)
+	local trilho = Instance.new("Frame")
+	trilho.Name = "Trilho"
+	trilho.Position = posicao
+	trilho.Size = UDim2.new(0, largura, 0, altura)
+	trilho.BackgroundColor3 = COR_TRILHO
+	trilho.BorderSizePixel = 0
+	trilho.Parent = pai
+	canto(trilho, UDim.new(1, 0))
+	borda(trilho, Color3.fromRGB(0, 0, 0), 1, 0.4)
+
+	local preenchimento = Instance.new("Frame")
+	preenchimento.Name = "Preenchimento"
+	preenchimento.Size = UDim2.new(0, 0, 1, 0)
+	preenchimento.BackgroundColor3 = Color3.new(1, 1, 1)
+	preenchimento.BorderSizePixel = 0
+	preenchimento.Parent = trilho
+	canto(preenchimento, UDim.new(1, 0))
+	local grad = gradienteFogo(preenchimento, 0)
+
+	-- reflexo de luz na metade de cima (dá volume à barra)
+	local reflexo = Instance.new("Frame")
+	reflexo.BackgroundColor3 = Color3.new(1, 1, 1)
+	reflexo.BackgroundTransparency = 0.8
+	reflexo.BorderSizePixel = 0
+	reflexo.Size = UDim2.new(1, -4, 0.4, 0)
+	reflexo.Position = UDim2.new(0, 2, 0, 1)
+	reflexo.ZIndex = 3
+	reflexo.Parent = trilho
+	canto(reflexo, UDim.new(1, 0))
+
+	return trilho, preenchimento, grad
+end
+
+-- Bolinhas de progresso: uma por acerto necessário.
+local function criarBolinhas(pai, posicao, quantidade)
+	local linha = Instance.new("Frame")
+	linha.Name = "Bolinhas"
+	linha.BackgroundTransparency = 1
+	linha.Position = posicao
+	linha.Size = UDim2.new(1, 0, 0, 12)
+	linha.Parent = pai
+	local layout = Instance.new("UIListLayout")
+	layout.FillDirection = Enum.FillDirection.Horizontal
+	layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+	layout.VerticalAlignment = Enum.VerticalAlignment.Center
+	layout.Padding = UDim.new(0, 6)
+	layout.Parent = linha
+	local lista = {}
+	for i = 1, quantidade do
+		local b = Instance.new("Frame")
+		b.Size = UDim2.fromOffset(10, 10)
+		b.BackgroundColor3 = COR_FALTANDO
+		b.BorderSizePixel = 0
+		b.LayoutOrder = i
+		b.Parent = linha
+		canto(b, UDim.new(1, 0))
+		borda(b, Color3.fromRGB(0, 0, 0), 1, 0.5)
+		lista[i] = b
+	end
+	local function marcar(n, cor)
+		for i, b in ipairs(lista) do
+			if i <= n then
+				if b.BackgroundColor3 == COR_FALTANDO then
+					local escala = Instance.new("UIScale")
+					escala.Scale = 1.8
+					escala.Parent = b
+					TweenService:Create(escala, TweenInfo.new(0.18, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1 }):Play()
+				end
+				b.BackgroundColor3 = cor or COR_FOGO_B
+			end
+		end
+	end
+	return marcar
+end
+
+-- Tecla desenhada como keycap (acende quando apertada).
+local function criarTecla(pai, texto, largura)
+	local tecla = Instance.new("TextButton")
+	tecla.Name = "Tecla_" .. texto
+	tecla.AutoButtonColor = false
+	tecla.Size = UDim2.fromOffset(largura or 44, 40)
+	tecla.BackgroundColor3 = Color3.fromRGB(40, 34, 40)
+	tecla.Text = texto
+	tecla.Font = FONTE_TITULO
+	tecla.TextSize = 16
+	tecla.TextColor3 = COR_TEXTO
+	tecla.Parent = pai
+	canto(tecla, UDim.new(0, 8))
+	local b = borda(tecla, Color3.fromRGB(255, 255, 255), 1.5, 0.75)
+	-- volume de tecla: mais clara em cima, mais escura embaixo
+	local volume = Instance.new("UIGradient")
+	volume.Rotation = 90
+	volume.Color = ColorSequence.new(Color3.fromRGB(255, 255, 255), Color3.fromRGB(150, 140, 150))
+	volume.Parent = tecla
+	local function acender()
+		tecla.BackgroundColor3 = COR_FOGO_B
+		b.Color = COR_FOGO_A
+		b.Transparency = 0
+		TweenService:Create(tecla, TweenInfo.new(0.25), { BackgroundColor3 = Color3.fromRGB(40, 34, 40) }):Play()
+		TweenService:Create(b, TweenInfo.new(0.25), { Transparency = 0.75 }):Play()
+	end
+	return tecla, acender
+end
+
+-- Anel que estoura (acerto): cresce e some.
+local function estouro(pai, posicao, tamanho, cor)
+	local anel = Instance.new("Frame")
+	anel.AnchorPoint = Vector2.new(0.5, 0.5)
+	anel.Position = posicao
+	anel.Size = UDim2.fromOffset(tamanho, tamanho)
+	anel.BackgroundTransparency = 1
+	anel.ZIndex = 8
+	anel.Parent = pai
+	canto(anel, UDim.new(1, 0))
+	local s = borda(anel, cor, 4, 0)
+	TweenService:Create(anel, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+		{ Size = UDim2.fromOffset(tamanho * 2, tamanho * 2) }):Play()
+	TweenService:Create(s, TweenInfo.new(0.3), { Transparency = 1, Thickness = 1 }):Play()
+	task.delay(0.35, function() anel:Destroy() end)
+end
+
+-- ============================================================
+-- "Tap" — alvos em posições aleatórias dentro do painel
+-- ============================================================
+local TAP_ZONA = 250      -- lado da área (px) onde os alvos podem nascer
+local TAP_ALVO = 66
 
 local function showTap(pulseName, params)
 	clearGui()
@@ -105,121 +400,101 @@ local function showTap(pulseName, params)
 	-- mouse pra clicar os alvos não muda mais pra onde a bola vai.
 	if _G.SetMouseLockSuspendedForQTE then _G.SetMouseLockSuspendedForQTE(true) end
 
-	local frame = Instance.new("Frame")
-	frame.Name = "TapFrame"
-	frame.AnchorPoint = Vector2.new(0.5, 0.5)
-	frame.Position = UDim2.new(0.5, 0, 0.42, 0)
-	frame.Size = UDim2.fromOffset(TAP_ZONE_SIZE, TAP_ZONE_SIZE)
-	frame.BackgroundTransparency = 1
-	frame.Parent = screenGui
+	local emCutscene = params.EmCutscene == true
+	local painel, sub = criarPainel(pulseName, "CLIQUE NOS ALVOS", TAP_ZONA + 40, TAP_ZONA + 118, emCutscene)
 
-	local zoneOutline = Instance.new("Frame")
-	zoneOutline.Name = "ZoneOutline"
-	zoneOutline.Size = UDim2.new(1, 0, 1, 0)
-	zoneOutline.BackgroundTransparency = 1
-	zoneOutline.Parent = frame
+	local zona = Instance.new("Frame")
+	zona.Name = "Zona"
+	zona.Position = UDim2.fromOffset(20, 60)
+	zona.Size = UDim2.fromOffset(TAP_ZONA, TAP_ZONA)
+	zona.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+	zona.BackgroundTransparency = 0.75
+	zona.BorderSizePixel = 0
+	zona.Parent = painel
+	canto(zona, UDim.new(0, 14))
+	borda(zona, COR_BORDA, 1, 0.8)
 
-	local zoneStroke = Instance.new("UIStroke")
-	zoneStroke.Color = COLOR_PREP
-	zoneStroke.Thickness = 2
-	zoneStroke.Transparency = 0.4
-	zoneStroke.Parent = zoneOutline
+	local requiredHits = math.max(tonumber(params.RequiredHits) or 5, 1)
+	local marcarBolinhas = criarBolinhas(painel, UDim2.fromOffset(0, TAP_ZONA + 70), requiredHits)
+	local _, tempoFill, tempoGrad = criarBarra(painel, UDim2.fromOffset(20, TAP_ZONA + 92), TAP_ZONA, 10)
 
-	local zoneCorner = Instance.new("UICorner")
-	zoneCorner.CornerRadius = UDim.new(0, 16)
-	zoneCorner.Parent = zoneOutline
+	-- ===== o alvo =====
+	local alvo = Instance.new("TextButton")
+	alvo.Name = "Alvo"
+	alvo.AutoButtonColor = false
+	alvo.AnchorPoint = Vector2.new(0.5, 0.5)
+	alvo.Size = UDim2.fromOffset(TAP_ALVO, TAP_ALVO)
+	alvo.BackgroundColor3 = Color3.new(1, 1, 1)
+	alvo.Text = ""
+	alvo.ZIndex = 5
+	alvo.Visible = false
+	alvo.Parent = zona
+	canto(alvo, UDim.new(1, 0))
+	gradienteFogo(alvo, 45)
+	local alvoBorda = borda(alvo, Color3.new(1, 1, 1), 3, 0)
 
-	local nameLabel = Instance.new("TextLabel")
-	nameLabel.Name = "NameLabel"
-	nameLabel.AnchorPoint = Vector2.new(0.5, 1)
-	nameLabel.Position = UDim2.new(0.5, 0, 0, -10)
-	nameLabel.Size = UDim2.new(1, 0, 0, 24)
-	nameLabel.BackgroundTransparency = 1
-	nameLabel.Text = pulseName or "Pulso"
-	nameLabel.Font = Enum.Font.GothamBold
-	nameLabel.TextSize = 18
-	nameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-	nameLabel.Parent = frame
+	-- miolo claro + número da ordem
+	local miolo = Instance.new("Frame")
+	miolo.AnchorPoint = Vector2.new(0.5, 0.5)
+	miolo.Position = UDim2.fromScale(0.5, 0.5)
+	miolo.Size = UDim2.fromScale(0.52, 0.52)
+	miolo.BackgroundColor3 = Color3.fromRGB(255, 250, 235)
+	miolo.BackgroundTransparency = 0.1
+	miolo.ZIndex = 6
+	miolo.Parent = alvo
+	canto(miolo, UDim.new(1, 0))
+	local numero = rotulo(miolo, "1", 18, COR_NUMERO, FONTE_TITULO)
+	numero.Size = UDim2.fromScale(1, 1)
+	numero.ZIndex = 7
 
-	local promptLabel = Instance.new("TextLabel")
-	promptLabel.Name = "PromptLabel"
-	promptLabel.AnchorPoint = Vector2.new(0.5, 0)
-	promptLabel.Position = UDim2.new(0.5, 0, 1, 10)
-	promptLabel.Size = UDim2.new(1, 0, 0, 22)
-	promptLabel.BackgroundTransparency = 1
-	promptLabel.Text = "prepara... (pode tomar carrinho!)"
-	promptLabel.Font = Enum.Font.GothamBold
-	promptLabel.TextSize = 14
-	promptLabel.TextColor3 = COLOR_PREP
-	promptLabel.Parent = frame
-
-	-- PEDIDO: "vários botões pra apertar, não só 1" — contador de quantos
-	-- dos RequiredHits alvos já foram clicados.
-	local hitsLabel = Instance.new("TextLabel")
-	hitsLabel.Name = "HitsLabel"
-	hitsLabel.AnchorPoint = Vector2.new(0.5, 0)
-	hitsLabel.Position = UDim2.new(0.5, 0, 1, 34)
-	hitsLabel.Size = UDim2.new(1, 0, 0, 20)
-	hitsLabel.BackgroundTransparency = 1
-	hitsLabel.Text = ""
-	hitsLabel.Font = Enum.Font.GothamBlack
-	hitsLabel.TextSize = 16
-	hitsLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-	hitsLabel.Parent = frame
-
-	local target = Instance.new("TextButton")
-	target.Name = "Target"
-	target.Size = UDim2.fromOffset(TAP_TARGET_SIZE, TAP_TARGET_SIZE)
-	target.AnchorPoint = Vector2.new(0.5, 0.5)
-	target.Position = UDim2.new(0.5, 0, 0.5, 0)
-	target.BackgroundColor3 = COLOR_ACTIVE
-	target.Text = "!"
-	target.Font = Enum.Font.GothamBlack
-	target.TextSize = 26
-	target.TextColor3 = Color3.fromRGB(20, 20, 25)
-	target.AutoButtonColor = false
-	target.Visible = false
-	target.Parent = frame
-
-	local targetCorner = Instance.new("UICorner")
-	targetCorner.CornerRadius = UDim.new(1, 0)
-	targetCorner.Parent = target
+	-- anel externo "respirando" — chama o clique
+	local chamariz = Instance.new("Frame")
+	chamariz.AnchorPoint = Vector2.new(0.5, 0.5)
+	chamariz.Position = UDim2.fromScale(0.5, 0.5)
+	chamariz.Size = UDim2.fromScale(1.5, 1.5)
+	chamariz.BackgroundTransparency = 1
+	chamariz.ZIndex = 4
+	chamariz.Parent = alvo
+	canto(chamariz, UDim.new(1, 0))
+	local chamarizBorda = borda(chamariz, COR_FOGO_A, 2, 0.3)
 
 	local prepTime = math.max(tonumber(params.PrepTime) or 0, 0)
 	local hitWindow = math.max(tonumber(params.HitWindow) or 0.8, 0.1)
-	local requiredHits = math.max(tonumber(params.RequiredHits) or 5, 1)
 	local startedAt = os.clock()
 	local targetShown = false
 	local hits = 0
 	local done = false
 
-	local half = TAP_TARGET_SIZE / 2
-	local margin = half + 6 -- garante que o alvo nasce INTEIRO dentro do quadrado, nunca cortado na borda
+	local margem = TAP_ALVO / 2 + 10 -- o alvo nasce INTEIRO dentro da área
 
-	local function placeTargetRandomly()
-		local x = math.random(margin, TAP_ZONE_SIZE - margin)
-		local y = math.random(margin, TAP_ZONE_SIZE - margin)
-		target.Position = UDim2.fromOffset(x, y)
+	local function posicionarAlvo()
+		local x = math.random(margem, TAP_ZONA - margem)
+		local y = math.random(margem, TAP_ZONA - margem)
+		alvo.Position = UDim2.fromOffset(x, y)
+		numero.Text = tostring(hits + 1)
+		-- nasce pequeno e "abre"
+		alvo.Size = UDim2.fromOffset(TAP_ALVO * 0.4, TAP_ALVO * 0.4)
+		TweenService:Create(alvo, TweenInfo.new(0.14, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+			{ Size = UDim2.fromOffset(TAP_ALVO, TAP_ALVO) }):Play()
 	end
-
-	hitsLabel.Text = ("0 / %d"):format(requiredHits)
 
 	-- PEDIDO: "faz uns 5 botões aparecerem" — cada clique válido conta 1
 	-- acerto (o servidor é quem decide de verdade, isso aqui é só visual)
 	-- e um NOVO alvo nasce em outra posição aleatória, até bater
 	-- requiredHits ou a janela fechar.
-	target.MouseButton1Click:Connect(function()
+	alvo.MouseButton1Click:Connect(function()
 		if done or not targetShown then return end
 		hits += 1
-		hitsLabel.Text = ("%d / %d"):format(hits, requiredHits)
+		marcarBolinhas(hits)
+		estouro(zona, alvo.Position, TAP_ALVO, COR_FOGO_A)
 		if onInputCallback then onInputCallback({}) end
 		if hits >= requiredHits then
 			done = true
-			target.BackgroundColor3 = COLOR_PERFECT
-			target.Visible = false
+			alvo.Visible = false
+			sub.Text = "PERFEITO!"
+			sub.TextColor3 = COR_PERFEITO
 		else
-			target.BackgroundColor3 = COLOR_ACTIVE
-			placeTargetRandomly()
+			posicionarAlvo()
 		end
 	end)
 
@@ -227,22 +502,8 @@ local function showTap(pulseName, params)
 		local elapsed = os.clock() - startedAt
 
 		if elapsed < prepTime then
-			local alpha = prepTime > 0 and (elapsed / prepTime) or 1
-			zoneStroke.Color = COLOR_PREP
-			promptLabel.Text = ("prepara... (pode tomar carrinho!) %d%%"):format(math.floor(alpha * 100))
+			sub.Text = "PREPARANDO..."
 			return
-		end
-
-		if done then return end
-
-		if not targetShown then
-			targetShown = true
-			placeTargetRandomly()
-			target.Visible = true
-			target.Size = UDim2.fromOffset(TAP_TARGET_SIZE, TAP_TARGET_SIZE)
-			promptLabel.Text = "CLICA NOS ALVOS!"
-			promptLabel.TextColor3 = COLOR_ACTIVE
-			zoneStroke.Color = COLOR_ACTIVE
 		end
 
 		local intoWindow = elapsed - prepTime
@@ -251,51 +512,41 @@ local function showTap(pulseName, params)
 			return
 		end
 
-		-- Encolhe o alvo ATUAL conforme a janela total fecha — feedback
-		-- visual de "o tempo está acabando", sem precisar de barra
-		-- separada.
-		local shrink = 1 - 0.35 * (intoWindow / hitWindow)
-		target.Size = UDim2.fromOffset(TAP_TARGET_SIZE * shrink, TAP_TARGET_SIZE * shrink)
+		-- barra de tempo: esvazia e esquenta pro vermelho no fim
+		local resta = 1 - intoWindow / hitWindow
+		tempoFill.Size = UDim2.new(resta, 0, 1, 0)
+		tempoGrad.Offset = Vector2.new(-(1 - resta) * 0.6, 0)
+
+		if done then return end
+
+		if not targetShown then
+			targetShown = true
+			sub.Text = "CLIQUE NOS ALVOS"
+			alvo.Visible = true
+			posicionarAlvo()
+		end
+
+		-- anel externo pulsando e encolhendo com o tempo
+		local pulso = 1.35 + 0.2 * math.sin(elapsed * 10)
+		chamariz.Size = UDim2.fromScale(pulso, pulso)
+		chamarizBorda.Transparency = 0.2 + 0.3 * (1 - resta)
+		alvoBorda.Thickness = 3 + math.sin(elapsed * 10)
 	end))
 end
 
 -- ============================================================
--- "TimingBar" — barra que enche, aperte ESPAÇO/clique no momento certo
+-- "TimingBar" — marcador indo e voltando; ESPAÇO/clique na faixa boa
 -- ============================================================
-local BAR_WIDTH = 320
+local BAR_WIDTH = 300
 
 local function showTimingBar(pulseName, params)
 	clearGui()
 
-	local frame = Instance.new("Frame")
-	frame.Name = "TimingBarFrame"
-	frame.AnchorPoint = Vector2.new(0.5, 0.5)
-	frame.Position = UDim2.new(0.5, 0, 0.62, 0)
-	frame.Size = UDim2.fromOffset(BAR_WIDTH, 90)
-	frame.BackgroundTransparency = 1
-	frame.Parent = screenGui
+	local emCutscene = params.EmCutscene == true
+	local painel, sub = criarPainel(pulseName, "APERTE NA FAIXA VERDE", BAR_WIDTH + 40, 170, emCutscene)
+	painel.Position = emCutscene and UDim2.new(0.8, 0, 0.5, 0) or UDim2.new(0.5, 0, 0.66, 0)
 
-	local nameLabel = Instance.new("TextLabel")
-	nameLabel.Size = UDim2.new(1, 0, 0, 20)
-	nameLabel.BackgroundTransparency = 1
-	nameLabel.Text = pulseName or "Pulso"
-	nameLabel.Font = Enum.Font.GothamBold
-	nameLabel.TextSize = 16
-	nameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-	nameLabel.Parent = frame
-
-	local barBack = Instance.new("Frame")
-	barBack.Name = "BarBack"
-	barBack.Position = UDim2.new(0, 0, 0, 28)
-	barBack.Size = UDim2.new(1, 0, 0, 22)
-	barBack.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
-	barBack.BorderSizePixel = 0
-	barBack.ClipsDescendants = false
-	barBack.Parent = frame
-
-	local barBackCorner = Instance.new("UICorner")
-	barBackCorner.CornerRadius = UDim.new(0, 8)
-	barBackCorner.Parent = barBack
+	local trilho = criarBarra(painel, UDim2.fromOffset(20, 62), BAR_WIDTH, 22)
 
 	local perfectStart = math.clamp(tonumber(params.PerfectStart) or 0.4, 0, 1)
 	local perfectEnd = math.clamp(tonumber(params.PerfectEnd) or 0.6, perfectStart, 1)
@@ -303,78 +554,61 @@ local function showTimingBar(pulseName, params)
 	local goodStart = math.max(perfectStart - goodPadding, 0)
 	local goodEnd = math.min(perfectEnd + goodPadding, 1)
 
-	local goodZone = Instance.new("Frame")
-	goodZone.Name = "GoodZone"
-	goodZone.BackgroundColor3 = COLOR_GOOD
-	goodZone.BackgroundTransparency = 0.4
-	goodZone.BorderSizePixel = 0
-	goodZone.Position = UDim2.new(goodStart, 0, 0, 0)
-	goodZone.Size = UDim2.new(goodEnd - goodStart, 0, 1, 0)
-	goodZone.ZIndex = 2
-	goodZone.Parent = barBack
+	local faixaBoa = Instance.new("Frame")
+	faixaBoa.Name = "FaixaBoa"
+	faixaBoa.BackgroundColor3 = COR_BOM
+	faixaBoa.BackgroundTransparency = 0.35
+	faixaBoa.BorderSizePixel = 0
+	faixaBoa.Position = UDim2.new(goodStart, 0, 0, 0)
+	faixaBoa.Size = UDim2.new(goodEnd - goodStart, 0, 1, 0)
+	faixaBoa.ZIndex = 2
+	faixaBoa.Parent = trilho
+	canto(faixaBoa, UDim.new(0, 4))
 
-	local perfectZone = Instance.new("Frame")
-	perfectZone.Name = "PerfectZone"
-	perfectZone.BackgroundColor3 = COLOR_PERFECT
-	perfectZone.BackgroundTransparency = 0.15
-	perfectZone.BorderSizePixel = 0
-	perfectZone.Position = UDim2.new(perfectStart, 0, 0, 0)
-	perfectZone.Size = UDim2.new(perfectEnd - perfectStart, 0, 1, 0)
-	perfectZone.ZIndex = 2
-	perfectZone.Parent = barBack
+	local faixaPerfeita = Instance.new("Frame")
+	faixaPerfeita.Name = "FaixaPerfeita"
+	faixaPerfeita.BackgroundColor3 = COR_PERFEITO
+	faixaPerfeita.BackgroundTransparency = 0.05
+	faixaPerfeita.BorderSizePixel = 0
+	faixaPerfeita.Position = UDim2.new(perfectStart, 0, 0, 0)
+	faixaPerfeita.Size = UDim2.new(perfectEnd - perfectStart, 0, 1, 0)
+	faixaPerfeita.ZIndex = 2
+	faixaPerfeita.Parent = trilho
+	canto(faixaPerfeita, UDim.new(0, 4))
+	local brilhoPerfeito = borda(faixaPerfeita, COR_PERFEITO, 2, 0.4)
 
-	local marker = Instance.new("Frame")
-	marker.Name = "Marker"
-	marker.AnchorPoint = Vector2.new(0.5, 0)
-	marker.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-	marker.BorderSizePixel = 0
-	marker.Size = UDim2.new(0, 4, 1, 8)
-	marker.Position = UDim2.new(0, 0, 0, -4)
-	marker.ZIndex = 3
-	marker.Parent = barBack
+	-- marcador: cápsula branca com halo
+	local marcador = Instance.new("Frame")
+	marcador.Name = "Marcador"
+	marcador.AnchorPoint = Vector2.new(0.5, 0.5)
+	marcador.BackgroundColor3 = Color3.new(1, 1, 1)
+	marcador.BorderSizePixel = 0
+	marcador.Size = UDim2.new(0, 8, 1, 14)
+	marcador.Position = UDim2.new(0, 0, 0.5, 0)
+	marcador.ZIndex = 5
+	marcador.Parent = trilho
+	canto(marcador, UDim.new(1, 0))
+	borda(marcador, COR_FOGO_A, 2, 0.2)
 
-	-- PEDIDO: "no GK precisa acertar a barra 5 vezes num período de
-	-- tempo" — o marcador agora anda pra frente E pra trás (ping-pong) em
-	-- ciclos de SweepPeriod segundos, em vez de um passe único, e é
-	-- preciso acertar a faixa boa RequiredHits vezes antes de Duration
-	-- acabar.
-	local promptLabel = Instance.new("TextLabel")
-	promptLabel.Position = UDim2.new(0, 0, 0, 56)
-	promptLabel.Size = UDim2.new(1, 0, 0, 22)
-	promptLabel.BackgroundTransparency = 1
-	promptLabel.Text = "ESPAÇO (ou clique) no momento certo!"
-	promptLabel.Font = Enum.Font.GothamBold
-	promptLabel.TextSize = 13
-	promptLabel.TextColor3 = COLOR_ACTIVE
-	promptLabel.Parent = frame
+	local requiredHits = math.max(tonumber(params.RequiredHits) or 5, 1)
+	local marcarBolinhas = criarBolinhas(painel, UDim2.fromOffset(0, 98), requiredHits)
 
-	local hitsLabel = Instance.new("TextLabel")
-	hitsLabel.Name = "HitsLabel"
-	hitsLabel.Position = UDim2.new(0, 0, 0, 76)
-	hitsLabel.Size = UDim2.new(1, 0, 0, 20)
-	hitsLabel.BackgroundTransparency = 1
-	hitsLabel.Font = Enum.Font.GothamBlack
-	hitsLabel.TextSize = 15
-	hitsLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-	hitsLabel.Parent = frame
-
-	local pressButton = Instance.new("TextButton")
-	pressButton.Name = "PressButton"
-	pressButton.Position = UDim2.new(0, 0, 0, 56)
-	pressButton.Size = UDim2.new(1, 0, 0, 22)
-	pressButton.BackgroundTransparency = 1
-	pressButton.Text = ""
-	pressButton.AutoButtonColor = false
-	pressButton.Parent = frame
+	-- tecla ESPAÇO (também é o botão de clique/toque)
+	local linhaTecla = Instance.new("Frame")
+	linhaTecla.BackgroundTransparency = 1
+	linhaTecla.Position = UDim2.fromOffset(0, 118)
+	linhaTecla.Size = UDim2.new(1, 0, 0, 44)
+	linhaTecla.Parent = painel
+	local layoutTecla = Instance.new("UIListLayout")
+	layoutTecla.HorizontalAlignment = Enum.HorizontalAlignment.Center
+	layoutTecla.Parent = linhaTecla
+	local teclaEspaco, acenderEspaco = criarTecla(linhaTecla, "ESPAÇO", 150)
 
 	local duration = math.max(tonumber(params.Duration) or 1.2, 0.2)
 	local sweepPeriod = math.max(tonumber(params.SweepPeriod) or 0.9, 0.1)
-	local requiredHits = math.max(tonumber(params.RequiredHits) or 5, 1)
 	local startedAt = os.clock()
 	local hits = 0
 	local resolved = false
-
-	hitsLabel.Text = ("0 / %d"):format(requiredHits)
 
 	-- Mesma fórmula de ping-pong usada pelo servidor (PulseController.
 	-- legacy.luau -> sweepFraction) — só visual aqui, o servidor decide
@@ -390,22 +624,34 @@ local function showTimingBar(pulseName, params)
 
 	local function respond()
 		if resolved then return end
+		acenderEspaco()
 		if onInputCallback then onInputCallback({}) end
 		-- Feedback visual OTIMISTA (o servidor confirma de verdade): conta
-		-- como acerto se o marcador estiver dentro da faixa amarela/verde
-		-- agora mesmo.
-		local elapsed = os.clock() - startedAt
-		local fraction = sweepFraction(elapsed)
+		-- como acerto se o marcador estiver dentro da faixa agora mesmo.
+		local fraction = sweepFraction(os.clock() - startedAt)
 		if fraction >= goodStart and fraction <= goodEnd then
+			local perfeito = fraction >= perfectStart and fraction <= perfectEnd
 			hits = math.min(hits + 1, requiredHits)
-			hitsLabel.Text = ("%d / %d"):format(hits, requiredHits)
+			marcarBolinhas(hits, perfeito and COR_PERFEITO or COR_BOM)
+			estouro(trilho, marcador.Position, 30, perfeito and COR_PERFEITO or COR_BOM)
 			if hits >= requiredHits then
 				resolved = true
+				sub.Text = "DEFENDIDO!"
+				sub.TextColor3 = COR_PERFEITO
 			end
+		else
+			sub.Text = "FORA DA FAIXA!"
+			sub.TextColor3 = COR_FOGO_C
+			task.delay(0.35, function()
+				if sub.Parent and not resolved then
+					sub.Text = "APERTE NA FAIXA VERDE"
+					sub.TextColor3 = COR_TEXTO_SUAVE
+				end
+			end)
 		end
 	end
 
-	pressButton.MouseButton1Click:Connect(respond)
+	teclaEspaco.MouseButton1Click:Connect(respond)
 
 	table.insert(activeConnections, UserInputService.InputBegan:Connect(function(input, gameProcessed)
 		if gameProcessed then return end
@@ -421,7 +667,10 @@ local function showTimingBar(pulseName, params)
 			return
 		end
 		local fraction = sweepFraction(elapsed)
-		marker.Position = UDim2.new(fraction, 0, 0, -4)
+		marcador.Position = UDim2.new(fraction, 0, 0.5, 0)
+		-- a faixa perfeita "brilha" quando o marcador passa por ela
+		local dentro = fraction >= perfectStart and fraction <= perfectEnd
+		brilhoPerfeito.Transparency = dentro and 0 or 0.5
 	end))
 end
 
@@ -431,62 +680,30 @@ end
 local function showMashAD(pulseName, params)
 	clearGui()
 
-	local frame = Instance.new("Frame")
-	frame.Name = "MashADFrame"
-	frame.AnchorPoint = Vector2.new(0.5, 0.5)
-	frame.Position = UDim2.new(0.5, 0, 0.62, 0)
-	frame.Size = UDim2.fromOffset(300, 150) -- +50 pra caber os botões mobile A/D abaixo da barra
-	frame.BackgroundTransparency = 1
-	frame.Parent = screenGui
+	local emCutscene = params.EmCutscene == true
+	local painel, sub = criarPainel(pulseName, "ALTERNE A e D RÁPIDO!", 320, 170, emCutscene)
+	painel.Position = emCutscene and UDim2.new(0.8, 0, 0.5, 0) or UDim2.new(0.5, 0, 0.66, 0)
 
-	local nameLabel = Instance.new("TextLabel")
-	nameLabel.Size = UDim2.new(1, 0, 0, 20)
-	nameLabel.BackgroundTransparency = 1
-	nameLabel.Text = pulseName or "Pulso"
-	nameLabel.Font = Enum.Font.GothamBold
-	nameLabel.TextSize = 16
-	nameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-	nameLabel.Parent = frame
+	local _, fill = criarBarra(painel, UDim2.fromOffset(20, 62), 280, 20)
 
-	local promptLabel = Instance.new("TextLabel")
-	promptLabel.Position = UDim2.new(0, 0, 0, 24)
-	promptLabel.Size = UDim2.new(1, 0, 0, 22)
-	promptLabel.BackgroundTransparency = 1
-	promptLabel.Text = "ALTERNA A e D RÁPIDO!"
-	promptLabel.Font = Enum.Font.GothamBlack
-	promptLabel.TextSize = 16
-	promptLabel.TextColor3 = COLOR_ACTIVE
-	promptLabel.Parent = frame
+	local contador = rotulo(painel, "", 13, COR_TEXTO_SUAVE, FONTE_TEXTO)
+	contador.Position = UDim2.fromOffset(0, 88)
+	contador.Size = UDim2.new(1, 0, 0, 16)
 
-	local barBack = Instance.new("Frame")
-	barBack.Position = UDim2.new(0, 0, 0, 50)
-	barBack.Size = UDim2.new(1, 0, 0, 20)
-	barBack.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
-	barBack.BorderSizePixel = 0
-	barBack.Parent = frame
-
-	local barBackCorner = Instance.new("UICorner")
-	barBackCorner.CornerRadius = UDim.new(0, 8)
-	barBackCorner.Parent = barBack
-
-	local barFill = Instance.new("Frame")
-	barFill.Size = UDim2.new(0, 0, 1, 0)
-	barFill.BackgroundColor3 = COLOR_PERFECT
-	barFill.BorderSizePixel = 0
-	barFill.Parent = barBack
-
-	local barFillCorner = Instance.new("UICorner")
-	barFillCorner.CornerRadius = UDim.new(0, 8)
-	barFillCorner.Parent = barFill
-
-	local countLabel = Instance.new("TextLabel")
-	countLabel.Position = UDim2.new(0, 0, 0, 76)
-	countLabel.Size = UDim2.new(1, 0, 0, 20)
-	countLabel.BackgroundTransparency = 1
-	countLabel.Font = Enum.Font.Gotham
-	countLabel.TextSize = 13
-	countLabel.TextColor3 = Color3.fromRGB(200, 200, 210)
-	countLabel.Parent = frame
+	-- ⚠️ MOBILE: não tem teclado A/D no celular — as teclas desenhadas também
+	-- são botões (em teclado dá pra ignorar e usar A/D normalmente).
+	local linha = Instance.new("Frame")
+	linha.BackgroundTransparency = 1
+	linha.Position = UDim2.fromOffset(0, 112)
+	linha.Size = UDim2.new(1, 0, 0, 44)
+	linha.Parent = painel
+	local layout = Instance.new("UIListLayout")
+	layout.FillDirection = Enum.FillDirection.Horizontal
+	layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+	layout.Padding = UDim.new(0, 16)
+	layout.Parent = linha
+	local teclaA, acenderA = criarTecla(linha, "A", 110)
+	local teclaD, acenderD = criarTecla(linha, "D", 110)
 
 	local duration = math.max(tonumber(params.Duration) or 2, 0.2)
 	local required = math.max(tonumber(params.RequiredAlternations) or 6, 1)
@@ -496,18 +713,14 @@ local function showMashAD(pulseName, params)
 	local resolved = false
 
 	local function updateBar()
-		barFill.Size = UDim2.new(math.clamp(hits / required, 0, 1), 0, 1, 0)
-		countLabel.Text = ("%d / %d"):format(hits, required)
+		TweenService:Create(fill, TweenInfo.new(0.08), { Size = UDim2.new(math.clamp(hits / required, 0, 1), 0, 1, 0) }):Play()
+		contador.Text = ("%d / %d"):format(hits, required)
 	end
 	updateBar()
 
-	-- ⚠️ MOBILE: não tem teclado A/D no celular — essa função central
-	-- processa uma "tecla" tanto vindo do UserInputService (teclado)
-	-- quanto de um toque nos botões abaixo (criados sempre, mas mais
-	-- úteis mesmo em touch — em teclado o jogador pode ignorar e usar
-	-- A/D normalmente).
 	local function registerPress(key)
 		if resolved then return end
+		if key == "A" then acenderA() else acenderD() end
 		if key == lastKey then return end -- precisa alternar de verdade
 		lastKey = key
 		hits += 1
@@ -515,48 +728,18 @@ local function showMashAD(pulseName, params)
 		if onInputCallback then onInputCallback({ Key = key }) end
 		if hits >= required then
 			resolved = true
+			sub.Text = "MÁXIMO!"
+			sub.TextColor3 = COR_PERFEITO
 		end
 	end
 
-	table.insert(activeConnections, UserInputService.InputBegan:Connect(function(input, gameProcessed)
+	table.insert(activeConnections, UserInputService.InputBegan:Connect(function(input)
 		local key = (input.KeyCode == Enum.KeyCode.A) and "A" or (input.KeyCode == Enum.KeyCode.D) and "D" or nil
 		if not key then return end
 		registerPress(key)
 	end))
-
-	-- ⚠️ MOBILE: dois botões grandes lado a lado (A à esquerda, D à
-	-- direita) — mesmo alternar rápido de antes, só que no toque.
-	local mashButtonRow = Instance.new("Frame")
-	mashButtonRow.Position = UDim2.new(0, 0, 0, 100)
-	mashButtonRow.Size = UDim2.new(1, 0, 0, 44)
-	mashButtonRow.BackgroundTransparency = 1
-	mashButtonRow.Parent = frame
-
-	local mashLayout = Instance.new("UIListLayout")
-	mashLayout.FillDirection = Enum.FillDirection.Horizontal
-	mashLayout.Padding = UDim.new(0, 10)
-	mashLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-	mashLayout.Parent = mashButtonRow
-
-	for _, keyName in ipairs({ "A", "D" }) do
-		local mashButton = Instance.new("TextButton")
-		mashButton.Size = UDim2.new(0.46, 0, 1, 0)
-		mashButton.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
-		mashButton.Text = keyName
-		mashButton.Font = Enum.Font.GothamBlack
-		mashButton.TextSize = 20
-		mashButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-		mashButton.AutoButtonColor = true
-		mashButton.Parent = mashButtonRow
-
-		local mashButtonCorner = Instance.new("UICorner")
-		mashButtonCorner.CornerRadius = UDim.new(0, 8)
-		mashButtonCorner.Parent = mashButton
-
-		mashButton.MouseButton1Down:Connect(function()
-			registerPress(keyName)
-		end)
-	end
+	teclaA.MouseButton1Down:Connect(function() registerPress("A") end)
+	teclaD.MouseButton1Down:Connect(function() registerPress("D") end)
 
 	table.insert(activeConnections, RunService.RenderStepped:Connect(function()
 		if os.clock() - startedAt >= duration then
@@ -568,7 +751,7 @@ end
 -- ============================================================
 -- "GKGuardArmed" — v7: a Hissatsu de goleiro não é mais um QTE na hora
 -- de usar, só arma a guarda (ver PulseController.legacy.luau ->
--- startGKGuard) — aqui só um aviso pequeno no canto, sem travar nada,
+-- startGKGuard) — aqui só um aviso pequeno no alto, sem travar nada,
 -- enquanto o goleiro espera o chute colidir com a área.
 -- ============================================================
 local function showGKGuardArmed(pulseName, params)
@@ -576,28 +759,33 @@ local function showGKGuardArmed(pulseName, params)
 
 	local duration = math.max(tonumber(params.Duration) or 5, 0.1)
 
-	local frame = Instance.new("Frame")
-	frame.Name = "GuardArmedFrame"
-	frame.AnchorPoint = Vector2.new(0.5, 0)
-	frame.Position = UDim2.new(0.5, 0, 0.06, 0)
-	frame.Size = UDim2.fromOffset(260, 40)
-	frame.BackgroundTransparency = 1
-	frame.Parent = screenGui
+	local faixa = Instance.new("Frame")
+	faixa.Name = "GuardaArmada"
+	faixa.AnchorPoint = Vector2.new(0.5, 0)
+	faixa.Position = UDim2.new(0.5, 0, 0.06, 0)
+	faixa.Size = UDim2.fromOffset(330, 40)
+	faixa.BackgroundColor3 = COR_PAINEL
+	faixa.BackgroundTransparency = 0.35
+	faixa.BorderSizePixel = 0
+	faixa.Parent = screenGui
+	canto(faixa, UDim.new(1, 0))
+	borda(faixa, COR_PERFEITO, 1.5, 0.4)
 
-	local label = Instance.new("TextLabel")
-	label.Size = UDim2.new(1, 0, 1, 0)
-	label.BackgroundTransparency = 1
-	label.Font = Enum.Font.GothamBold
-	label.TextSize = 16
-	label.TextColor3 = COLOR_ACTIVE
-	label.Text = ("🛡️ %s ARMADA — espera o chute colidir"):format(pulseName or "Guarda")
-	label.Parent = frame
+	-- (v103: sem emoji — pedido do usuário)
+	local label = rotulo(faixa, ("%s ARMADA — espera o chute"):format(maiusculas(pulseName or "Guarda")), 14, COR_TEXTO, FONTE_TITULO)
+	label.Size = UDim2.new(1, 0, 1, -6)
+
+	local _, fill = criarBarra(faixa, UDim2.new(0, 16, 1, -7), 298, 4)
+	fill.Size = UDim2.new(1, 0, 1, 0)
 
 	local startedAt = os.clock()
 	table.insert(activeConnections, RunService.RenderStepped:Connect(function()
-		if os.clock() - startedAt >= duration then
+		local passou = os.clock() - startedAt
+		if passou >= duration then
 			HissatsuQTEWindow.Hide()
+			return
 		end
+		fill.Size = UDim2.new(1 - passou / duration, 0, 1, 0)
 	end))
 end
 
@@ -612,6 +800,7 @@ function HissatsuQTEWindow.Show(slot, pulseName, params, inputCallback)
 	currentSlot = slot
 	onInputCallback = inputCallback
 	screenGui.Enabled = true
+	aplicarTema(temaDaTecnica(pulseName)) -- ⚠️ v103: cores da própria técnica
 
 	if params.Kind == "Tap" then
 		showTap(pulseName, params)

@@ -119,6 +119,21 @@ _G.SetPulseDebugNoDelay = function(player, enabled)
 	DebugNoDelay[player] = enabled and true or nil
 end
 
+-- ⚠️ v110 — PEDIDO: "coloca as opções de zerar o cooldown, que não estão
+-- funcionando mais... tirar todos os cooldowns das Hissatsus pra poder testar,
+-- e a opção de energia infinita". O botão do debugger só desligava o cooldown
+-- das ARMAS (Instinto) — nunca chamou nada daqui. Agora (ver
+-- DebugAbilitySelector): SemCooldown = ignora o cooldown (sem mexer no preparo
+-- nem na cutscene, pra testar a técnica como ela é), Energia = o pool nunca
+-- baixa. O atributo no Player avisa o HUD pra não mostrar contagem.
+local DebugFlags = {} -- [player] = { SemCooldown = bool, Energia = bool }
+_G.SetPulseDebugFlag = function(player, nome, ligado)
+	DebugFlags[player] = DebugFlags[player] or {}
+	DebugFlags[player][nome] = ligado and true or nil
+	player:SetAttribute("Debug" .. nome, ligado and true or nil)
+	if nome == "Energia" and ligado and _G.ZerarPulseDebug then _G.ZerarPulseDebug(player, "Energia") end
+end
+
 local function ensurePlayerTables(player)
 	Loadout[player] = Loadout[player] or {}
 	ReadyAt[player] = ReadyAt[player] or {}
@@ -159,6 +174,29 @@ end
 _G.GetPulseAimPoint = function(player)
 	return LastAimPoint[player]
 end
+
+-- ⚠️ v92 — MIRA AO VIVO NO PREPARO. PEDIDO: "acho que a Hissatsu tá saindo
+-- onde eu tô olhando. Pode fazer ela sair onde eu tô olhando, mas também
+-- onde eu estou mirando com o mouse." A mira era tirada SÓ no aperto da
+-- tecla, e entre o aperto e o chute passam o preparo + QTE + cutscene (uns
+-- 5-6s) — quem mirava com o mouse depois de apertar não era atendido. Agora
+-- o cliente manda o ponto de mira ao vivo (mouse livre = onde o cursor
+-- aponta; Shift Lock = centro da tela, onde está olhando) e ele vale
+-- enquanto a Hissatsu de chute está no PREPARO. Trava quando a janela do QTE
+-- abre, porque aí o mouse vai clicar nos alvos do QTE, não mirar.
+Remotes.UpdatePulseAim.OnServerEvent:Connect(function(player, ponto)
+	if typeof(ponto) ~= "Vector3" then return end
+	if ponto.X ~= ponto.X or ponto.Y ~= ponto.Y or ponto.Z ~= ponto.Z then return end -- NaN
+	local pendentes = Pending[player]
+	if not pendentes then return end
+	for _, state in pairs(pendentes) do
+		if state and not state.Resolved and state.Kind == "Tap" and state.Def and state.Def.Action == "Shot"
+			and tick() < state.StepsStart + (state.PrepTime or 0) then
+			LastAimPoint[player] = ponto
+			return
+		end
+	end
+end)
 
 -- ⚠️ v7: PEDIDO — congela o MOVIMENTO (não o resto: o jogador ainda
 -- reage a QTE) por "duration" segundos. Usado pela Hissatsu de goleiro
@@ -229,7 +267,11 @@ _G.IsPulseInProgress = function(player)
 	for _, state in pairs(pending) do
 		if state and not state.Resolved then
 			local def = state.Def
-			if def and BALL_HOLDING_ACTIONS[def.Action] then
+			-- ⚠️ v120b — PEDIDO: "às vezes depois do carrinho o carrinho ou o dash param
+			-- de funcionar". Um combo que nunca resolvia (jogador resetado/ragdoll no
+			-- meio) deixava o dash bloqueado pra sempre: combo velho (> 6s) não conta.
+			local velho = state.StepsStart and (tick() - state.StepsStart) > 6
+			if def and BALL_HOLDING_ACTIONS[def.Action] and not velho then
 				return true
 			end
 		end
@@ -502,20 +544,34 @@ RunService.Heartbeat:Connect(function()
 			dentro = d <= z.Radius
 		end
 
+		-- ⚠️ v110 — PEDIDO: "a névoa precisa deixar o player 100% INVISÍVEL pra
+		-- todos os outros jogadores, a não ser ele mesmo e o próprio time". Antes
+		-- a transparência era aplicada aqui no servidor (0.85 pra todo mundo).
+		-- Agora o servidor só MARCA (atributos) e cada cliente decide o que vê
+		-- (NevoaClient.local.luau): adversário = invisível (corpo, nome, efeitos
+		-- e a bola dele); ele e o time = meio transparente, pra saber que está
+		-- escondido.
 		if dentro ~= z.Escondido then
 			z.Escondido = dentro
-			definirTransparencia(character, dentro and Config.FOG_HIDDEN_TRANSPARENCY or 0)
-			-- a bola acompanha, mas só enquanto ELE for o dono dela
-			if _G.SetBallHidden then
-				local dono = _G.GetBallOwner and _G.GetBallOwner()
-				_G.SetBallHidden(dentro and dono == z.Player)
+			if character then character:SetAttribute("NaNevoa", dentro or nil) end
+		end
+		-- a bola some junto, mas só enquanto ELE for o dono dela (perdeu a posse
+		-- dentro da névoa = a bola reaparece na hora)
+		do
+			local bola = workspace:FindFirstChild(Config.BALL_NAME)
+			local dono = _G.GetBallOwner and _G.GetBallOwner()
+			local escondida = z.Escondido and dono == z.Player and z.Player.UserId or nil
+			if bola and (escondida or bola:GetAttribute("EscondidaNaNevoa") == z.Player.UserId)
+				and bola:GetAttribute("EscondidaNaNevoa") ~= escondida then
+				bola:SetAttribute("EscondidaNaNevoa", escondida)
 			end
 		end
 
 		if expirou then
-			if z.Escondido then
-				definirTransparencia(character, 0)
-				if _G.SetBallHidden then _G.SetBallHidden(false) end
+			if character then character:SetAttribute("NaNevoa", nil) end
+			local bola = workspace:FindFirstChild(Config.BALL_NAME)
+			if bola and bola:GetAttribute("EscondidaNaNevoa") == z.Player.UserId then
+				bola:SetAttribute("EscondidaNaNevoa", nil)
 			end
 			if z.Part then z.Part:Destroy() end
 			table.remove(FogZones, i)
@@ -527,19 +583,93 @@ local function spawnSlowZone(player, radius, duration, mult)
 	local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
 	if not root then return end
 
-	local part = Instance.new("Part")
+	-- ⚠️ v110 — PEDIDO: "a Teia com uma teia bonita e visível". Era um disco roxo
+	-- liso. Agora é uma TEIA DE ARANHA de verdade no gramado: fios radiais +
+	-- anéis em espiral, que se espalham a partir de quem lançou (cresce em 0.5s).
+	local TweenService = game:GetService("TweenService")
+	local chaoY = root.Position.Y - 2.9
+	do
+		local filtro = RaycastParams.new()
+		filtro.FilterType = Enum.RaycastFilterType.Exclude
+		filtro.RespectCanCollide = true
+		local ignorar = {}
+		for _, p in ipairs(Players:GetPlayers()) do if p.Character then table.insert(ignorar, p.Character) end end
+		local bola = workspace:FindFirstChild(Config.BALL_NAME)
+		if bola then table.insert(ignorar, bola) end
+		filtro.FilterDescendantsInstances = ignorar
+		local hit = workspace:Raycast(root.Position, Vector3.new(0, -12, 0), filtro)
+		if hit then chaoY = hit.Position.Y end
+	end
+	local centro = Vector3.new(root.Position.X, chaoY + 0.06, root.Position.Z)
+	local part = Instance.new("Model")
 	part.Name = "PulseSlowZone"
-	part.Shape = Enum.PartType.Cylinder
-	part.Size = Vector3.new(0.4, radius * 2, radius * 2)
-	part.CFrame = CFrame.new(root.Position.X, root.Position.Y - 2.6, root.Position.Z) * CFrame.Angles(0, 0, math.rad(90))
-	part.Anchored = true
-	part.CanCollide = false
-	part.CanTouch = false
-	part.CanQuery = false
-	part.Material = Enum.Material.Neon
-	part.Color = Color3.fromRGB(120, 90, 160)
-	part.Transparency = 0.75
+	local COR_FIO = Color3.fromRGB(236, 248, 228)
+	local function fio(a, b, grossura, transp)
+		local p = Instance.new("Part")
+		p.Name = "Fio"
+		p.Anchored = true
+		p.CanCollide = false
+		p.CanTouch = false
+		p.CanQuery = false
+		p.CastShadow = false
+		p.Material = Enum.Material.Neon
+		p.Color = COR_FIO
+		p.Transparency = transp
+		local len = (b - a).Magnitude
+		p.Size = Vector3.new(grossura, 0.05, 0.05)
+		p.CFrame = CFrame.lookAt((a + b) / 2, b)
+		p.Parent = part
+		-- espalha do centro pra fora
+		local atraso = ((a + b) / 2 - centro).Magnitude / radius * 0.45
+		task.delay(atraso, function()
+			if p.Parent then
+				TweenService:Create(p, TweenInfo.new(0.15), { Size = Vector3.new(grossura, 0.05, len) }):Play()
+			end
+		end)
+	end
+	local RAIOS, ANEIS = 14, 7
+	local angulos = {}
+	for i = 1, RAIOS do
+		angulos[i] = (i / RAIOS) * math.pi * 2 + math.sin(i * 1.7) * 0.08 -- teia irregular, de verdade
+	end
+	for i = 1, RAIOS do
+		local ponta = centro + Vector3.new(math.cos(angulos[i]), 0, math.sin(angulos[i])) * radius
+		fio(centro, ponta, 0.16, 0.15)
+	end
+	for anel = 1, ANEIS do
+		for i = 1, RAIOS do
+			local j = i % RAIOS + 1
+			-- raio cresce um pouco de fio em fio (espiral), e o fio "cede" pro centro
+			local r1 = radius * (anel - 0.35 + i / RAIOS * 0.35) / ANEIS
+			local r2 = radius * (anel - 0.35 + (i % RAIOS == 0 and 0.35 or j / RAIOS * 0.35)) / ANEIS
+			local a = centro + Vector3.new(math.cos(angulos[i]), 0, math.sin(angulos[i])) * r1
+			local b = centro + Vector3.new(math.cos(angulos[j]), 0, math.sin(angulos[j])) * r2
+			fio(a, b, 0.1, 0.3)
+		end
+	end
+	-- véu verde bem fraco embaixo, pra marcar a área
+	local veu = Instance.new("Part")
+	veu.Name = "Veu"
+	veu.Shape = Enum.PartType.Cylinder
+	veu.Anchored = true
+	veu.CanCollide = false
+	veu.CanTouch = false
+	veu.CanQuery = false
+	veu.CastShadow = false
+	veu.Material = Enum.Material.ForceField
+	veu.Color = Color3.fromRGB(150, 220, 120)
+	veu.Transparency = 0.2
+	veu.Size = Vector3.new(0.1, radius * 2, radius * 2)
+	veu.CFrame = CFrame.new(centro) * CFrame.Angles(0, 0, math.rad(90))
+	veu.Parent = part
 	part.Parent = workspace
+	-- some aos poucos no último segundo
+	task.delay(math.max(duration - 1, 0), function()
+		if not part.Parent then return end
+		for _, p in ipairs(part:GetChildren()) do
+			if p:IsA("BasePart") then TweenService:Create(p, TweenInfo.new(0.9), { Transparency = 1 }):Play() end
+		end
+	end)
 
 	table.insert(SlowZones, {
 		Position = root.Position,
@@ -590,7 +720,102 @@ end
 -- Fiel ao anime: a sombra vira uma mão, agarra as pernas e PRENDE — não
 -- rouba a bola. Quem usa ainda precisa ir buscar. É o único desarme do
 -- jogo que funciona sem contato.
-local function executeRoot(player, effect)
+local function executeRoot(player, effect, slot, def)
+	-- ⚠️ v110 — PEDIDO: "não sei o que a Costura de Sombra faz, testei e não deu
+	-- nada — precisa de um oponente? ela paralisa no lugar?" Precisava: só saía
+	-- com um adversário COM A BOLA a até 46 studs (senão, nada acontecia). Agora,
+	-- como os carrinhos: a SOMBRA corre reta pelo chão na direção da mira (até o
+	-- alcance) e o PRIMEIRO adversário que ela alcançar fica PRESO no lugar
+	-- (não rouba a bola — quem usou ainda precisa ir buscar). Wiki (Kage Nui): "a
+	-- sombra se estica pelo campo, vira uma mão e agarra as pernas".
+	do
+		local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+		if not root then return false end
+		local direcao
+		local mira = LastAimPoint[player]
+		if typeof(mira) == "Vector3" and mira.X == mira.X then
+			local plano = Vector3.new(mira.X - root.Position.X, 0, mira.Z - root.Position.Z)
+			if plano.Magnitude > 1 then direcao = plano.Unit end
+		end
+		if not direcao then
+			local look = Vector3.new(root.CFrame.LookVector.X, 0, root.CFrame.LookVector.Z)
+			direcao = look.Magnitude > 0.01 and look.Unit or Vector3.new(0, 0, -1)
+		end
+		local alcance = effect.RootRadius or 46
+		local _ = effect.RootDuration -- (v110: tempo preso = 1.5s + QTE, até 2s — ver o agarrão abaixo)
+		-- ⚠️ v113 — PEDIDO: "Costura de Sombra: sombra 3x maior" (largura 4.5 -> 13.5)
+		local VEL, LARGURA, ATRASO = 85, 13.5, 0.45 -- (ATRASO = mãos juntas e braços pra trás na animação)
+		local origem = root.Position
+		-- ⚠️ v110 — PEDIDO: "enquanto eu estiver usando essa habilidade eu NÃO
+		-- posso me mover, porque eu tô criando a sombra... é pra travar o avanço
+		-- de alguém". Quem usa fica plantado enquanto a sombra corre.
+		freezeMovement(player, ATRASO + alcance / VEL + 0.05)
+		if Remotes.HissatsuVFX and player.Character then
+			Config.DispararVFX("HissatsuVFX", player.Character, "Costura de Sombra", nil,
+				{ Dir = direcao, Alcance = alcance, Vel = VEL, Atraso = ATRASO })
+		end
+		task.delay(ATRASO, function()
+			local t0 = tick()
+			local percorrido = 0
+			local con
+			con = RunService.Heartbeat:Connect(function()
+				local antes = percorrido
+				percorrido = math.min(alcance, (tick() - t0) * VEL)
+				local a = origem + direcao * antes
+				local b = origem + direcao * percorrido
+				for _, other in ipairs(Players:GetPlayers()) do
+					if other == player or (player.Team and other.Team == player.Team) then continue end
+					if _G.HasPulseIframe and _G.HasPulseIframe(other) then continue end
+					local r = other.Character and other.Character:FindFirstChild("HumanoidRootPart")
+					if not r then continue end
+					-- distância (no chão) do adversário até o trecho que a sombra andou neste quadro
+					local p = Vector3.new(r.Position.X, origem.Y, r.Position.Z)
+					local ab = b - a
+					local u = ab.Magnitude > 0.001 and math.clamp((p - a):Dot(ab) / ab:Dot(ab), 0, 1) or 0
+					if (p - (a + ab * u)).Magnitude <= LARGURA then
+						con:Disconnect()
+						-- ⚠️ v110 — PEDIDO: "se ela acertar alguém, segura por 1.5
+						-- segundos — 2 no máximo" + "pode rolar um quick time event:
+						-- quanto mais você acertar, mais tempo dura". Os DOIS ficam
+						-- presos (ele pela sombra, você segurando ela) 1.5s; alternar
+						-- A/D durante o agarrão estica até 2s.
+						local inicio = tick()
+						local fim = inicio + 1.5
+						local function segurar()
+							local resta = fim - tick()
+							if resta <= 0 then return end
+							if _G.StunPlayer then _G.StunPlayer(other, resta) end
+							freezeMovement(player, resta)
+						end
+						segurar()
+						if Remotes.HissatsuVFX and player.Character then
+							Config.DispararVFX("HissatsuVFX", player.Character, "Costura de Sombra@agarra", nil,
+								{ Alvo = other.Character, Duracao = fim - tick() })
+						end
+						if slot and _G.StartHissatsuQTE and _G.RegisterQTEHitCallback then
+							local qdef = { Name = (def and def.Name) or "Costura de Sombra", Rarity = def and def.Rarity,
+								Action = "Root", QTE = { Kind = "MashAD", Duration = 1.3, RequiredAlternations = 10 } }
+							_G.StartHissatsuQTE(player, slot, qdef, function() end)
+							_G.RegisterQTEHitCallback(player, slot, function(hits)
+								local novoFim = inicio + math.min(2.0, 1.5 + (hits or 0) * 0.05)
+								if novoFim > fim + 0.01 then
+									fim = novoFim
+									segurar()
+									if Remotes.HissatsuVFX and player.Character then
+										Config.DispararVFX("HissatsuVFX", player.Character, "Costura de Sombra@segura", nil,
+											{ Alvo = other.Character, Duracao = fim - tick() })
+									end
+								end
+							end)
+						end
+						return
+					end
+				end
+				if percorrido >= alcance then con:Disconnect() end
+			end)
+		end)
+		return true
+	end
 	local target = _G.GetBallOwner and _G.GetBallOwner()
 	if not target or target == player then return false end
 	if player.Team and target.Team and player.Team == target.Team then return false end
@@ -649,12 +874,12 @@ local function applyAlliesScale(player, def, effect)
 end
 
 -- ⚠️ v9 PEDIDO: "energia de ativação da Hissatsu... precisa ser algo
--- relacionado com o atributo Energy". Pool separado do multiplicador de
--- FORÇA que o atributo Energy já dá (ver getEnergyForceMultiplier em
--- BallController.legacy.luau) — esse aqui é "combustível" que QUALQUER
--- Pulso Hissatsu (chute/defesa/arrancada/drible) consome pra ativar, e
--- cujo TAMANHO do pool também escala com Energy (mais Energy = pool
--- maior, além de chute mais forte). Regenera sozinho, mesmo parado.
+-- relacionado com o atributo Energy". "Combustível" que QUALQUER Pulso
+-- Hissatsu (chute/defesa/arrancada/drible) consome pra ativar; o TAMANHO
+-- do pool escala com o atributo Energy. ⚠️ NOVO: é o ÚNICO efeito do
+-- atributo Energy — ele não deixa mais nenhuma Hissatsu mais forte
+-- (PEDIDO: "Energia é um RECURSO... Energia máxima 100, Hissatsu custa 30,
+-- após usar 70"). Só reenche no kickoff (ver _G.ResetPulseEnergy).
 local EnergyPool = {} -- [player] = valor atual do pool
 
 local function maxEnergyPool(player)
@@ -707,12 +932,117 @@ end
 -- no PRÓXIMO chute de "player" (Pulso do Camisa 10 aplicando no
 -- companheiro que recebeu o passe) — consumido no primeiro chute depois
 -- disso, ver _G.GetPulseActiveKickForceMult.
+-- ⚠️ v110: buff de VELOCIDADE nos companheiros a até `raio` de quem usa (Armas
+-- Maestro do Campo / Voz de Comando). Usa a mesma tabela do Pulso do General
+-- (TeamBuff), que o GetPulseSpeedMultiplier já lê — sem mexer no PlayerSystems.
+_G.PulseTeamBuff = function(player, raio, speedMult, duracao)
+	local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+	if not root or not player.Team then return end
+	local ate = tick() + duracao
+	for _, mate in ipairs(Players:GetPlayers()) do
+		if mate ~= player and mate.Team == player.Team then
+			local r = mate.Character and mate.Character:FindFirstChild("HumanoidRootPart")
+			if r and (r.Position - root.Position).Magnitude <= raio then
+				local atual = TeamBuff[mate]
+				local valendo = atual and atual.ExpiresAt > tick()
+				TeamBuff[mate] = {
+					SpeedMult = math.max(speedMult, valendo and (atual.SpeedMult or 1) or 1),
+					ForceMult = valendo and (atual.ForceMult or 1) or 1,
+					ExpiresAt = math.max(ate, valendo and atual.ExpiresAt or 0),
+				}
+			end
+		end
+	end
+end
+
 _G.SetPulseTeammateBuff = function(player, forceMult, duration)
 	TeammateBuff[player] = { ForceMult = forceMult, ExpiresAt = tick() + duration }
 end
 
 local function feedback(player, kind, extra)
 	Remotes.PulseFeedback:FireClient(player, kind, extra)
+end
+
+-- ===== ⚠️ v108 — ZONA MORTA DE TRÊS (def.Trio, ver PulseInstinctData) =====
+-- Tabela única (um local só) com: os companheiros que entram, o estado ativo
+-- de quem chutou e a conta final aplicada no resolveAndExecute.
+local Trio = { Ativo = {} } -- Ativo[player] = estado do QTE de quem chutou
+
+-- os `quantos` companheiros vivos do time mais perto, até `raio` studs
+function Trio.Proximos(player, raio, quantos)
+	return Trio.Companheiros(player, { Trio = { Raio = raio, Companheiros = quantos } })
+end
+
+function Trio.Companheiros(player, def)
+	local spec = def.Trio
+	local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+	if not spec or not root or not player.Team then return {} end
+	local lista = {}
+	for _, mate in ipairs(Players:GetPlayers()) do
+		if mate ~= player and mate.Team == player.Team then
+			local r = mate.Character and mate.Character:FindFirstChild("HumanoidRootPart")
+			local hum = mate.Character and mate.Character:FindFirstChildOfClass("Humanoid")
+			if r and hum and hum.Health > 0 then
+				local d = (r.Position - root.Position).Magnitude
+				if d <= (spec.Raio or 55) then table.insert(lista, { Mate = mate, D = d }) end
+			end
+		end
+	end
+	table.sort(lista, function(a, b) return a.D < b.D end)
+	local out = {}
+	for i = 1, math.min(#lista, spec.Companheiros or 2) do out[i] = lista[i].Mate end
+	return out
+end
+
+-- ⚠️ v110 — PEDIDO: "o Death Zone saiu muito fraco mesmo a gente acertando (não
+-- acertamos tudo). A força vai SOMANDO a partir do que a gente acerta; se todo
+-- mundo acertar tudo, no máximo vai ser um POUCO mais forte que uma Hissatsu
+-- solo (ou dupla, porque é trio)." Antes era tudo-ou-nada: um clique a menos de
+-- qualquer um = chute a 30%. Agora conta a SINCRONIA = média dos cliques certos
+-- de todo mundo (quem chuta + apoios; apoio que faltou conta 0). A força vai de
+-- ForcaMin (ninguém acertou nada) até ForcaMax (todos acertaram tudo) —
+-- ForcaMax só um pouco acima de 1 (dupla 1.06, trio 1.12). Sincronia baixa
+-- também entorta a mira.
+function Trio.Efeito(state, effect)
+	local spec = state.Def.Trio
+	local apoios = state.Trio and state.Trio.Apoios or {}
+	local sozinhoDebug = DebugFlags[state.Jogador] and DebugFlags[state.Jogador].TrioSozinho
+	local precisa = spec.Companheiros or 2
+	local function fracao(hits, req)
+		req = math.max(req or 1, 1)
+		return math.clamp((hits or 0) / req, 0, 1)
+	end
+	local fChute = fracao(state.Hits, state.BaseHits or state.RequiredHits)
+	local soma, n = fChute, 1
+	for _, r in ipairs(apoios) do
+		soma += fracao(r.Hits, r.Req)
+		n += 1
+	end
+	for _ = #apoios + 1, precisa do -- apoio que faltou (no debug "sozinho", conta igual a quem chuta)
+		soma += sozinhoDebug and fChute or 0
+		n += 1
+	end
+	local sincronia = soma / n
+	local minimo = spec.ForcaMin or 0.5
+	local maximo = spec.ForcaMax or (precisa >= 2 and 1.12 or 1.06)
+	local ef = table.clone(effect or {})
+	ef.ForceMult = (ef.ForceMult or 1) * (minimo + (maximo - minimo) * sincronia)
+	if sincronia < 0.5 then
+		ef.AimDeviationMult = (ef.AimDeviationMult or 1) * (1 + (0.5 - sincronia) * 4)
+	end
+	local todos = { state.Jogador }
+	for _, r in ipairs(apoios) do table.insert(todos, r.Mate) end
+	-- ⚠️ v110: com acento em maiúscula também ("FÚRIA", não "FúRIA")
+	local titulo = (string.upper(state.Def.Name or ""):gsub("\195([\160-\190])", function(c)
+		if string.byte(c) ~= 183 then return "\195" .. string.char(string.byte(c) - 32) end
+	end))
+	for _, p in ipairs(todos) do
+		if p and p.Parent then
+			feedback(p, "Aviso", ("%s — sincronia %d%%"):format(titulo, math.floor(sincronia * 100 + 0.5)))
+			if p ~= state.Jogador and _G.AddInstinctCharge then _G.AddInstinctCharge(p, 0.1 * sincronia) end
+		end
+	end
+	return ef
 end
 
 local function startCooldown(player, slot, def)
@@ -780,6 +1110,10 @@ end
 -- ===== PRECONDIÇÃO DA AÇÃO (checada ANTES de gastar cooldown) =====
 local function actionPrecheck(player, def)
 	local action = def.Action
+	-- ⚠️ v123: Hissatsu que só faz sentido com a bola (ex.: Bola Ilusão), qualquer Action
+	if def.PrecisaDaBola and not (_G.PulseHasControl and _G.PulseHasControl(player)) then
+		return false, "Sem posse de bola"
+	end
 	if action == "Shot" or action == "Pass" or action == "DribbleMove" then
 		if not (_G.PulseHasControl and _G.PulseHasControl(player)) then
 			return false, "Sem posse de bola"
@@ -803,6 +1137,9 @@ local function actionPrecheck(player, def)
 		local bonusAlcance = (def.Effect and def.Effect.TackleRangeAdd)
 			or (def.Perfect and def.Perfect.TackleRangeAdd)
 			or (def.Bom and def.Bom.TackleRangeAdd)
+		-- ⚠️ v110: TODO carrinho de Hissatsu virou dash livre na mira ("pode usar
+		-- em qualquer lugar") — só o desarme cronometrado ainda pede alvo
+		isFreeDash = isFreeDash or not (def.QTE and def.QTE.Kind == "TimingBar")
 		if not isFreeDash and not (_G.PulseHasOpponentInTackleRange and _G.PulseHasOpponentInTackleRange(player, bonusAlcance)) then
 			return false, "Nenhum adversário com a bola por perto"
 		end
@@ -813,13 +1150,8 @@ local function actionPrecheck(player, def)
 		if _G.PulseHasControl and _G.PulseHasControl(player) then
 			return false, "Você está com a posse de bola"
 		end
-		local carrier = _G.GetBallOwner and _G.GetBallOwner()
-		if not carrier or carrier == player then
-			return false, "Ninguém está com a bola"
-		end
-		if player.Team and carrier.Team and player.Team == carrier.Team then
-			return false, "A bola está com um companheiro"
-		end
+		-- ⚠️ v110: a sombra agora corre RETA na mira e prende quem ela alcançar —
+		-- não precisa mais de alguém com a bola pra usar
 	elseif action == "Header" then
 		if not (_G.PulseCanHeader and _G.PulseCanHeader(player)) then
 			return false, "Bola não está no ar por perto"
@@ -894,7 +1226,183 @@ end
 -- empurrar, um passe pode travar a bola pro companheiro, etc. As que
 -- dependem de física/posição vão pro BallController (_G.*); as que são
 -- puramente de estado do Pulso ficam aqui.
+-- ⚠️ v113 — cegueira: tela branca nos ADVERSÁRIOS no raio (Clarão de Fótons,
+-- Investida de Luz). Remoto direto (não vai pro replay: não pode cegar quem
+-- está assistindo o replay).
+_G.PulseAplicarCegueira = function(player, centro, raio, duracao)
+	if typeof(centro) ~= "Vector3" or not raio or not duracao then return end
+	local vitimas = {}
+	for _, other in ipairs(Players:GetPlayers()) do
+		if other == player or (player.Team and other.Team and player.Team == other.Team) then continue end
+		local r = other.Character and other.Character:FindFirstChild("HumanoidRootPart")
+		if r and Vector3.new(r.Position.X - centro.X, 0, r.Position.Z - centro.Z).Magnitude <= raio then
+			table.insert(vitimas, other.UserId)
+		end
+	end
+	if #vitimas > 0 and Remotes.HissatsuVFX and player.Character then
+		Remotes.HissatsuVFX:FireAllClients(player.Character, "Clarão de Fótons@cegar", nil, { Vitimas = vitimas, Duracao = duracao })
+	end
+end
+
+-- ⚠️ v113: variante da Investida pelo elemento do JOGADOR (ver PulseInstinctData)
+local VARIANTES_INVESTIDA = {
+	Fogo = { KnockbackRadius = 9, KnockbackForce = 50 },
+	Vento = { KnockbackRadius = 13, KnockbackForce = 80 },
+	Void = { StunGarantido = { Raio = 10, Duracao = 1.0, Atraso = 0.45 } },
+	Natureza = { ZoneSlowRadius = 12, ZoneSlowDuration = 3, ZoneSlowMult = 0.6 },
+	Luz = { Cegueira = { Raio = 13, Duracao = 1.4, Atraso = 0.45 } },
+}
+
 local function applyExtraEffectKeys(player, slot, def, effect)
+	if effect.VarianteElemental then
+		local el = player:GetAttribute(Config.ELEMENT_ATTRIBUTE_NAME)
+		local v = VARIANTES_INVESTIDA[el] or VARIANTES_INVESTIDA.Fogo
+		local copia = table.clone(effect)
+		copia.VarianteElemental = nil
+		for k, val in pairs(v) do copia[k] = val end
+		effect = copia
+	end
+
+	-- ⚠️ v113: ATORDOAMENTO GARANTIDO (Faísca Zigue-Zague, Investida Sombria):
+	-- sai quando o golpe CHEGA (Atraso), no raio inteiro, ignora a resistência
+	-- (Defesa Zumbi) e pega também o goleiro bot.
+	if effect.StunGarantido then
+		local sg = effect.StunGarantido
+		task.delay(sg.Atraso or 0, function()
+			local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+			if not root then return end
+			for _, other in ipairs(Players:GetPlayers()) do
+				if other == player or (player.Team and other.Team and player.Team == other.Team) then continue end
+				local r = other.Character and other.Character:FindFirstChild("HumanoidRootPart")
+				if r and (r.Position - root.Position).Magnitude <= sg.Raio and _G.StunPlayer then
+					local mult = _G.GetInstinctStunMult and _G.GetInstinctStunMult(other) or 1
+					_G.StunPlayer(other, sg.Duracao / math.max(mult, 0.05))
+				end
+			end
+			if _G.GetGKBotPositions and _G.FreezeGKBot then
+				for _, bot in ipairs(_G.GetGKBotPositions()) do
+					if (not player.Team or bot.TeamName ~= player.Team.Name) and (bot.Position - root.Position).Magnitude <= sg.Raio then
+						_G.FreezeGKBot(bot.TeamName, sg.Duracao)
+					end
+				end
+			end
+		end)
+	end
+
+	-- ⚠️ v113: cegueira em volta de quem usou (Investida de Luz)
+	if effect.Cegueira then
+		local cg = effect.Cegueira
+		task.delay(cg.Atraso or 0, function()
+			local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+			if root then _G.PulseAplicarCegueira(player, root.Position, cg.Raio, cg.Duracao) end
+		end)
+	end
+
+	-- ⚠️ v113: BOLA ILUSÃO — 2 cópias em 2 das 3 direções (frente, diagonais),
+	-- sorteadas; quem usou é a terceira figura e anda livre (ver HissatsuVFX).
+	if effect.Ilusao then
+		local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+		if root then
+			local look = Vector3.new(root.CFrame.LookVector.X, 0, root.CFrame.LookVector.Z)
+			look = look.Magnitude > 0.01 and look.Unit or Vector3.new(0, 0, -1)
+			-- ⚠️ v120b — PEDIDO: "transforma em TRÊS clones (um é provisório): quando você
+			-- usa, ele TROCA a sua posição com um dos três — some o seu personagem e
+			-- aparece em algum dos três, e o cara não sabe qual é você; você pode continuar
+			-- andando reto fingindo que é outro". As 3 figuras saem juntas (frente e as duas
+			-- diagonais); a sua é sorteada: as cópias fazem as outras duas e você é
+			-- empurrado pelo caminho da sua, no mesmo ritmo, com a bola de verdade.
+			local angulos = { 0, 40, -40 }
+			local meu = math.random(1, 3)
+			local dur = effect.Ilusao.Duracao or 1.5
+			local dist = effect.Ilusao.Distancia or 22
+			-- ⚠️ v123 — PEDIDO: "não teleporta o player pra posição de um dos clones". As
+			-- TRÊS figuras saem juntas da nuvem; o jogador (e a bola) some e, em `troca`
+			-- segundos, é TELEPORTADO pro lugar da figura sorteada — que vira ele. Puf nas
+			-- três ao mesmo tempo (ninguém sabe qual), as outras duas seguem e somem.
+			local troca = math.clamp(effect.Ilusao.Troca or 0.45, 0.1, dur - 0.1)
+			local dirs = {}
+			for _, a in ipairs(angulos) do
+				table.insert(dirs, CFrame.Angles(0, math.rad(a), 0):VectorToWorldSpace(look))
+			end
+			if Remotes.HissatsuVFX then
+				Config.DispararVFX("HissatsuVFX", player.Character, "Bola Ilusão@clones", def.Element,
+					{ Dirs = dirs, Meu = meu, Troca = troca, Duracao = dur, Distancia = dist, Trocou = true })
+			end
+			local origem = root.Position
+			local minhaDir = dirs[meu]
+			task.delay(troca, function()
+				local r = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+				if not r then return end
+				local destino = origem + minhaDir * dist * (troca / dur)
+				-- não atravessa parede: para antes de algo sólido no caminho
+				local filtro = RaycastParams.new()
+				filtro.FilterType = Enum.RaycastFilterType.Exclude
+				filtro.FilterDescendantsInstances = { player.Character, workspace:FindFirstChild(Config.BALL_NAME) }
+				filtro.RespectCanCollide = true
+				local hit = workspace:Raycast(origem, destino - origem, filtro)
+				if hit then destino = origem + (destino - origem).Unit * math.max(hit.Distance - 2, 0) end
+				r.CFrame = CFrame.lookAt(destino, destino + minhaDir)
+				r.AssemblyLinearVelocity = minhaDir * (dist / dur)
+			end)
+		end
+	end
+
+	-- ⚠️ v113: PISÃO DE SUMÔ NA MIRA (até Alcance studs): o pé desce onde você
+	-- mirou e atordoa quem estiver ali.
+	if effect.PisaoMira then
+		local pm = effect.PisaoMira
+		local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+		if root then
+			local ponto
+			local mira = LastAimPoint[player]
+			if typeof(mira) == "Vector3" and mira.X == mira.X then
+				local plano = Vector3.new(mira.X - root.Position.X, 0, mira.Z - root.Position.Z)
+				if plano.Magnitude > (pm.Alcance or 60) then plano = plano.Unit * (pm.Alcance or 60) end
+				ponto = root.Position + plano
+			else
+				local look = Vector3.new(root.CFrame.LookVector.X, 0, root.CFrame.LookVector.Z)
+				ponto = root.Position + (look.Magnitude > 0.01 and look.Unit or Vector3.new(0, 0, -1)) * 12
+			end
+			local chaoY = root.Position.Y - 2.9
+			do
+				local filtro = RaycastParams.new()
+				filtro.FilterType = Enum.RaycastFilterType.Exclude
+				filtro.RespectCanCollide = true
+				local ignorar = {}
+				for _, p in ipairs(Players:GetPlayers()) do if p.Character then table.insert(ignorar, p.Character) end end
+				local bola = workspace:FindFirstChild(Config.BALL_NAME)
+				if bola then table.insert(ignorar, bola) end
+				filtro.FilterDescendantsInstances = ignorar
+				local hit = workspace:Raycast(Vector3.new(ponto.X, root.Position.Y + 6, ponto.Z), Vector3.new(0, -30, 0), filtro)
+				if hit then chaoY = hit.Position.Y end
+			end
+			ponto = Vector3.new(ponto.X, chaoY, ponto.Z)
+			freezeMovement(player, 0.5)
+			if Remotes.HissatsuVFX and player.Character then
+				Config.DispararVFX("HissatsuVFX", player.Character, "Pisão de Sumô@mira", def.Element, { Posicao = ponto, Atraso = 0.38, Raio = pm.Raio })
+			end
+			task.delay(0.38, function()
+				for _, other in ipairs(Players:GetPlayers()) do
+					if other == player or (player.Team and other.Team and player.Team == other.Team) then continue end
+					local r = other.Character and other.Character:FindFirstChild("HumanoidRootPart")
+					if r and Vector3.new(r.Position.X - ponto.X, 0, r.Position.Z - ponto.Z).Magnitude <= pm.Raio and _G.StunPlayer then
+						_G.StunPlayer(other, pm.Duracao)
+						-- ⚠️ v120b — PEDIDO: "o pisão de sumô pode deixar atordoado com o efeito de tontura"
+						if _G.MostrarTontura then _G.MostrarTontura(other, pm.Duracao) end
+					end
+				end
+				if _G.GetGKBotPositions and _G.FreezeGKBot then
+					for _, bot in ipairs(_G.GetGKBotPositions()) do
+						if (not player.Team or bot.TeamName ~= player.Team.Name)
+							and Vector3.new(bot.Position.X - ponto.X, 0, bot.Position.Z - ponto.Z).Magnitude <= pm.Raio then
+							_G.FreezeGKBot(bot.TeamName, pm.Duracao)
+						end
+					end
+				end
+			end)
+		end
+	end
+
 	-- Iframe próprio (ex: Pulso Fantasma, Explosão, Carrinho Blindado).
 	if effect.SelfIframe and _G.GrantPulseIframe then
 		_G.GrantPulseIframe(player, effect.SelfIframe)
@@ -1069,29 +1577,32 @@ end
 -- em FootballConfig — mesma curva 0-100 -> MIN..MAX de sempre, 1.0x no
 -- default 50); Tackle (desarme) usa Physical também, mesma lógica do GK,
 -- só que na defesa.
-local function getPulsePowerScaleAttribute(def)
-	if def.RoleRequired == "GK" then return Config.PHYSICAL_ATTRIBUTE, Config.DEFAULT_PHYSICAL end
-	if def.Action == "Shot" then return Config.KICK_ATTRIBUTE, Config.DEFAULT_KICK end
-	-- ⚠️ v11: cabeçada (Cabeça de Kung Fu) é finalização, lê Força de
-	-- Chute; "Root" (Costura de Sombra) é desarme, lê Físico igual Tackle.
-	if def.Action == "Header" then return Config.KICK_ATTRIBUTE, Config.DEFAULT_KICK end
-	if def.Action == "DribbleMove" then return Config.DRIBBLE_SKILL_ATTRIBUTE, Config.DEFAULT_DRIBBLE_SKILL end
-	if def.Action == "Tackle" then return Config.PHYSICAL_ATTRIBUTE, Config.DEFAULT_PHYSICAL end
-	if def.Action == "Root" then return Config.PHYSICAL_ATTRIBUTE, Config.DEFAULT_PHYSICAL end
-	return nil, nil
+--
+-- ⚠️ NOVO — FÓRMULA POR HISSATSU. PEDIDO: "Cada Hissatsu poderá utilizar
+-- atributos diferentes para determinar sua potência... 60% Chute + 40%
+-- Técnica... 70% Físico + 30% Técnica". O atributo fixo por categoria
+-- (antigo getPulsePowerScaleAttribute) virou só o PADRÃO de quem não
+-- declara Scaling — ver Config.GetHissatsuScaling/GetHissatsuAttribute-
+-- Rating em FootballConfig. A nota (média ponderada 0-100) entra na MESMA
+-- curva de sempre, então uma Hissatsu 100% Físico continua idêntica.
+local function getPulsePowerScale(player, def)
+	local rating = Config.GetHissatsuAttributeRating(player, def)
+	if not rating then return 1 end
+	return Config.AttributeCurve(rating, Config.PULSE_EFFECT_POWER_SCALE_MIN, Config.PULSE_EFFECT_POWER_SCALE_MAX)
 end
 
-local function getPulsePowerScale(player, def)
-	local attrName, default = getPulsePowerScaleAttribute(def)
-	if not attrName then return 1 end
-	local value = player:GetAttribute(attrName)
-	if typeof(value) ~= "number" then value = default end
-	local fraction = math.clamp(value, 0, 100) / 100
-	return Config.PULSE_EFFECT_POWER_SCALE_MIN + (Config.PULSE_EFFECT_POWER_SCALE_MAX - Config.PULSE_EFFECT_POWER_SCALE_MIN) * fraction
+-- ⚠️ NOVO: multiplicador de FORÇA de chute da Hissatsu — a nota da fórmula
+-- na curva de força do Chute (KICK_FORCE_MULTIPLIER_*: 1.0x na nota 50).
+-- Entregue ao BallController em effect.AttributeForceMult (substitui o
+-- antigo Kick x Energy de _G.PulseExecuteShot).
+local function getPulseAttributeForceMult(player, def)
+	local rating = Config.GetHissatsuAttributeRating(player, def)
+	if not rating then return nil end
+	return Config.AttributeCurve(rating, Config.KICK_FORCE_MULTIPLIER_MIN, Config.KICK_FORCE_MULTIPLIER_MAX)
 end
 
 -- Chaves de TAMANHO/POTÊNCIA de efeito de área — ForceMult/CurveMult/etc
--- já têm seu próprio caminho de escala (Kick/Energy/raridade, ver
+-- já têm seu próprio caminho de escala (AttributeForceMult/raridade, ver
 -- BallController.lua), então essas aqui são só as de área/duração.
 local POWER_SCALED_EFFECT_KEYS = {
 	"FreezeRadius", "FreezeDuration",
@@ -1131,10 +1642,23 @@ end
 
 local function applyPulsePowerScale(player, def, effect)
 	local scale = getPulsePowerScale(player, def) * getElementSelfMatchScale(player, def)
-	if scale == 1 then return effect end
+	-- ⚠️ NOVO: chute de Hissatsu leva junto a força da fórmula (ver
+	-- getPulseAttributeForceMult) — só Action="Shot" lê isso.
+	local forceMult = def.Action == "Shot" and getPulseAttributeForceMult(player, def) or nil
+	if scale == 1 and not forceMult and def.Action ~= "Shot" then return effect end
 	local scaled = table.clone(effect)
-	for _, key in ipairs(POWER_SCALED_EFFECT_KEYS) do
-		if scaled[key] then scaled[key] = scaled[key] * scale end
+	if scale ~= 1 then
+		for _, key in ipairs(POWER_SCALED_EFFECT_KEYS) do
+			if scaled[key] then scaled[key] = scaled[key] * scale end
+		end
+	end
+	scaled.AttributeForceMult = forceMult
+	-- ⚠️ v107: o chute leva o elemento (o duelo de defesa compara com o da
+	-- defesa) e o bônus de elemento próprio vale também na FORÇA do chute
+	-- ("se você tiver o elemento no personagem, a Hissatsu fica mais forte").
+	if def.Action == "Shot" then
+		scaled.Elemento = def.Element
+		scaled.ElementoProprioMult = getElementSelfMatchScale(player, def)
 	end
 	return scaled
 end
@@ -1142,6 +1666,12 @@ end
 -- ===== DISPATCHER: chama o executor certo pra def.Action e manda o feedback =====
 local function resolveAndExecute(player, slot, def, effect)
 	effect = effect or def.Effect or {}
+	-- ⚠️ v108: Zona Morta de três — a conta final (acertou/falhou/perfeitos)
+	local trioState = Trio.Ativo[player]
+	if trioState and trioState.Def == def then
+		Trio.Ativo[player] = nil
+		effect = Trio.Efeito(trioState, effect)
+	end
 	effect = applyPulsePowerScale(player, def, effect) -- ⚠️ v36 (ver comentário acima)
 	effect = applyAlliesScale(player, def, effect)     -- ⚠️ v11 (Zona Morta / Muralha Infinita)
 	local action = def.Action
@@ -1155,7 +1685,7 @@ local function resolveAndExecute(player, slot, def, effect)
 	elseif action == "Pass" then
 		ok = _G.PulseExecutePass and _G.PulseExecutePass(player, effect) or false
 	elseif action == "Tackle" then
-		ok = _G.PulseExecuteTackle and _G.PulseExecuteTackle(player, effect) or false
+		ok = _G.PulseExecuteTackle and _G.PulseExecuteTackle(player, effect, def) or false -- ⚠️ v110: def = carrinho livre na mira
 	elseif action == "Header" then
 		ok = _G.PulseExecuteHeader and _G.PulseExecuteHeader(player, effect) or false
 	elseif action == "AerialControl" then
@@ -1168,7 +1698,7 @@ local function resolveAndExecute(player, slot, def, effect)
 		ok = executeSteal(player, effect)
 	elseif action == "Root" then
 		-- ⚠️ v11: Costura de Sombra — prende à distância, NÃO rouba.
-		ok = executeRoot(player, effect)
+		ok = executeRoot(player, effect, slot, def)
 	elseif action == "Buff" then
 		ok = executeBuff(player, slot, def, effect)
 		-- ⚠️ v3: Buff SEM Duration + BallMagnetRadius = ação instantânea
@@ -1183,8 +1713,24 @@ local function resolveAndExecute(player, slot, def, effect)
 	end
 
 	if ok then
-		applyExtraEffectKeys(player, slot, def, effect)
+		-- ⚠️ v110: carrinho de Hissatsu aplica o efeito dele NA CHEGADA (ver
+		-- _G.PulseExecuteTackle no BallController) — aqui só o iframe próprio;
+		-- o VFX dele também sai de lá (início e chegada). A Costura idem.
+		if action == "Tackle" or action == "Root" then
+			if effect.SelfIframe and _G.GrantPulseIframe then _G.GrantPulseIframe(player, effect.SelfIframe) end
+		else
+			applyExtraEffectKeys(player, slot, def, effect)
+		end
 		feedback(player, "Fired", def.Name)
+		-- ⚠️ v123: estatísticas da partida (Hissatsu usada; Hissatsu de chute = chute a gol)
+		if _G.RegistrarEstatistica then
+			_G.RegistrarEstatistica(player, "Hissatsus")
+			if action == "Shot" then _G.RegistrarEstatistica(player, "Shots") end
+		end
+		-- ⚠️ v109: VFX das Hissatsus sem cutscene (dribles/defesas) em todo cliente
+		if Remotes.HissatsuVFX and player.Character and not def.Cutscene and action ~= "Tackle" and action ~= "Root" then
+			Config.DispararVFX("HissatsuVFX", player.Character, def.Name, def.Element)
+		end
 	else
 		-- A precondição já passou no aperto do botão, mas o estado do jogo
 		-- mudou nesse meio tempo (perdeu a posse durante o wind-up, levou
@@ -1331,6 +1877,300 @@ local function hissatsuTiming(def)
 	return nil
 end
 
+-- ===== ⚠️ v87 — CUTSCENE DE HISSATSU =====
+-- PEDIDO: "a cutscene é uma animação, só que vai aparecer ali a câmera
+-- vidrada no personagem. Ninguém vai poder se mexer até ficar 100% completa.
+-- Usou a Hissatsu, vai ter aquele cooldownzinho de 3, 4 segundos (o preparo +
+-- QTE de sempre). Depois vai rolar a animação. Assim que acabar, o chute vai
+-- sair. E aí o GK teria que usar a skill de GK pra defender, o zagueiro a de
+-- zagueiro..."
+--
+-- O servidor aqui só faz o que precisa ser AUTORIDADE:
+--   1. congela o jogo: todo personagem ancorado e com WalkSpeed 0, goleiros
+--      bot parados, bola ancorada, e nenhum comando aceito (BallController e
+--      o UsePulse abaixo checam _G.HissatsuCutsceneActive);
+--   2. manda TODOS os clientes tocarem a cutscene, com o mesmo horário de
+--      início (relógio do servidor), pra ela bater igual em toda tela;
+--   3. quando acaba, põe o chutador e a bola exatamente onde a coreografia
+--      termina (no ar, no ponto do chute), solta tudo e dispara o chute.
+-- O resto — câmera, pose, fogo — é visual e mora no cliente
+-- (HissatsuCutsceneClient.local.luau), lendo a mesma coreografia
+-- (HissatsuCutscenes.luau). A defesa depois do chute é a de sempre: a bola sai
+-- como qualquer chute de Hissatsu e as skills de GK/zagueiro reagem a ela.
+local HissatsuCutscenes = require(ReplicatedStorage:WaitForChild("HissatsuCutscenes"))
+
+_G.HissatsuCutsceneActive = nil
+
+local function playHissatsuCutscene(player, def, onDone)
+	local spec = HissatsuCutscenes[def.Cutscene]
+	local character = player.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	local ball = workspace:FindFirstChild(Config.BALL_NAME)
+	local dono = _G.GetBallOwner and _G.GetBallOwner()
+	-- Sem coreografia, sem corpo, sem bola ou sem a posse: não tem o que
+	-- mostrar — segue direto pro chute (que decide sozinho se ainda dá).
+	if not spec or not root or not ball or dono ~= player then
+		onDone()
+		return
+	end
+
+	-- Uma cutscene por vez: se outra estiver rodando, espera ela acabar.
+	while _G.HissatsuCutsceneActive do
+		task.wait(0.1)
+	end
+	if not root.Parent or (_G.GetBallOwner and _G.GetBallOwner() ~= player) then
+		onDone()
+		return
+	end
+
+	local duration = spec.Duration
+
+	-- Direção da cutscene = pra onde ele mirou (achatado no chão), igual ao
+	-- chute que vai sair no fim.
+	local target = LastAimPoint[player]
+	local flat = target and Vector3.new(target.X - root.Position.X, 0, target.Z - root.Position.Z)
+	if not flat or flat.Magnitude < 0.5 then
+		flat = Vector3.new(root.CFrame.LookVector.X, 0, root.CFrame.LookVector.Z)
+	end
+	if flat.Magnitude < 0.01 then flat = Vector3.new(0, 0, -1) end
+	local startCFrame = CFrame.lookAt(root.Position, root.Position + flat.Unit)
+
+	_G.HissatsuCutsceneActive = { Player = player, Until = tick() + duration }
+
+	-- 1) congela todo mundo (chutador incluso)
+	local ancorados = {}
+	for _, other in ipairs(Players:GetPlayers()) do
+		local otherRoot = other.Character and other.Character:FindFirstChild("HumanoidRootPart")
+		if otherRoot then
+			otherRoot.AssemblyLinearVelocity = Vector3.zero
+			otherRoot.Anchored = true
+			table.insert(ancorados, otherRoot)
+			freezeMovement(other, duration + 0.1)
+		end
+	end
+	root.CFrame = startCFrame
+	if _G.GetGKBotPositions and _G.FreezeGKBot then
+		for _, bot in ipairs(_G.GetGKBotPositions()) do
+			_G.FreezeGKBot(bot.TeamName, duration + 0.1)
+		end
+	end
+	local congelouBola = _G.FreezeBallForQTE and _G.FreezeBallForQTE() or false
+	if not congelouBola then ball.Anchored = true end -- já estava congelada por outro motivo: garante mesmo assim
+	if _G.GrantPulseIframe then _G.GrantPulseIframe(player, duration + 0.3) end
+
+	local ballLocal = startCFrame:PointToObjectSpace(ball.Position)
+
+	-- 2) todo mundo assiste, sincronizado pelo relógio do servidor
+	-- ⚠️ v108: Zona Morta de três — os vértices do triângulo são os 2 companheiros
+	-- de verdade (o cliente copia a aparência deles no lugar das sombras)
+	local extras = nil
+	local trioState = def.Trio and Trio.Ativo[player]
+	if trioState and trioState.Trio then
+		extras = { Companheiros = {} }
+		for _, r in ipairs(trioState.Trio.Apoios) do table.insert(extras.Companheiros, r.Mate) end
+	elseif HissatsuCutscenes[def.Cutscene] and HissatsuCutscenes[def.Cutscene].Clones then
+		-- ⚠️ v108: técnica de dupla (Raio Um) — o companheiro mais perto faz o
+		-- parceiro na cena, com a aparência dele (sem ninguém perto: sombra)
+		local qtd = HissatsuCutscenes[def.Cutscene].Clones.Quantidade or 1
+		extras = { Companheiros = Trio.Proximos(player, 45, qtd) }
+	end
+	Remotes.HissatsuCutscene:FireAllClients(def.Cutscene, player, startCFrame, ballLocal, workspace:GetServerTimeNow(), def.Name, nil, extras)
+	-- ⚠️ v103: a cutscene vai pro replay (o fantasma do chutador faz ela de novo)
+	if _G.RegistrarEventoReplay then
+		_G.RegistrarEventoReplay("Cutscene", {
+			ator = "P" .. player.UserId, nome = def.Cutscene, titulo = def.Name,
+			inicio = { startCFrame:GetComponents() }, bola = { ballLocal.X, ballLocal.Y, ballLocal.Z },
+		})
+	end
+
+	-- 3) no fim: tudo no lugar do último quadro, solta, e o chute sai
+	task.delay(duration, function()
+		for _, r in ipairs(ancorados) do
+			if r.Parent then r.Anchored = false end
+		end
+		if root.Parent then
+			-- ⚠️ v120b — PEDIDO: "depois da Fúria Glacial (e de algumas habilidades) o
+			-- personagem entra na terra, a animação e o torso bugam e ele cai no void".
+			-- O último quadro de várias coreografias é agachado/aterrissando (altura do
+			-- quadril NEGATIVA — e o servidor nem calibra o chão): o HRP era teleportado
+			-- pra baixo da altura de pé e as pernas iam pra dentro do gramado. Agora só
+			-- o deslocamento no chão (X/Z) vale; a altura nunca fica abaixo da de pé.
+			local fim = spec.RootPosition(duration)
+			root.CFrame = startCFrame * CFrame.new(fim.X, math.max(fim.Y, 0), fim.Z)
+			root.AssemblyLinearVelocity = Vector3.zero
+		end
+		if ball.Parent then
+			ball.CFrame = CFrame.new(startCFrame:PointToWorldSpace(spec.BallPosition(duration, ballLocal)))
+		end
+		if congelouBola and _G.ReleaseBallFromQTE then
+			_G.ReleaseBallFromQTE()
+		else
+			ball.Anchored = false
+		end
+		_G.HissatsuCutsceneActive = nil
+		onDone()
+	end)
+end
+
+-- ⚠️ v113 — CENA DO FLOW. PEDIDO: "flows com cutscene de anime de verdade,
+-- 10-15 segundos, por personagem". Mesmo esquema da cutscene de Hissatsu:
+-- congela todo mundo (e o relógio da partida — MatchController olha o campo
+-- Flow), todos os clientes tocam a coreografia HissatsuCutscenes["Flow_..."]
+-- sincronizada, e no fim tudo volta pro lugar. Devolve a duração (0 = sem
+-- cena, o Flow começa na hora). O Flow só começa DEPOIS (InstinctController).
+local CosmeticosFlow = nil
+pcall(function() CosmeticosFlow = require(ReplicatedStorage:WaitForChild("Cosmeticos", 5)) end)
+_G.TocarCenaFlow = function(player)
+	if _G.HissatsuCutsceneActive then return 0 end
+	local item = CosmeticosFlow and (CosmeticosFlow.Equipado(player, "Flow") or CosmeticosFlow.Item("Flow_Isagi"))
+	local spec = item and HissatsuCutscenes[item.Id]
+	local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+	if not spec or not root then return 0 end
+	local duration = spec.Duration
+	local ball = workspace:FindFirstChild(Config.BALL_NAME)
+	local flat = Vector3.new(root.CFrame.LookVector.X, 0, root.CFrame.LookVector.Z)
+	if flat.Magnitude < 0.01 then flat = Vector3.new(0, 0, -1) end
+	local startCFrame = CFrame.lookAt(root.Position, root.Position + flat.Unit)
+	_G.HissatsuCutsceneActive = { Player = player, Until = tick() + duration, Flow = true }
+
+	local ancorados = {}
+	for _, other in ipairs(Players:GetPlayers()) do
+		local otherRoot = other.Character and other.Character:FindFirstChild("HumanoidRootPart")
+		if otherRoot then
+			otherRoot.AssemblyLinearVelocity = Vector3.zero
+			otherRoot.Anchored = true
+			table.insert(ancorados, otherRoot)
+			freezeMovement(other, duration + 0.1)
+		end
+	end
+	if _G.GetGKBotPositions and _G.FreezeGKBot then
+		for _, bot in ipairs(_G.GetGKBotPositions()) do
+			_G.FreezeGKBot(bot.TeamName, duration + 0.1)
+		end
+	end
+	local congelouBola = false
+	if ball then
+		congelouBola = _G.FreezeBallForQTE and _G.FreezeBallForQTE() or false
+		if not congelouBola then ball.Anchored = true end
+	end
+	if _G.GrantPulseIframe then _G.GrantPulseIframe(player, duration + 0.3) end
+	local ballLocal = ball and startCFrame:PointToObjectSpace(ball.Position) or Vector3.new(0, -2.3, -1.8)
+	-- ⚠️ v119 — PEDIDO: "o Rin é um companheiro aleatório, não um fantasma". A cena
+	-- que pede (CompanheiroAleatorio) recebe um companheiro de time sorteado; sem
+	-- ninguém no time, o cliente usa a sombra.
+	local extras = nil
+	if spec.CompanheiroAleatorio then
+		local mates = {}
+		for _, other in ipairs(Players:GetPlayers()) do
+			if other ~= player and other.Team and other.Team == player.Team
+				and other.Character and other.Character:FindFirstChild("HumanoidRootPart") then
+				table.insert(mates, other)
+			end
+		end
+		-- ⚠️ v120b — PEDIDO: "o Rin (alguém aleatório) não tá aparecendo". Sem colega
+		-- de time aparecia uma sombra do PRÓPRIO jogador; agora: colega de time →
+		-- qualquer outro jogador → um goleiro bot (o cliente aceita Player ou Model)
+		if #mates == 0 then
+			for _, other in ipairs(Players:GetPlayers()) do
+				if other ~= player and other.Character and other.Character:FindFirstChild("HumanoidRootPart") then
+					table.insert(mates, other)
+				end
+			end
+		end
+		if #mates == 0 then
+			for _, m in ipairs(workspace:GetChildren()) do
+				if m:IsA("Model") and m.Name:sub(1, 6) == "GKBot_" and m:FindFirstChild("HumanoidRootPart") then
+					table.insert(mates, m)
+				end
+			end
+		end
+		if #mates > 0 then extras = { Companheiros = { mates[math.random(1, #mates)] } } end
+	end
+	Remotes.HissatsuCutscene:FireAllClients(item.Id, player, startCFrame, ballLocal, workspace:GetServerTimeNow(),
+		"FLOW · " .. string.upper(item.Personagem or ""), duration, extras)
+
+	task.delay(duration, function()
+		for _, r in ipairs(ancorados) do
+			if r.Parent then r.Anchored = false end
+		end
+		if root.Parent then
+			root.CFrame = startCFrame
+			root.AssemblyLinearVelocity = Vector3.zero
+		end
+		if ball and ball.Parent then
+			if congelouBola and _G.ReleaseBallFromQTE then
+				_G.ReleaseBallFromQTE()
+			else
+				ball.Anchored = false
+			end
+		end
+		_G.HissatsuCutsceneActive = nil
+	end)
+	return duration
+end
+
+-- ⚠️ v103 — CUTSCENE DE DEFESA. PEDIDO: "a Hissatsu de GK e de defensor
+-- precisa sair instantaneamente com a colisão na hitbox, e a cutscene da
+-- defesa vai acontecer se a bola colidir com essa hitbox." Chamada pelo
+-- BallController (goleiro humano) e pelo GKBotController (bot) no instante da
+-- colisão: congela todo mundo (igual a cutscene de chute) e todos os clientes
+-- tocam a cutscene da técnica do goleiro (HissatsuCutscenes.Defesa_*) pela
+-- duração do duelo. A bola já está congelada pela guarda. Devolve true se
+-- tocou (quem chamou espera o fim pra aplicar o resultado).
+_G.TocarCutsceneDeDefesa = function(model, def, duracao)
+	if not model or not def then return false end
+	if _G.HissatsuCutsceneActive then return false end
+	local nome = def.CutsceneDefesa or (HissatsuCutscenes.DefesaPorNome and HissatsuCutscenes.DefesaPorNome[def.Name])
+	if not nome or not HissatsuCutscenes[nome] then return false end
+	local root = model:FindFirstChild("HumanoidRootPart")
+	local ball = workspace:FindFirstChild(Config.BALL_NAME)
+	if not root or not ball then return false end
+	duracao = math.clamp(tonumber(duracao) or 3.5, 1.5, 6)
+
+	local plano = Vector3.new(ball.Position.X - root.Position.X, 0, ball.Position.Z - root.Position.Z)
+	if plano.Magnitude < 0.2 then plano = Vector3.new(root.CFrame.LookVector.X, 0, root.CFrame.LookVector.Z) end
+	if plano.Magnitude < 0.01 then plano = Vector3.new(0, 0, -1) end
+	local inicio = CFrame.lookAt(root.Position, root.Position + plano.Unit)
+	local ballLocal = inicio:PointToObjectSpace(ball.Position)
+
+	_G.HissatsuCutsceneActive = { Player = Players:GetPlayerFromCharacter(model), Until = tick() + duracao, Defesa = true }
+	local ancorados = {}
+	for _, other in ipairs(Players:GetPlayers()) do
+		local r = other.Character and other.Character:FindFirstChild("HumanoidRootPart")
+		if r and not r.Anchored then
+			r.AssemblyLinearVelocity = Vector3.zero
+			r.Anchored = true
+			table.insert(ancorados, r)
+		end
+		freezeMovement(other, duracao + 0.1)
+	end
+	if _G.GetGKBotPositions and _G.FreezeGKBot then
+		for _, bot in ipairs(_G.GetGKBotPositions()) do
+			_G.FreezeGKBot(bot.TeamName, duracao + 0.1)
+		end
+	end
+
+	local ator = Players:GetPlayerFromCharacter(model) or model
+	Remotes.HissatsuCutscene:FireAllClients(nome, ator, inicio, ballLocal, workspace:GetServerTimeNow(), def.Name, duracao)
+	if _G.RegistrarEventoReplay and _G.IdDoAtorReplay then
+		local id = _G.IdDoAtorReplay(model)
+		if id then
+			_G.RegistrarEventoReplay("Cutscene", {
+				ator = id, nome = nome, titulo = def.Name, dur = duracao,
+				inicio = { inicio:GetComponents() }, bola = { ballLocal.X, ballLocal.Y, ballLocal.Z },
+			})
+		end
+	end
+
+	task.delay(duracao, function()
+		for _, r in ipairs(ancorados) do
+			if r.Parent then r.Anchored = false end
+		end
+		_G.HissatsuCutsceneActive = nil
+	end)
+	return true
+end
+
 local function resolveHissatsu(state, player, slot)
 	if state.Resolved then return end
 	state.Resolved = true
@@ -1342,7 +2182,8 @@ local function resolveHissatsu(state, player, slot)
 	-- no fim da janela — quem acerta os cliques rápido volta a se mexer
 	-- antes. A guarda do goleiro tem congelamento próprio
 	-- (_G.ConsumeGKGuardOnCollision) e não passa por essa checagem.
-	if state.Kind == "Tap" and state.Def and (state.Def.Action == "Shot" or state.Def.FreezeBall) then
+	if state.Kind == "Tap" and state.Def and (state.Def.Action == "Shot" or state.Def.FreezeBall)
+		and not state.CutsceneMode then -- ⚠️ v95: com cutscene, quem solta é o fim dela
 		clearMovementFreeze(player)
 	end
 
@@ -1370,7 +2211,7 @@ local function resolveHissatsu(state, player, slot)
 
 	local resolvedEffect = state.Perfect and state.Def.Perfect or state.Def.Bom
 
-	-- ⚠️ v28: cada clique ALÉM do básico (os que o atributo Energy liberou)
+	-- ⚠️ v28: cada clique ALÉM do básico (os que a fórmula da Hissatsu liberou)
 	-- soma força de verdade no chute — é o que faz o atributo valer a pena
 	-- em vez de só encher a tela de alvo.
 	if state.BaseHits and state.Hits and state.Hits > state.BaseHits and resolvedEffect then
@@ -1378,6 +2219,18 @@ local function resolveHissatsu(state, player, slot)
 		local boosted = table.clone(resolvedEffect)
 		boosted.ForceMult = (boosted.ForceMult or 1) * (1 + extraHits * Config.HISSATSU_QTE_BONUS_HIT_FORCE)
 		resolvedEffect = boosted
+	end
+
+	-- ⚠️ v87/v95: Hissatsu com cutscene — o QTE roda DURANTE ela, e o chute
+	-- só sai no último quadro. Se o QTE resolveu antes do fim (o normal),
+	-- guarda o efeito e quem executa é o fim da cutscene (ver startHissatsuQTE).
+	if state.CutsceneMode then
+		state.EfeitoFinal = resolvedEffect
+		if state.CutsceneAcabou and not state.Executou then
+			state.Executou = true
+			resolveAndExecute(player, slot, state.Def, resolvedEffect)
+		end
+		return
 	end
 
 	resolveAndExecute(player, slot, state.Def, resolvedEffect)
@@ -1423,20 +2276,39 @@ local function startHissatsuQTE(player, slot, def, onResolved)
 		-- é ganhar mais TRÊS clicadas, e tempo suficiente pra conseguir
 		-- clicar em todas se estiver maximizado."
 		--
-		-- Energy alto dá as duas coisas juntas, de propósito: mais cliques
+		-- Nota alta dá as duas coisas juntas, de propósito: mais cliques
 		-- disponíveis E janela maior pra alcançá-los. Se só os cliques
 		-- subissem, atributo alto viraria punição (mais alvos no mesmo
 		-- tempo). A janela cresce um pouco mais rápido que os cliques, então
 		-- quem está no máximo consegue mesmo fechar todos.
-		local energyValue = player:GetAttribute(Config.ENERGY_ATTRIBUTE)
-		if typeof(energyValue) ~= "number" then energyValue = Config.DEFAULT_ENERGY end
-		local energyFraction = math.clamp(energyValue, 0, 100) / 100
+		--
+		-- ⚠️ NOVO: a nota NÃO é mais a Energy (Energia é recurso, não
+		-- potência) — é a FÓRMULA da própria Hissatsu (Scaling). Um chute
+		-- 60% Chute + 40% Técnica ganha cliques com esses dois atributos.
+		-- Sem fórmula, nota neutra (50).
+		local rating = Config.GetHissatsuAttributeRating(player, def) or 50
+		local energyFraction = math.clamp(rating, 0, 100) / 100
 
 		local baseHits = math.max(qte.HitCount or 5, 1)
 		local bonusHits = math.floor(energyFraction * Config.HISSATSU_QTE_MAX_BONUS_HITS + 0.0001)
 
 		hitWindow = hitWindow * (1 + energyFraction * Config.HISSATSU_QTE_WINDOW_BONUS)
 		total = prepTime + hitWindow
+
+		-- ⚠️ v95 — PEDIDO: "os quick time events precisam ser ativados DURANTE
+		-- a cutscene... atualmente são ativados antes da cutscene acontecer,
+		-- mas precisa ser ao mesmo tempo". Hissatsu com cutscene: no fim do
+		-- preparo a cutscene E o QTE começam juntos (ver o task.delay(prepTime)
+		-- logo abaixo). A janela de cliques é encurtada pra caber na cutscene
+		-- (acaba meio segundo antes do chute sair), e o resultado fica guardado
+		-- até o último quadro — é lá que o chute sai (ver resolveHissatsu).
+		local specCutscene = def.Cutscene and HissatsuCutscenes[def.Cutscene]
+		if specCutscene then
+			hitWindow = math.min(hitWindow, math.max(specCutscene.Duration - 0.5, 0.5))
+			total = prepTime + hitWindow
+			state.CutsceneMode = true
+			promptParams.EmCutscene = true
+		end
 
 		state.PrepTime = prepTime
 		state.HitWindow = hitWindow
@@ -1445,6 +2317,43 @@ local function startHissatsuQTE(player, slot, def, onResolved)
 		promptParams.PrepTime = prepTime
 		promptParams.HitWindow = hitWindow
 		promptParams.RequiredHits = state.RequiredHits
+
+		-- ⚠️ v108 — ZONA MORTA DE TRÊS: os 2 companheiros mais perto recebem o
+		-- MESMO QTE (mesma janela, os cliques básicos da técnica) no slot
+		-- "Apoio". Cada um registra se fechou os cliques e se foi perfeito; a
+		-- conta final é no resolveAndExecute (Trio.Efeito), no fim da cutscene.
+		if def.Trio then
+			state.Jogador = player
+			state.Trio = { Apoios = {} }
+			Trio.Ativo[player] = state
+			for _, mate in ipairs(Trio.Companheiros(player, def)) do
+				ensurePlayerTables(mate)
+				local registro = { Mate = mate, Ok = false, Perfect = false }
+				local apoio = {
+					Kind = "Tap", Def = def, StepsStart = state.StepsStart, Resolved = false, Perfect = false,
+					Hits = 0, PrepTime = prepTime, HitWindow = hitWindow, BaseHits = baseHits, RequiredHits = baseHits,
+					CutsceneMode = true, -- (não mexe no congelamento de quem apoia)
+				}
+				apoio.OnResolved = function(perfect, hits)
+					registro.Ok = (hits or 0) >= apoio.RequiredHits
+					registro.Perfect = registro.Ok and perfect and true or false
+					registro.Hits = hits or 0 -- ⚠️ v110: a força soma pelos cliques de cada um
+					registro.Req = apoio.RequiredHits
+				end
+				table.insert(state.Trio.Apoios, registro)
+				Pending[mate].Apoio = apoio
+				local params = table.clone(promptParams)
+				params.PrepTime = 0
+				params.RequiredHits = apoio.RequiredHits
+				task.delay(prepTime, function()
+					if apoio.Resolved or not mate.Parent then return end
+					Remotes.PulseQTEPrompt:FireClient(mate, "Apoio", def.Name, params)
+				end)
+				task.delay(prepTime + hitWindow + 0.15, function()
+					if not apoio.Resolved then resolveHissatsu(apoio, mate, "Apoio") end
+				end)
+			end
+		end
 
 		-- ⚠️ v11 PEDIDO: "o cara não pode se mexer durante a habilidade, pra
 		-- ter aquela vulnerabilidade. Ele tá armando uma Hissatsu forte."
@@ -1460,6 +2369,14 @@ local function startHissatsuQTE(player, slot, def, onResolved)
 		-- "não pode se mexer durante a habilidade" volta a valer também ali.
 		if def.Action == "Shot" or def.FreezeBall then
 			freezeMovement(player, total)
+		end
+		-- ⚠️ v103 — PEDIDO: "coloca uma animação pra iniciar todas as
+		-- Hissatsus... começa a preparar um chutão diferente, um foguinho em
+		-- volta dele bem de leve, umas faíscas". Pose e VFX leve do PREPARO,
+		-- em todo cliente (AnimadorProcedural + HissatsuCutsceneClient).
+		if def.Action == "Shot" and player.Character and Remotes.AcaoAnimada and prepTime > 0.1 then
+			Remotes.AcaoAnimada:FireAllClients(player.Character, "HissatsuPreparo", prepTime,
+				{ Estilo = def.Cutscene or def.Element or "Padrao" })
 		end
 
 		-- ⚠️ v14: a bola trava no ar JÁ no aperto (não depois do preparo) —
@@ -1487,7 +2404,27 @@ local function startHissatsuQTE(player, slot, def, onResolved)
 			-- ⚠️ v14: o salto sai junto com o iframe, no fim do preparo — é
 			-- o momento em que a técnica "acontece". Quem não tem
 			-- AirLaunchHeight simplesmente continua no chão.
-			launchIntoAir(player, def.AirLaunchHeight)
+			-- ⚠️ v87: Hissatsu com cutscene não pula aqui — o salto é da
+			-- própria cutscene, que começa com os pés no chão.
+			if not def.Cutscene then
+				launchIntoAir(player, def.AirLaunchHeight)
+			end
+			-- ⚠️ v95: a cutscene começa AGORA, junto com o QTE (o prompt do
+			-- QTE sai neste mesmo instante, ver o task.delay(prepTime) do
+			-- PulseQTEPrompt mais abaixo). No último quadro dela o chute sai
+			-- com o que o QTE decidiu — ou, se o jogador ainda não terminou de
+			-- clicar (não deveria: a janela acaba antes), resolve ali mesmo.
+			if state.CutsceneMode then
+				playHissatsuCutscene(player, def, function()
+					state.CutsceneAcabou = true
+					if not state.Resolved then
+						resolveHissatsu(state, player, slot) -- já executa: CutsceneAcabou
+					elseif state.EfeitoFinal and not state.Executou then
+						state.Executou = true
+						resolveAndExecute(player, slot, def, state.EfeitoFinal)
+					end
+				end)
+			end
 		end)
 	elseif qte.Kind == "TimingBar" then
 		state.Duration = total
@@ -1587,26 +2524,87 @@ _G.GetGKGuard = function(player)
 	return guard
 end
 
+-- ⚠️ v108 — chute NORMAL (não-Hissatsu) na guarda: o goleiro pega na hora, SEM
+-- QTE (ver BallController, "defesa instantânea"). Consome a guarda, solta o
+-- goleiro e fecha o indicador de guarda armada no cliente. Devolve a Hissatsu.
+_G.ConsumirGuardaSemQTE = function(player)
+	local guard = GKGuard[player]
+	if not guard or tick() >= guard.ExpiresAt then return nil end
+	GKGuard[player] = nil
+	clearMovementFreeze(player)
+	feedback(player, "Fired", guard.Def.Name)
+	if _G.RegistrarEstatistica then _G.RegistrarEstatistica(player, "Hissatsus") end -- ⚠️ v123
+	return guard.Def
+end
+
 -- Chamado por BallController.legacy.luau quando o chute de Pulso colide
 -- com a área da guarda — CONSOME a guarda (só serve pra 1 bola) e só
 -- ENTÃO dispara o TimingBar de verdade. onResult(perfect, effect) é
 -- chamado quando o QTE resolver (clique do goleiro ou timeout).
-_G.ConsumeGKGuardOnCollision = function(player, onResult)
+-- ⚠️ v103: onHit(hits, dano) é chamado a CADA acerto do QTE do goleiro, com
+-- o dano daquele acerto (Config.DEFESA_DANO_POR_ACERTO pela raridade x escala
+-- de atributo; acerto perfeito vale mais) — é o que tira vida da bola no
+-- duelo (ver iniciarDueloDeDefesa no BallController).
+local function danoPorAcertoDeDefesa(player, def)
+	local base = (Config.DEFESA_DANO_POR_ACERTO or {})[def.Rarity or "Common"] or 25
+	return base * getPulsePowerScale(player, def)
+end
+_G.DanoPorAcertoDeDefesa = danoPorAcertoDeDefesa
+
+-- ⚠️ v107 — dano da defesa em duas partes (ver Config.DEFESA_IMPACTO_FRACAO):
+-- IMPACTO (entra quando a mão/soco encontra a bola) + POR ACERTO do QTE.
+-- Capacidade = dano por acerto x acertos pedidos, vezes: escala de atributo
+-- (player) ou `escala` (bot), elemento contra o chute atual e bônus de
+-- elemento próprio. player pode ser nil (goleiro bot).
+local function danoDaDefesa(player, def, escala)
+	local acertos = (def.QTE and def.QTE.RequiredHits) or 5
+	local base = (Config.DEFESA_DANO_POR_ACERTO or {})[def.Rarity or "Common"] or 25
+	local mult = escala or (player and getPulsePowerScale(player, def)) or 1
+	local info = _G.GetLastPulseShotInfo and _G.GetLastPulseShotInfo()
+	local elemChute = info and info.Element
+	local elemental = Config.MultElementalDaDefesa and Config.MultElementalDaDefesa(elemChute, def.Element) or 1
+	local proprio = player and getElementSelfMatchScale(player, def) or 1
+	local capacidade = base * acertos * mult * elemental * proprio
+	-- ⚠️ v109: chute que QUEBRA defesa (Ruptura de Gaia) tira essa fração da capacidade
+	local quebra = info and tonumber(info.QuebraDefesa) or 0
+	if quebra > 0 then capacidade *= (1 - math.clamp(quebra, 0, 0.8)) end
+	local fracao = Config.DEFESA_IMPACTO_FRACAO or 0.5
+	if Config.PULSE_FORCE_DEBUG_PRINTS then
+		print(string.format("🧤 [Duelo] %s (%s) x chute %s: capacidade %d (atributo %.2f, elemento %.2f, próprio %.2f) = impacto %d + %d por acerto",
+			def.Name or "?", tostring(def.Element), tostring(elemChute), math.floor(capacidade), mult, elemental, proprio,
+			math.floor(capacidade * fracao), math.floor(capacidade * (1 - fracao) / acertos)))
+	end
+	return capacidade * fracao, capacidade * (1 - fracao) / acertos, acertos
+end
+_G.DanoDaDefesa = danoDaDefesa
+
+_G.ConsumeGKGuardOnCollision = function(player, onResult, onHit)
 	local guard = GKGuard[player]
 	if not guard then return false end
 	GKGuard[player] = nil
 	freezeMovement(player, hissatsuTiming(guard.Def) or 3)
-	startHissatsuQTE(player, guard.Slot, guard.Def, function(perfect)
+	local impacto, dano = danoDaDefesa(player, guard.Def)
+	-- ⚠️ v107: o impacto entra quando a mão encontra a bola na cutscene
+	if onHit then
+		task.delay(0.5, function() onHit(0, impacto) end)
+	end
+	startHissatsuQTE(player, guard.Slot, guard.Def, function(perfect, hits)
 		-- ⚠️ v36: DiveRadiusAdd também escala com Physical, igual GuardSize
 		-- (ver applyPulsePowerScale/getPulsePowerScale acima).
 		local effect = applyPulsePowerScale(player, guard.Def, perfect and guard.Def.Perfect or guard.Def.Bom)
-		onResult(perfect, effect)
+		onResult(perfect, effect, hits)
 	end)
+	local state = Pending[player] and Pending[player][guard.Slot]
+	if state and onHit then
+		state.OnHit = function(hits, perfeito)
+			onHit(hits, dano * (perfeito and (Config.DEFESA_DANO_PERFEITO_MULT or 1) or 1))
+		end
+	end
 	return true
 end
 
 Remotes.PulseQTEInput.OnServerEvent:Connect(function(player, slotArg, payload)
-	local slot = (slotArg == 2) and 2 or 1
+	local slot = (slotArg == 2 and 2) or (slotArg == "Apoio" and "Apoio") or 1 -- ⚠️ v108: "Apoio" = companheiro da Zona Morta
 	local state = Pending[player] and Pending[player][slot]
 	if not state or state.Resolved or not state.Kind then return end -- not state.Kind: é um combo de teclas antigo, não um Hissatsu QTE
 
@@ -1624,6 +2622,7 @@ Remotes.PulseQTEInput.OnServerEvent:Connect(function(player, slotArg, payload)
 		end
 		state.Hits += 1
 		feedback(player, "ComboStep", { Index = state.Hits, Hit = true })
+		if state.OnHit then state.OnHit(state.Hits, false) end -- ⚠️ v103: duelo de defesa
 		if state.Hits >= state.RequiredHits then
 			local elapsedInWindow = now - openAt
 			state.Perfect = elapsedInWindow <= state.HitWindow * 0.7
@@ -1651,6 +2650,7 @@ Remotes.PulseQTEInput.OnServerEvent:Connect(function(player, slotArg, payload)
 		-- ⚠️ v24: manda a QUALIDADE junto — acerto na faixa perfeita pisca
 		-- DOURADO, acerto só "bom" pisca verde.
 		feedback(player, "ComboStep", { Index = state.Hits, Hit = true, Perfect = isPerfectHit })
+		if state.OnHit then state.OnHit(state.Hits, isPerfectHit) end -- ⚠️ v103: duelo de defesa
 		if state.Hits >= state.RequiredHits then
 			state.Perfect = state.AllPerfect
 			resolveHissatsu(state, player, slot)
@@ -1730,7 +2730,27 @@ Remotes.PulsePrecisionInput.OnServerEvent:Connect(function(player, slotArg, keyA
 end)
 
 -- ===== ENTRADA PRINCIPAL: aperta o botão do Pulso =====
-Remotes.UsePulse.OnServerEvent:Connect(function(player, slotArg, aimPointArg)
+local AguardandoCutscene = {} -- ⚠️ v105: [player] = true com um aperto de guarda guardado (ver abaixo)
+Players.PlayerRemoving:Connect(function(p) AguardandoCutscene[p] = nil end)
+local function onUsePulse(player, slotArg, aimPointArg)
+	-- ⚠️ v105 — "a Hissatsu mítica do goleiro não tirava nada de vida": o goleiro
+	-- arma a guarda apertando a tecla QUANDO VÊ o chute vindo — que é justamente
+	-- durante a cutscene do chute, quando todo aperto era jogado fora. Sem
+	-- guarda, sem colisão, sem QTE: a bola passava inteira. Agora, goleiro na
+	-- área que aperta durante a cutscene tem o aperto GUARDADO e aplicado assim
+	-- que ela acaba (antes da bola voar). O resto continua bloqueado (v87).
+	if _G.HissatsuCutsceneActive then
+		if GKAreaUtil.IsEffectiveGK(player) and not AguardandoCutscene[player] then
+			AguardandoCutscene[player] = true
+			task.spawn(function()
+				local limite = tick() + 12
+				while _G.HissatsuCutsceneActive and tick() < limite do task.wait(0.05) end
+				AguardandoCutscene[player] = nil
+				if player.Parent then onUsePulse(player, slotArg, aimPointArg) end
+			end)
+		end
+		return
+	end
 	-- ⚠️ v76: slot 3 adicionado (Hissatsu extra comprada com Robux — ver
 	-- RollServer.legacy.luau no Lobby). Qualquer coisa que não seja 2 ou
 	-- 3 continua caindo em 1, igual sempre foi.
@@ -1753,20 +2773,30 @@ Remotes.UsePulse.OnServerEvent:Connect(function(player, slotArg, aimPointArg)
 	-- local.luau).
 	-- ⚠️ v76: slot >= 2 (era só "== 2") — goleiro dentro da área continua
 	-- restrito a 1 slot só, e agora existe um slot 3 pra também bloquear.
-	if slot >= 2 and GKAreaUtil.IsEffectiveGK(player) then
-		feedback(player, "WrongRole", slot)
-		return
-	end
-
+	-- ⚠️ v106 — PEDIDO: "o slot 2 às vezes não funciona pra algumas pessoas, o
+	-- slot 1 pra outras... os dois têm que funcionar". O goleiro na área só
+	-- podia usar o SLOT 1 — quem tinha a Hissatsu de goleiro no slot 2 não
+	-- conseguia defender com ela. Agora vale o TIPO, não o número do slot: na
+	-- área, o goleiro usa a Hissatsu de goleiro que estiver em qualquer slot
+	-- (as de linha continuam bloqueadas pra ele lá dentro).
 	local pulseName = Loadout[player][slot]
 	if not pulseName then
 		feedback(player, "NoPulseEquipped", slot)
 		return
 	end
 	local def = findPulse(pulseName)
-	if not def then return end
+	if not def then
+		warn(("[Pulso] %s: a Hissatsu '%s' do slot %d não existe nos dados (nome antigo?)"):format(player.Name, tostring(pulseName), slot))
+		feedback(player, "NoPulseEquipped", slot)
+		return
+	end
+	if GKAreaUtil.IsEffectiveGK(player) and def.RoleRequired ~= "GK" then
+		feedback(player, "WrongRole", slot)
+		return
+	end
 
-	if not DebugNoDelay[player] and ReadyAt[player][slot] and tick() < ReadyAt[player][slot] then
+	local debugFlags = DebugFlags[player] or {}
+	if not DebugNoDelay[player] and not debugFlags.SemCooldown and ReadyAt[player][slot] and tick() < ReadyAt[player][slot] then
 		feedback(player, "OnCooldown", ReadyAt[player][slot] - tick())
 		return
 	end
@@ -1784,6 +2814,13 @@ Remotes.UsePulse.OnServerEvent:Connect(function(player, slotArg, aimPointArg)
 		feedback(player, "NoTarget", reason)
 		return
 	end
+	-- ⚠️ v108: Zona Morta só com 2 companheiros perto (nada gasto se faltar)
+	-- (debugger "chutes em grupo sozinho": sem companheiros, sombras no lugar)
+	if def.Trio and not (DebugFlags[player] and DebugFlags[player].TrioSozinho)
+		and #Trio.Companheiros(player, def) < (def.Trio.Companheiros or 2) then
+		feedback(player, "Aviso", ("%s precisa de %d companheiros perto de você"):format(def.Name, def.Trio.Companheiros or 2))
+		return
+	end
 
 	-- ⚠️ v9: "energia de ativação" — sem pool suficiente, o Pulso nem
 	-- dispara (cooldown NÃO começa a contar, pra não punir duas vezes).
@@ -1791,13 +2828,19 @@ Remotes.UsePulse.OnServerEvent:Connect(function(player, slotArg, aimPointArg)
 	-- ⚠️ v27: o custo agora depende da RARIDADE (ver
 	-- Config.PULSE_ENERGY_COST_BY_RARITY) — é o que limita quantas vezes uma
 	-- Hissatsu forte cabe numa rodada, já que o pool só reenche no intervalo.
-	local energyCost = (Config.PULSE_ENERGY_COST_BY_RARITY and Config.PULSE_ENERGY_COST_BY_RARITY[def.Rarity])
+	-- ⚠️ NOVO: def.EnergyCost (opcional) — custo próprio da Hissatsu, na
+	-- frente da tabela por raridade. PEDIDO: "A Energia deve determinar o
+	-- custo para utilizar a Hissatsu, e não sua potência".
+	local energyCost = (typeof(def.EnergyCost) == "number" and def.EnergyCost)
+		or (Config.PULSE_ENERGY_COST_BY_RARITY and Config.PULSE_ENERGY_COST_BY_RARITY[def.Rarity])
 		or Config.PULSE_ENERGY_COST
+	if debugFlags.Energia then EnergyPool[player] = maxEnergyPool(player) end -- ⚠️ v110: debug, energia infinita
 	if EnergyPool[player] < energyCost then
 		feedback(player, "NotEnoughEnergy", energyCost - EnergyPool[player])
 		return
 	end
 	EnergyPool[player] -= energyCost
+	if debugFlags.Energia then EnergyPool[player] = maxEnergyPool(player) end
 	lastSentEnergy[player] = math.floor(EnergyPool[player] + 0.5)
 	Remotes.PulseEnergyFeedback:FireClient(player, lastSentEnergy[player], math.floor(maxEnergyPool(player)))
 
@@ -1819,6 +2862,14 @@ Remotes.UsePulse.OnServerEvent:Connect(function(player, slotArg, aimPointArg)
 		_G.StartPulseDashTackle(player, slot, def)
 	elseif def.QTE then
 		startHissatsuQTE(player, slot, def)
+	elseif def.Cutscene and def.Action ~= "Shot" then
+		-- ⚠️ v110 — DRIBLE COM CUTSCENE (Chuva de Meteoros): sem QTE; a cena
+		-- toca pra todo mundo e, no último quadro dela (os meteoros acabaram de
+		-- cair), o drible sai e quem estava no raio é derrubado.
+		grantWindupIframe(player, def, 0)
+		playHissatsuCutscene(player, def, function()
+			resolveAndExecute(player, slot, def, def.Effect)
+		end)
 	else
 		-- Mesmo instantâneo, um Pulso pode pedir iframe explicitamente
 		-- (Iframe = true) — o wind-up dele é 0, então a regra automática
@@ -1826,7 +2877,8 @@ Remotes.UsePulse.OnServerEvent:Connect(function(player, slotArg, aimPointArg)
 		grantWindupIframe(player, def, 0)
 		resolveAndExecute(player, slot, def, def.Effect)
 	end
-end)
+end
+Remotes.UsePulse.OnServerEvent:Connect(onUsePulse)
 
 -- ===== BUFFS ATIVOS (1 por slot, os dois somam) =====
 local function getActiveEffects(player)
@@ -1918,6 +2970,64 @@ _G.GetPulseBlock = function(player)
 	return bestRadius, bestImpulse
 end
 
+-- ⚠️ v120b — MURALHA INFINITA GIGANTE. PEDIDO: "a muralha tá muito pequena — o
+-- tamanho base dela é pra ser literalmente gigante (gostei da aparência). E a
+-- hitbox é bem maior do que ela: a hitbox precisa ser ELA — se bater nela, contou.
+-- As pessoas podem passar no meio dela, a bola não." A barreira com `Muro` no
+-- efeito deixa de ser uma esfera em volta de quem usa e vira a CAIXA do muro, na
+-- frente dele (mesma conta do desenho em HissatsuVFXClient). Barreiras sem Muro
+-- (outros Pulsos) continuam com o raio.
+do -- (do...end: sem gastar locals do topo do script)
+local function raizDe(player)
+	return player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+end
+local function muroDe(player, e)
+	local root = raizDe(player)
+	if not root then return nil end
+	local m = e.Muro
+	local frente = Vector3.new(root.CFrame.LookVector.X, 0, root.CFrame.LookVector.Z)
+	frente = frente.Magnitude > 0.01 and frente.Unit or Vector3.new(0, 0, -1)
+	-- companheiros perto (cresce com eles, igual ao desenho do muro)
+	local aliados = 0
+	for _, mate in ipairs(Players:GetPlayers()) do
+		if mate ~= player and player.Team and mate.Team == player.Team then
+			local r = raizDe(mate)
+			if r and (r.Position - root.Position).Magnitude <= 45 then aliados += 1 end
+		end
+	end
+	aliados = math.min(aliados, 2)
+	local largura = (m.Largura or 40) + (m.PorAliado or 10) * aliados
+	local altura = (m.Altura or 26) + (m.AlturaPorAliado or 3) * aliados
+	local chao = root.Position.Y - 3
+	local centro = Vector3.new(root.Position.X, chao + altura / 2, root.Position.Z) + frente * (m.Distancia or 8)
+	return {
+		CFrame = CFrame.lookAt(centro, centro + frente),
+		Tamanho = Vector3.new(largura, altura, m.Espessura or 4),
+	}
+end
+_G.MuroDaBarreira = function(player)
+	local e1, e2 = getActiveEffects(player)
+	for _, e in ipairs({ e1, e2 }) do
+		if e and e.Muro and e.BlockRadius then return muroDe(player, e) end
+	end
+	return nil
+end
+-- pos está dentro da barreira de `player`? (folga = raio da bola)
+_G.DentroDaBarreira = function(player, pos, folga)
+	local raio = _G.GetPulseBlock(player)
+	if not raio then return false end
+	local muro = _G.MuroDaBarreira(player)
+	if muro then
+		local rel = muro.CFrame:PointToObjectSpace(pos)
+		local f = folga or 0
+		return math.abs(rel.X) <= muro.Tamanho.X / 2 + f and math.abs(rel.Y) <= muro.Tamanho.Y / 2 + f
+			and math.abs(rel.Z) <= muro.Tamanho.Z / 2 + f
+	end
+	local root = raizDe(player)
+	return root ~= nil and (root.Position - pos).Magnitude <= raio
+end
+end
+
 -- Goleiro: bônus de mergulho vindo de um Pulso ATIVO (buff em duração —
 -- Muralha/Muralha Impenetrável/Reflexo Absoluto). Soma os dois slots.
 _G.GetPulseGKDiveBonus = function(player)
@@ -1993,12 +3103,27 @@ RunService.Heartbeat:Connect(function()
 	end
 end)
 
+-- ⚠️ v110 (debugger): zera AGORA os cooldowns das Hissatsus (o = "Cooldown") ou
+-- enche a energia (o = "Energia"), e avisa o HUD pra limpar a contagem.
+_G.ZerarPulseDebug = function(player, o)
+	ensurePlayerTables(player)
+	if o == "Cooldown" then
+		ReadyAt[player] = {}
+		feedback(player, "CooldownsZerados")
+	elseif o == "Energia" then
+		EnergyPool[player] = maxEnergyPool(player)
+		lastSentEnergy[player] = nil
+		sendEnergyFeedback(player)
+	end
+end
+
 Players.PlayerRemoving:Connect(function(player)
 	Loadout[player] = nil
 	ReadyAt[player] = nil
 	ActiveBuff[player] = nil
 	TeammateBuff[player] = nil
 	DebugNoDelay[player] = nil
+	DebugFlags[player] = nil
 	TeamBuff[player] = nil
 	Pending[player] = nil
 	FrozenUntil[player] = nil

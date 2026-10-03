@@ -232,6 +232,13 @@ end
 -- Toca a animação de andar em loop no fantasma (vale pros dois caminhos de
 -- construção: clone inteiro e remontagem manual).
 local function startGhostWalkAnimation(ghostModel)
+	-- ⚠️ v96: com a animação por código ligada, o fantasma é animado pelo
+	-- AnimadorProcedural a partir do próprio movimento no replay (parado,
+	-- andando, correndo, no ar) — em vez de andar em loop até parado.
+	if Config.ANIMACAO_PROCEDURAL and _G.AnimadorRegistrar then
+		_G.AnimadorRegistrar(ghostModel)
+		return
+	end
 	local walkId = Config.NormalizeAnimationId(Config.ANIMATIONS and Config.ANIMATIONS.Walk)
 	if not walkId or walkId == "" then return end
 	local ghostHumanoid = ghostModel:FindFirstChildOfClass("Humanoid")
@@ -268,7 +275,12 @@ local function cloneWholeCharacter(sourceModel, nameSuffix)
 	-- colisão. O Humanoid FICA (é ele que faz a animação e as roupas
 	-- aparecerem), só sem barra de vida/nome.
 	for _, inst in ipairs(modelClone:GetDescendants()) do
-		if inst:IsA("Script") or inst:IsA("LocalScript") or inst:IsA("Sound") then
+		-- ⚠️ v120b — PEDIDO: "o Flow acaba e o cara continua com as partículas": o
+		-- fantasma do replay clonava junto os emissores/rastros do Flow (e de
+		-- qualquer efeito) e ficava com eles o replay inteiro
+		if inst:IsA("Script") or inst:IsA("LocalScript") or inst:IsA("Sound")
+			or inst:IsA("ParticleEmitter") or inst:IsA("Trail") or inst:IsA("Beam")
+			or (inst:IsA("BasePart") and inst.Name == "OlhosFlow") then
 			inst:Destroy()
 		elseif inst:IsA("BasePart") then
 			inst.CanCollide = false
@@ -634,9 +646,66 @@ local function makeTrackSampler(track)
 	end
 end
 
+-- ===== ⚠️ v103 — EXTRAS DO REPLAY =====
+-- PEDIDO: "algumas animações não saem... a de chutar, nem a da cutscene...
+-- é pra aparecer o personagem fazendo a animação em tempo real... os VFX vão
+-- sair no replay... o número da vida da bola, se o GK usou a habilidade —
+-- tudo o que aconteceu vai ser registrado no replay." O servidor agora manda,
+-- junto das posições, os EVENTOS (ações animadas e cutscenes) e, em cada
+-- amostra, a vida da bola, a aura de habilidade e as peças de habilidade
+-- (guarda do goleiro / bloqueio). Aqui tudo isso é repetido nos fantasmas.
+
+-- número da vida da bola em cima da bola fantasma (mesmo visual do jogo)
+local function criarVidaDaBola(ghostBall)
+	local gui = Instance.new("BillboardGui")
+	gui.Name = "VidaDaBolaReplay"
+	gui.Size = UDim2.fromOffset(90, 40)
+	gui.StudsOffset = Vector3.new(0, 3, 0)
+	gui.AlwaysOnTop = true
+	gui.Enabled = false
+	gui.Parent = ghostBall
+	local label = Instance.new("TextLabel")
+	label.BackgroundTransparency = 1
+	label.Size = UDim2.fromScale(1, 1)
+	label.Font = Enum.Font.GothamBold
+	label.TextScaled = true
+	label.TextColor3 = Color3.fromRGB(255, 220, 60)
+	label.TextStrokeTransparency = 0.3
+	label.Parent = gui
+	return gui, label
+end
+
+-- peças de habilidade (guarda/bloqueio): pool reaproveitado quadro a quadro
+local function atualizarVisuais(pool, pasta, lista)
+	local n = lista and #lista or 0
+	for i = 1, n do
+		local v = lista[i]
+		local part = pool[i]
+		if not part then
+			part = Instance.new("Part")
+			part.Anchored = true
+			part.CanCollide = false
+			part.CanQuery = false
+			part.CanTouch = false
+			part.CastShadow = false
+			part.Material = Enum.Material.ForceField
+			part.Parent = pasta
+			pool[i] = part
+		end
+		part.Shape = v.bola and Enum.PartType.Ball or Enum.PartType.Block
+		part.Size = Vector3.new(v.sx, v.sy, v.sz)
+		part.CFrame = CFrame.new(table.unpack(v.cf))
+		part.Color = Color3.new(v.r, v.g, v.b)
+		part.Transparency = v.tr
+	end
+	for i = n + 1, #pool do
+		pool[i].Transparency = 1
+	end
+end
+
 -- ===== REPLAY =====
 
-local function playReplay(_scoringTeam, samples)
+local function playReplay(_scoringTeam, samples, eventos)
 	if replayInProgress then return end
 	if not samples or #samples < 2 then return end
 
@@ -658,6 +727,11 @@ local function playReplay(_scoringTeam, samples)
 
 	local ghosts = {} -- lista de Instance pra destruir no final
 	local samplers = {} -- lista de { ghost, sample = function(t) -> pos, yaw|nil, isBall }
+	-- ⚠️ v103
+	local fantasmaDaBola = nil
+	local fantasmaDoAtor = {} -- ["P<uid>"/"B<time>"] = Model fantasma
+	local emCutscene = {} -- [fantasma] = true enquanto a cutscene move ele (o replay não mexe)
+	local auraDoFantasma = {} -- [fantasma] = Highlight
 
 	local ok, err = pcall(function()
 		-- ===== BOLA =====
@@ -667,6 +741,7 @@ local function playReplay(_scoringTeam, samples)
 			local ghostBall = buildGhostBall()
 			table.insert(ghosts, ghostBall)
 			table.insert(samplers, { ghost = ghostBall, sample = ballSampler, isBall = true })
+			fantasmaDaBola = ghostBall
 		end
 
 		-- ===== JOGADORES =====
@@ -691,7 +766,8 @@ local function playReplay(_scoringTeam, samples)
 				local ghost, reason = buildGhostFromModel(sourceCharacter, "Player_" .. tostring(uid))
 				if ghost then
 					table.insert(ghosts, ghost)
-					table.insert(samplers, { ghost = ghost, sample = sampler })
+					table.insert(samplers, { ghost = ghost, sample = sampler, uid = uid })
+					fantasmaDoAtor["P" .. tostring(uid)] = ghost
 				else
 					-- v28/v29/v30 diagnóstico: pra descobrir por que um jogador
 					-- some do replay em vez de ficar adivinhando (ex: "meu
@@ -727,6 +803,7 @@ local function playReplay(_scoringTeam, samples)
 				if ghost then
 					table.insert(ghosts, ghost)
 					table.insert(samplers, { ghost = ghost, sample = sampler })
+					fantasmaDoAtor["B" .. teamName] = ghost
 				else
 					warn(("⚠️ GoalReplayClient: fantasma do bot do time '%s' não foi criado — %s"):format(
 						teamName,
@@ -743,6 +820,66 @@ local function playReplay(_scoringTeam, samples)
 		local totalDuration = trimmed[#trimmed].t - trimmed[1].t
 		local playbackStart = os.clock()
 		local lastBallPos = nil
+
+		-- ⚠️ v103: eventos, vida da bola e peças de habilidade
+		local listaEventos = {}
+		if typeof(eventos) == "table" then
+			for _, ev in ipairs(eventos) do
+				-- cutscene que começou um pouco antes da janela ainda entra (em andamento)
+				local folga = (ev.tipo == "Cutscene") and 4 or 0
+				if typeof(ev) == "table" and typeof(ev.t) == "number" and ev.t >= trimmed[1].t - folga and ev.t <= lastT then
+					table.insert(listaEventos, ev)
+				end
+			end
+			table.sort(listaEventos, function(a, b) return a.t < b.t end)
+		end
+		local proximoEvento = 1
+		-- ⚠️ v112: quantos eventos de cada tipo o replay tocou (diagnóstico,
+		-- atributo ReplayUltimo no jogador local)
+		local contagem = { Acao = 0, Cutscene = 0, VFX = 0 }
+		local vidaGui, vidaLabel = nil, nil
+		if fantasmaDaBola then vidaGui, vidaLabel = criarVidaDaBola(fantasmaDaBola) end
+		local pastaVisuais = Instance.new("Folder")
+		pastaVisuais.Name = "ReplayVisuais"
+		pastaVisuais.Parent = Workspace
+		table.insert(ghosts, pastaVisuais)
+		local poolVisuais = {}
+		local cursorAmostra = 1
+
+		local function dispararEvento(ev, relogio)
+			local d = ev.dados
+			if typeof(d) ~= "table" then return end
+			local fantasma = fantasmaDoAtor[d.ator]
+			if not fantasma then return end
+			if ev.tipo == "Acao" then
+				if _G.AnimadorAcaoLocal and not emCutscene[fantasma] then
+					_G.AnimadorAcaoLocal(fantasma, d.chave, d.dur, d.params)
+				end
+			elseif ev.tipo == "Cutscene" and _G.TocarCutsceneReplay and typeof(d.inicio) == "table" then
+				local inicio = CFrame.new(table.unpack(d.inicio))
+				local bolaLocal = typeof(d.bola) == "table" and Vector3.new(d.bola[1], d.bola[2], d.bola[3]) or nil
+				emCutscene[fantasma] = true
+				if fantasmaDaBola then emCutscene[fantasmaDaBola] = true end
+				local inicioEv = ev.t
+				_G.TocarCutsceneReplay(d.nome, fantasma, fantasmaDaBola, inicio, bolaLocal, d.titulo,
+					function() return relogio() - inicioEv end,
+					function()
+						emCutscene[fantasma] = nil
+						if fantasmaDaBola then emCutscene[fantasmaDaBola] = nil end
+					end, d.dur)
+				contagem.Cutscene += 1
+			elseif ev.tipo == "VFX" and typeof(d.args) == "table" then
+				-- ⚠️ v112: efeito de Arma / Hissatsu de drible e carrinho, no fantasma
+				local f = (d.remoto == "ArmaVFX" and _G.ArmaVFXLocal) or (d.remoto == "HissatsuVFX" and _G.HissatsuVFXLocal)
+				if f then
+					local args = {}
+					for i = 1, tonumber(d.n) or 0 do args[i] = d.args[tostring(i)] end
+					f(fantasma, table.unpack(args, 1, tonumber(d.n) or 0))
+					contagem.VFX += 1
+				end
+			end
+			if ev.tipo == "Acao" then contagem.Acao += 1 end
+		end
 		-- ⚠️ v20: o yaw só é alinhado UMA vez, no primeiro trecho em que a
 		-- bola realmente se move — dali em diante o ângulo é do jogador.
 		local yawInitialized = false
@@ -753,8 +890,54 @@ local function playReplay(_scoringTeam, samples)
 
 			local targetT = trimmed[1].t + elapsed
 
+			-- ⚠️ v103: eventos que já chegaram na hora deles
+			while proximoEvento <= #listaEventos and listaEventos[proximoEvento].t <= targetT do
+				local ev = listaEventos[proximoEvento]
+				proximoEvento += 1
+				pcall(dispararEvento, ev, function() return trimmed[1].t + (os.clock() - playbackStart) end)
+			end
+			-- amostra "atual" (degrau) pra vida da bola, auras e peças
+			while cursorAmostra < #trimmed and trimmed[cursorAmostra + 1].t <= targetT do
+				cursorAmostra += 1
+			end
+			local atual = trimmed[cursorAmostra]
+			if vidaGui then
+				local f = atual.forca
+				vidaGui.Enabled = typeof(f) == "table"
+				if typeof(f) == "table" then
+					vidaLabel.Text = tostring(f.txt)
+					vidaLabel.TextColor3 = Color3.new(f.r or 1, f.g or 0.85, f.b or 0.2)
+				end
+			end
+			pcall(atualizarVisuais, poolVisuais, pastaVisuais, atual.visuais)
+
 			for _, entry in ipairs(samplers) do
 				local pos, yaw = entry.sample(targetT)
+				-- ⚠️ v103: a cutscene está movendo esse fantasma (ou a bola)
+				if emCutscene[entry.ghost] then
+					if entry.isBall then pos = entry.ghost.Position else continue end
+				end
+				-- aura de habilidade do jogador nesse instante
+				if entry.uid then
+					local ponto = findPlayerPoint(atual, entry.uid)
+					local aura = ponto and ponto.aura
+					local h = auraDoFantasma[entry.ghost]
+					if aura and not h then
+						h = Instance.new("Highlight")
+						h.Name = "AuraReplay"
+						h.FillTransparency = 1
+						h.OutlineTransparency = 0
+						h.Parent = entry.ghost
+						auraDoFantasma[entry.ghost] = h
+					end
+					if h then
+						h.Enabled = aura ~= nil
+						if aura then
+							h.OutlineColor = Color3.new(aura.r, aura.g, aura.b)
+							h.OutlineTransparency = 0.25 + 0.25 * math.sin(os.clock() * 8)
+						end
+					end
+				end
 
 				if entry.isBall then
 					-- ⚠️ v20: a câmera virou ÓRBITA presa na bola (ver o bloco
@@ -777,7 +960,7 @@ local function playReplay(_scoringTeam, samples)
 					end
 					lastBallPos = pos
 
-					entry.ghost.Position = pos
+					if not emCutscene[entry.ghost] then entry.ghost.Position = pos end
 
 					local focus = pos + Vector3.new(0, 1, 0)
 					local orbit = CFrame.new(focus)
@@ -815,6 +998,10 @@ local function playReplay(_scoringTeam, samples)
 		end
 
 		camera.CameraType = previousCameraType ~= Enum.CameraType.Scriptable and previousCameraType or Enum.CameraType.Custom
+		pcall(function()
+			Players.LocalPlayer:SetAttribute("ReplayUltimo", string.format("eventos=%d acoes=%d cutscenes=%d vfx=%d",
+				#listaEventos, contagem.Acao, contagem.Cutscene, contagem.VFX))
+		end)
 	end)
 
 	for _, ghost in ipairs(ghosts) do
@@ -836,8 +1023,8 @@ local function playReplay(_scoringTeam, samples)
 	UserInputService.MouseBehavior = Enum.MouseBehavior.Default
 end
 
-Remotes.GoalReplay.OnClientEvent:Connect(function(scoringTeam, samples)
-	playReplay(scoringTeam, samples)
+Remotes.GoalReplay.OnClientEvent:Connect(function(scoringTeam, samples, eventos)
+	playReplay(scoringTeam, samples, eventos) -- ⚠️ v103: + eventos
 end)
 
 print("✅ GoalReplayClient carregado.")

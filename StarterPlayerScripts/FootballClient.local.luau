@@ -2,12 +2,24 @@
 	FootballClient (LocalScript)
 	LOCAL: StarterPlayerScripts
 
-	Um único LocalScript cuidando de TODO o input do jogador (sprint,
-	Shift Lock, chute/passe/voleio, carrinho, cabeçada) e da UI (barra de
+	Um único LocalScript cuidando de TODO o input do jogador (Shift Lock,
+	chute/passe/voleio, dash/carrinho, cabeçada) e da UI (barra de
 	stamina, placar, menu de troca de time, resumo pós-partida).
 
-	NOTA: o drible direcional (Z/X/C) é tratado no LocalScript separado
-	"DribbleInput", não aqui.
+	⚠️ NOVO — ESQUEMA DE CONTROLES (PEDIDO do usuário):
+		WASD            movimento (sem tecla de sprint — ver RUN_SPEED)
+		Q               COM a bola: drible direcional (DribbleInput.local.luau)
+		                SEM a bola: carrinho (⚠️ v86 — ver KEYS.Tackle)
+		F               dash: arranque curto na direção do WASD, com ou sem
+		                bola, não rouba nada (⚠️ v86 — ver KEYS.Dash)
+		E / R           Arma 1 / Arma 2 (PulseInput.local.luau)
+		1 / 2           Hissatsu 1 / 2 (HissatsuInput.local.luau)
+		T               cabeçada
+		Espaço          pulo (padrão do Roblox)
+		Clique esquerdo chute (voleio se a bola estiver no ar e você sem posse)
+	Mantidos por não conflitarem: Ctrl = câmera/Shift Lock, H = pedir
+	passe, V = Instinct Mode. Goleiro dentro da área: Q + direção =
+	mergulho, F = saída do gol (GKInput.local.luau).
 ]]
 
 local Players = game:GetService("Players")
@@ -15,6 +27,16 @@ local UserInputService = game:GetService("UserInputService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
+
+-- ⚠️ v110: string.upper não põe acento em maiúscula ("Fúria" virava "FúRIA").
+-- Converte também as letras acentuadas (UTF-8 à..þ → À..Þ).
+local function maiusculas(s)
+	s = string.upper(tostring(s))
+	return (s:gsub("\195([\160-\190])", function(c)
+		local b = string.byte(c)
+		if b ~= 183 then return "\195" .. string.char(b - 32) end
+	end))
+end
 
 local Config = require(ReplicatedStorage:WaitForChild("FootballConfig"))
 local Remotes = Config.Remotes
@@ -46,11 +68,14 @@ end
 -- Pass foi removido: chutar mirando num companheiro já funciona como
 -- passe. Control (domínio) também foi removido: a posse de bola solta é
 -- automática por proximidade (ver BallController).
+-- ⚠️ NOVO: Sprint (Shift) SAIU — PEDIDO: "Não haverá botão de corrida/
+-- sprint". Carrinho (era Z) virou o DASH no F, e a cabeçada foi de G pra T.
 local KEYS = {
-	Sprint = Enum.KeyCode.LeftShift,
-	ShiftLock = Enum.KeyCode.LeftControl, -- Shift Lock nativo, só que na tecla Ctrl (Shift já é o sprint)
-	Tackle = Enum.KeyCode.Z,
-	Header = Enum.KeyCode.G,
+	ShiftLock = Enum.KeyCode.LeftControl, -- Shift Lock nativo, só que na tecla Ctrl
+	Tackle = Enum.KeyCode.Q, -- ⚠️ v86: carrinho no Q, só SEM a bola (com ela, Q = drible)
+	Dash = Enum.KeyCode.F, -- ⚠️ v86: dash de avanço (não é mais o carrinho)
+	-- ⚠️ v105: a cabeçada SAIU do T — agora é no ar, com o botão de chute
+	-- (ver acaoAerea abaixo)
 }
 
 -- ============================================================
@@ -224,7 +249,7 @@ local function getMouseLookVector()
 	return dir.Unit
 end
 
-local function computeAimPoint()
+local function computeAimPointAntigo()
 	local character = player.Character
 	local root = character and character:FindFirstChild("HumanoidRootPart")
 	local origin = root and root.Position or camera.CFrame.Position
@@ -291,28 +316,32 @@ local function computeAimPoint()
 	return alvoPonto or (origin + lookVector * 50)
 end
 
--- ===== SPRINT =====
-UserInputService.InputBegan:Connect(function(input, processed)
-	if processed then return end
-	if input.KeyCode == KEYS.Sprint then
-		Remotes.UpdateSprinting:FireServer(true)
-	end
-end)
-UserInputService.InputEnded:Connect(function(input)
-	if input.KeyCode == KEYS.Sprint then
-		Remotes.UpdateSprinting:FireServer(false)
-	end
-end)
+-- ⚠️ v97 — MIRA PRECISA. PEDIDO: "aonde você estiver mirando, você clicou, é
+-- pra ser perfeito... às vezes vai pra trás". A mira antiga (acima, fica de
+-- reserva) usava o mouse.Hit do Roblox, que para no primeiro corpo na frente
+-- do cursor (goleiro, zagueiro) e às vezes na grama entre você e a câmera
+-- (chute pra trás). Agora é a MiraPrecisa, a MESMA da Hissatsu: gol = ponto
+-- exato da boca do gol; fora dele, a primeira coisa sólida ignorando gente;
+-- e nunca pra trás de quem chuta.
+local MiraPrecisa = require(ReplicatedStorage:WaitForChild("MiraPrecisa"))
 
--- ⚠️ MOBILE: exposto pro botão de Sprint de MobileControls.local.luau
--- chamar direto (segurar = true, soltar = false), sem duplicar nada.
-_G.MobileSetSprinting = function(sprinting)
-	Remotes.UpdateSprinting:FireServer(sprinting and true or false)
+local function computeAimPoint()
+	local x, y = pontoDeMiraNaTela()
+	local ok, ponto = pcall(MiraPrecisa.Calcular, camera, x, y, { NuncaPraTras = true })
+	if ok and typeof(ponto) == "Vector3" then return ponto end
+	return computeAimPointAntigo()
 end
+
+-- ===== SPRINT =====
+-- ⚠️ NOVO: REMOVIDO. PEDIDO: "Não haverá botão de corrida/sprint. O
+-- personagem deve correr normalmente usando WASD, e sua velocidade será
+-- determinada pelo atributo Velocidade." (ver getRunSpeed em
+-- PlayerSystems.legacy.luau). O botão SPRINT do mobile saiu junto.
 
 -- ===== SHIFT LOCK (tecla Ctrl) =====
 -- É o Shift Lock nativo do Roblox reimplementado à mão numa tecla
--- diferente (Ctrl), já que Shift está ocupado pelo sprint. Não avisa o
+-- diferente (Ctrl) — era porque Shift era o sprint (que não existe mais);
+-- continua no Ctrl pra não mudar o costume de quem já joga. Não avisa o
 -- servidor de nada, não mexe em WalkSpeed nem em nada da bola — só:
 --   1) trava o mouse no centro da tela (câmera gira livre sem precisar
 --      segurar botão nenhum, igual o Shift Lock nativo);
@@ -353,15 +382,20 @@ local function applyMouseLockState()
 	end
 end
 
+local suspensoDesde = 0
 _G.SetMouseLockSuspendedForQTE = function(suspended)
 	suspended = suspended and true or false
 	if mouseLockSuspended == suspended then return end
 	mouseLockSuspended = suspended
+	suspensoDesde = os.clock()
 	applyMouseLockState()
 end
 
 local function setShiftLock(enabled)
 	if shiftLockEnabled == enabled then return end
+	-- ⚠️ v112: "não vão poder ativar a trava do shift nem nada enquanto tiver na
+	-- cutscene de entrada"
+	if _G.CutsceneEntradaAtiva then return end
 	shiftLockEnabled = enabled
 
 	applyMouseLockState()
@@ -419,18 +453,79 @@ end)
 -- BindToRenderStep logo DEPOIS da prioridade de câmera, lendo o CFrame
 -- da câmera já atualizado do próprio frame — igual o Shift Lock nativo.
 RunService:BindToRenderStep("FootballShiftLockRotation", Enum.RenderPriority.Camera.Value + 1, function()
+	-- ⚠️ v108 — PEDIDO: "às vezes eu ativo o Ctrl e tento mexer pro lado e pro
+	-- outro e ele não mexe a tela, fica travado, como se a trava não estivesse
+	-- ativa". A trava só era aplicada UMA vez, no aperto do Ctrl — qualquer coisa
+	-- que devolvesse o mouse pro modo normal depois (o script de câmera do Roblox
+	-- ao soltar o botão direito, o replay de gol, o fim de uma cutscene, a janela
+	-- de QTE) desfazia a trava calada e ela nunca mais voltava. Agora ela é
+	-- REAFIRMADA todo quadro enquanto estiver ligada (fora do QTE de clique e das
+	-- cutscenes, que precisam do mouse livre). E a suspensão do QTE se solta
+	-- sozinha se ficar presa mais de 10s.
+	if mouseLockSuspended and os.clock() - suspensoDesde > 10 then
+		mouseLockSuspended = false
+		applyMouseLockState()
+	end
+	if shiftLockEnabled and not mouseLockSuspended and not _G.HissatsuCutsceneLocal
+		and camera.CameraType ~= Enum.CameraType.Scriptable then
+		if UserInputService.MouseBehavior ~= Enum.MouseBehavior.LockCenter then
+			UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
+		end
+		if UserInputService.MouseIconEnabled then
+			UserInputService.MouseIconEnabled = false
+		end
+	end
+	local character = player.Character
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	-- ⚠️ v112 — PEDIDO: "reformule a trava do control, de vez em quando dá umas
+	-- bugadas; veja por que e faça ela ficar perfeita". O AutoRotate só era
+	-- acertado no aperto do Ctrl. Quem o mexia depois deixava ele ERRADO até o
+	-- próximo aperto: o fim do ragdoll no servidor (drible que derruba,
+	-- carrinho, pisão) religa o AutoRotate; a cutscene de entrada devolvia o
+	-- valor de ANTES. Com a trava ligada e AutoRotate ligado, o corpo gira pela
+	-- câmera E pela direção de andar ao mesmo tempo — treme e vira sozinho.
+	-- Agora ele é reafirmado todo quadro (fora do corpo travado / ragdoll).
+	if humanoid and not humanoid.PlatformStand and os.clock() >= (_G.CorpoTravadoAte or 0) then
+		local desejado = not shiftLockEnabled
+		if humanoid.AutoRotate ~= desejado then humanoid.AutoRotate = desejado end
+	end
 	if not shiftLockEnabled then return end
 	if tick() < rotationSuppressedUntil then return end -- finta/carrinho em andamento: não briga pela rotação
-
-	local character = player.Character
-	local root = character and character:FindFirstChild("HumanoidRootPart")
-	if not root then return end
+	if os.clock() < (_G.CorpoTravadoAte or 0) then return end -- ⚠️ v104: caído/levantando do carrinho
+	if _G.HissatsuCutsceneLocal then return end -- ⚠️ v87: cutscene de Hissatsu move o corpo sozinha
+	-- ⚠️ v112: câmera de cutscene/replay (Scriptable) não é a câmera do jogador —
+	-- girar o corpo pra ela deixava o personagem virado pra qualquer lado depois
+	-- do replay; e corpo caído/sentado/ancorado não se gira na mão (rodopiava)
+	if camera.CameraType == Enum.CameraType.Scriptable or _G.CutsceneEntradaAtiva then return end
+	if not root or not humanoid or humanoid.PlatformStand or humanoid.Sit or root.Anchored then return end
 
 	local lookVector = camera.CFrame.LookVector
 	local flatLook = Vector3.new(lookVector.X, 0, lookVector.Z)
 	if flatLook.Magnitude < 0.001 then return end
 
 	root.CFrame = CFrame.lookAt(root.Position, root.Position + flatLook.Unit)
+end)
+
+-- ⚠️ v104 — CORPO TRAVADO no carrinho (ver _G.CorpoTravadoAte em
+-- AnimadorProcedural): enquanto o personagem está no chão ou levantando,
+-- o comando de andar é zerado e o AutoRotate desligado — nem WASD nem a
+-- câmera giram o corpo. Roda DEPOIS do módulo de controle (prioridade de
+-- Input), então o Move(zero) daqui é o que vale no quadro. O avanço do
+-- carrinho em si é feito pelo servidor (CFrame), então continua igual.
+local corpoEstavaTravado = false
+RunService:BindToRenderStep("FootballCorpoTravado", Enum.RenderPriority.Input.Value + 1, function()
+	local travado = os.clock() < (_G.CorpoTravadoAte or 0)
+	local humanoid = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
+	if not humanoid then return end
+	if travado then
+		humanoid.AutoRotate = false
+		humanoid:Move(Vector3.zero, false)
+		humanoid.Jump = false
+	elseif corpoEstavaTravado then
+		humanoid.AutoRotate = not shiftLockEnabled
+	end
+	corpoEstavaTravado = travado
 end)
 
 -- ===== POSSE DE BOLA (recebida do servidor) =====
@@ -441,6 +536,55 @@ Remotes.PossessionChanged.OnClientEvent:Connect(function(playerWithBall, gainedP
 	elseif hasPossession and playerWithBall ~= player then
 		hasPossession = false
 	end
+end)
+
+-- ⚠️ v86: o Q é drible COM a bola e carrinho SEM ela — o DribbleInput
+-- pergunta aqui pra não disparar uma finta que o servidor só ia recusar.
+_G.FootballHasPossession = function()
+	return hasPossession
+end
+
+-- ===== DESLOCAMENTO SEM TRAVAR (drible e dash) — ⚠️ v86 =====
+-- PEDIDO: "Não precisa travar o personagem durante o drible... O drible vai
+-- só mover o personagem, só que pode deixar ele continuando andando." O
+-- servidor manda QUANTO deslocar e em QUANTO TEMPO (Remotes.ApplyDisplacement)
+-- e este cliente — que é quem simula a física do próprio personagem — soma o
+-- pedaço de cada quadro à posição, por cima do andar normal do Humanoid. O
+-- WASD, o pulo e a rotação continuam funcionando durante todo o movimento.
+-- Mesma curva de antes (ease-out cúbica: sai rápido e assenta suave), que o
+-- servidor também usa pra levar a bola junto.
+local deslocamento = nil -- { Offset, Duracao, Inicio, Aplicado }
+
+Remotes.ApplyDisplacement.OnClientEvent:Connect(function(offset, duracao)
+	if typeof(offset) ~= "Vector3" or typeof(duracao) ~= "number" or duracao <= 0 then
+		deslocamento = nil -- duração 0 = cancelar
+		return
+	end
+	deslocamento = { Offset = offset, Duracao = duracao, Inicio = os.clock(), Aplicado = 0 }
+end)
+
+RunService.Heartbeat:Connect(function()
+	local d = deslocamento
+	if not d then return end
+
+	local character = player.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	-- atordoado (WalkSpeed 0), caído (ragdoll/PlatformStand) ou morto: o
+	-- empurrão acaba ali mesmo, senão o corpo deslizaria parado no chão
+	if not root or not humanoid or humanoid.Health <= 0
+		or humanoid.WalkSpeed <= 0 or humanoid.PlatformStand then
+		deslocamento = nil
+		return
+	end
+
+	local alpha = math.clamp((os.clock() - d.Inicio) / d.Duracao, 0, 1)
+	local eased = 1 - (1 - alpha) ^ 3
+	local passo = d.Offset * (eased - d.Aplicado)
+	d.Aplicado = eased
+	root.CFrame += passo
+
+	if alpha >= 1 then deslocamento = nil end
 end)
 
 -- ===== TOQUE ESPECIAL: barra de força do chute =====
@@ -514,6 +658,34 @@ _G.GetKickChargeInfo = function()
 	}
 end
 
+-- ⚠️ v122 — CURVA DO RIN: o lado da curva é o A/D segurado na hora de soltar. O
+-- servidor lia o MoveDirection dele e falhava; agora o cliente manda o movimento
+-- (MoveDirection; sem ele, as teclas A/D/setas pelo lado da câmera).
+local function movimentoDoChute()
+	-- ⚠️ v122b — PEDIDO: "corrige o bug de ir pro lado ou pro outro no chute normal".
+	-- Medido no Studio: o chute normal sai 0,00 stud da linha (parado, com giro e
+	-- andando de lado a 16 studs/s). O que entortava era a curva da arma valendo
+	-- também CORRENDO NA DIAGONAL (W+A conta 0,7 "de lado"). Agora só vale A OU D
+	-- puro (sem W/S) — no controle/celular, movimento quase todo pro lado da câmera.
+	local cam = workspace.CurrentCamera
+	local direitaCam = cam and Vector3.new(cam.CFrame.RightVector.X, 0, cam.CFrame.RightVector.Z) or Vector3.zero
+	if direitaCam.Magnitude < 0.01 then return Vector3.zero end
+	direitaCam = direitaCam.Unit
+	local K = Enum.KeyCode
+	local esq = UserInputService:IsKeyDown(K.A) or UserInputService:IsKeyDown(K.Left)
+	local dir = UserInputService:IsKeyDown(K.D) or UserInputService:IsKeyDown(K.Right)
+	local frenteTras = UserInputService:IsKeyDown(K.W) or UserInputService:IsKeyDown(K.S)
+		or UserInputService:IsKeyDown(K.Up) or UserInputService:IsKeyDown(K.Down)
+	if esq or dir or frenteTras then -- teclado
+		if esq ~= dir and not frenteTras then return direitaCam * (dir and 1 or -1) end
+		return Vector3.zero
+	end
+	local hum = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
+	local mov = hum and hum.MoveDirection or Vector3.zero
+	if mov.Magnitude > 0.2 and math.abs(mov.Unit:Dot(direitaCam)) > 0.85 then return mov.Unit end
+	return Vector3.zero
+end
+
 local function releaseKick()
 	if not isCharging then return end
 	isCharging = false
@@ -525,8 +697,72 @@ local function releaseKick()
 	Remotes.UpdateKickCharging:FireServer(false)
 	-- ⚠️ v84: sem spin — o chute normal sai reto na direção mirada (ver o
 	-- comentário no final de Remotes.KickBall em BallController).
-	Remotes.KickBall:FireServer(currentForce, computeAimPoint())
+	-- ⚠️ v105: manda se está no ar — voleio (sem posse) só vale pulando
+	Remotes.KickBall:FireServer(currentForce, computeAimPoint(), _G.EstouNoAr and _G.EstouNoAr() or false, movimentoDoChute())
 end
+
+-- ===== ⚠️ v105 — CABEÇADA E VOLEIO NO AR =====
+-- PEDIDO: "tirar a cabeçada com T. A bola tá no ar, numa altura certa de você
+-- e você clicou no botão de chute: cabeçada. A bola mais abaixo da cabeça:
+-- voleio. Só vale se você estiver pulando. Se estiver SEGURANDO o botão de
+-- chute antes, ele prefere o voleio (a cabeçada é instantânea). Sem segurar,
+-- recebeu o passe, precisa reagir rápido: aperta e dá a cabeçada na hora, se
+-- estiver na altura certa; senão um voleio fraco."
+--   • segurando o chute e solta no ar  -> voleio com a força carregada
+--     (releaseKick acima, o servidor trata como voleio);
+--   • toque rápido no ar, sem posse    -> acaoAerea: bola na faixa da cabeça
+--     = cabeçada instantânea; mais baixa = voleio fraco.
+_G.EstouNoAr = function()
+	local character = player.Character
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	if not humanoid then return false end
+	local estado = humanoid:GetState()
+	return humanoid.FloorMaterial == Enum.Material.Air
+		or estado == Enum.HumanoidStateType.Jumping or estado == Enum.HumanoidStateType.Freefall
+end
+
+-- ⚠️ v108: a bola está na faixa da cabeça e ao alcance? (mesma régua do servidor)
+local function bolaNaAlturaDaCabeca()
+	local character = player.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	local bola = workspace:FindFirstChild(Config.BALL_NAME)
+	if not root or not bola then return false end
+	local rel = bola.Position - root.Position
+	local horizontal = Vector3.new(rel.X, 0, rel.Z).Magnitude
+	return rel.Y >= (Config.HEADER_ALTURA_MIN_NO_AR or 1.2) and rel.Y <= Config.HEADER_MAX_BALL_HEIGHT
+		and horizontal <= Config.HEADER_RANGE
+end
+
+local function acaoAerea()
+	local character = player.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	local bola = workspace:FindFirstChild(Config.BALL_NAME)
+	if not root or not bola then return end
+	local rel = bola.Position - root.Position
+	local horizontal = Vector3.new(rel.X, 0, rel.Z).Magnitude
+	-- faixa da cabeça: do ombro pra cima (mesma régua de altura do servidor,
+	-- que mede a partir do HumanoidRootPart)
+	local alturaCabeca = (Config.HEADER_ALTURA_MIN_NO_AR or 1.2)
+	if rel.Y >= alturaCabeca and rel.Y <= Config.HEADER_MAX_BALL_HEIGHT and horizontal <= Config.HEADER_RANGE then
+		Remotes.AttemptHeader:FireServer(computeAimPoint())
+	else
+		Remotes.KickBall:FireServer(Config.VOLLEY_FRACO_FORCA or 55, computeAimPoint(), true)
+	end
+end
+_G.AcaoAerea = acaoAerea
+
+-- ⚠️ v108/v109 — METAVISÃO dos outros: com a bola no pé, manda pra onde está
+-- mirando — ⚠️ v109: TODO QUADRO (pedido: "tem que atualizar a cada instante;
+-- antes tinha uma travinha até saber o próximo"), pelo evento não-confiável.
+-- É exatamente a mesma mira do chute (mouse no PC, centro da tela no mobile),
+-- com ou sem a trava do Ctrl.
+RunService.RenderStepped:Connect(function()
+	if not hasPossession then return end
+	local ok, ponto = pcall(computeAimPoint)
+	if ok and typeof(ponto) == "Vector3" then
+		Remotes.MiraDoDonoU:FireServer(ponto)
+	end
+end)
 
 -- Se o personagem morrer/resetar no meio de uma carga de chute, sem isso
 -- o servidor ficaria achando que o personagem novo ainda está
@@ -589,24 +825,40 @@ end
 UserInputService.InputBegan:Connect(function(input, processed)
 	if processed then return end
 	if isShootPress(input) then
-		startCharging()
+		-- ⚠️ v105: no ar, sem a bola e sem já estar carregando = reação rápida
+		-- ⚠️ v108: e também NO CHÃO se a bola estiver na altura da cabeça —
+		-- "clicou na altura certa, ele dá a cabeçada automaticamente em vez do chute"
+		if not hasPossession and not isCharging and (_G.EstouNoAr() or bolaNaAlturaDaCabeca()) then
+			acaoAerea()
+		else
+			startCharging()
+		end
 	elseif input.KeyCode == KEYS.Tackle then
-		-- ⚠️ v5.4 FIX: era "Role ~= GK", travando o carrinho do goleiro
-		-- SEMPRE, mesmo fora da própria área — onde ele já devia virar
-		-- jogador de linha normal (dribla com Z/X/C, ver DribbleInput.
-		-- local.luau, que já usa IsEffectiveGK certo). Agora usa a MESMA
-		-- checagem de área que o resto do jogo: só trava o Z quando ele
-		-- está sendo GK de verdade (dentro da própria área, onde Z vira
-		-- mergulho — ver GKInput.local.luau).
-		if not hasPossession and not GKAreaUtil.IsEffectiveGK(player) then
+		-- ⚠️ v86 — PEDIDO: "o carrinho, na verdade, é o Q, quando você não
+		-- estiver com a bola". Com a bola, o mesmo Q é o drible direcional
+		-- (DribbleInput.local.luau). Direção pelo WASD, cooldown
+		-- Config.TACKLE_COOLDOWN, custo TACKLE_STAMINA_COST — o carrinho de
+		-- sempre, só mudou de tecla.
+		-- ⚠️ v5.4 FIX: usa a checagem de área (IsEffectiveGK), não o Role:
+		-- goleiro fora da própria área é jogador de linha normal; dentro dela
+		-- o Q vira mergulho (GKInput.local.luau).
+		-- Combo de Pulso aberto: o Q é um passo do combo (PulseInput), não carrinho.
+		if not hasPossession and not GKAreaUtil.IsEffectiveGK(player)
+			and not player:GetAttribute("PulseComboActive") then
 			Remotes.AttemptTackle:FireServer(currentTackleDirection())
 		end
-	elseif input.KeyCode == KEYS.Header then
-		Remotes.AttemptHeader:FireServer(computeAimPoint())
+	elseif input.KeyCode == KEYS.Dash then
+		-- ⚠️ v86 — PEDIDO: "o F pode ser utilizado para dar um dash, que é
+		-- meio que um avanço para frente". Arranque curto na direção do WASD
+		-- (parado = pra frente do personagem), com ou sem bola; não rouba nem
+		-- disputa nada. Goleiro dentro da área: F é a saída do gol (GKInput).
+		if not GKAreaUtil.IsEffectiveGK(player) then
+			Remotes.AttemptDash:FireServer(currentTackleDirection())
+		end
 	end
 end)
 
--- ⚠️ MOBILE: botões de Carrinho e Cabeçada (Z e G não existem em
+-- ⚠️ MOBILE: botões de Carrinho, Dash e Cabeçada (Q/F/T não existem em
 -- celular). Reaproveitam exatamente a mesma checagem de cima.
 _G.MobileTackle = function()
 	if not hasPossession and not GKAreaUtil.IsEffectiveGK(player) then
@@ -614,8 +866,15 @@ _G.MobileTackle = function()
 	end
 end
 
+_G.MobileDash = function() -- ⚠️ v86
+	if not GKAreaUtil.IsEffectiveGK(player) then
+		Remotes.AttemptDash:FireServer(currentTackleDirection())
+	end
+end
+
 _G.MobileHeader = function()
-	Remotes.AttemptHeader:FireServer(computeAimPoint())
+	-- ⚠️ v105: o botão de cabeçada do celular vira a reação no ar (só pulando)
+	if _G.EstouNoAr() then acaoAerea() end
 end
 
 -- ⚠️ v55 — Chute no mobile (ver o comentário em isShootPress). Segurar o
@@ -623,6 +882,10 @@ end
 -- startCharging/releaseKick que o clique do mouse usa no PC, então força,
 -- mira e barra de carga se comportam igual nas duas plataformas.
 _G.MobileKickStart = function()
+	if not hasPossession and not isCharging and _G.EstouNoAr() then
+		acaoAerea() -- ⚠️ v105: mesmo comportamento do clique
+		return
+	end
 	startCharging()
 end
 
@@ -692,33 +955,223 @@ end)
 local TEAM_A = Config.TEAM_NAMES[1] or "Time A"
 local TEAM_B = Config.TEAM_NAMES[2] or "Time B"
 
+-- ⚠️ v103 — PLACAR + TIMER UNIFICADOS. PEDIDO: "melhore esse HUD de timer e
+-- pontuação — hoje em dia um sobrescreve o outro — unifique eles pra não ter
+-- sobrescrição e melhore, deixe bem bonito." O timer era uma peça do Studio
+-- (Menu.Timer) no MESMO lugar do placar criado aqui. Agora é UM painel só,
+-- estilo placar de transmissão: [cor | TIME A  2] [ 03:12 ] [1  TIME B | cor].
+-- O timer antigo do Studio fica escondido (ver esconderTimerAntigo).
+local COR_PAINEL_PLACAR = Color3.fromRGB(13, 15, 22)
+local COR_MEIO_PLACAR = Color3.fromRGB(21, 24, 34)
+local COR_BORDA_PLACAR = Color3.fromRGB(34, 38, 52)
+local COR_TEXTO_PLACAR = Color3.fromRGB(238, 241, 248)
+local COR_TEXTO_MEDIO_PLACAR = Color3.fromRGB(190, 197, 212)
+local COR_ALERTA_PLACAR = Color3.fromRGB(255, 90, 80)
+
+local function corDoTime(nome, padrao)
+	local Teams = game:GetService("Teams")
+	local time = Teams:FindFirstChild(nome)
+	if time and time:IsA("Team") then return time.TeamColor.Color end
+	return padrao
+end
+local COR_TIME_A = corDoTime(TEAM_A, Color3.fromRGB(60, 130, 255))
+local COR_TIME_B = corDoTime(TEAM_B, Color3.fromRGB(255, 205, 50))
+
 local scoreGui = Instance.new("ScreenGui")
 scoreGui.Name = "ScoreGui"
 scoreGui.ResetOnSpawn = false
+scoreGui.IgnoreGuiInset = false
+scoreGui.DisplayOrder = 5
 scoreGui.Parent = playerGui
 
-local scoreBackground = Instance.new("Frame")
-scoreBackground.Size = UDim2.new(0, 260, 0, 40)
-scoreBackground.Position = UDim2.new(0.5, 0, 0, 20)
-scoreBackground.AnchorPoint = Vector2.new(0.5, 0)
-scoreBackground.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-scoreBackground.BackgroundTransparency = 0.3
-scoreBackground.Parent = scoreGui
-Instance.new("UICorner", scoreBackground).CornerRadius = UDim.new(0, 8)
+local PLACAR_W, PLACAR_H = 440, 54
+local placar = Instance.new("Frame")
+placar.Name = "Placar"
+placar.AnchorPoint = Vector2.new(0.5, 0)
+placar.Position = UDim2.new(0.5, 0, 0, 10)
+placar.Size = UDim2.fromOffset(PLACAR_W, PLACAR_H)
+placar.BackgroundColor3 = COR_PAINEL_PLACAR
+placar.BackgroundTransparency = 0.08
+placar.Parent = scoreGui
+Instance.new("UICorner", placar).CornerRadius = UDim.new(0, 10)
+local placarBorda = Instance.new("UIStroke")
+placarBorda.Color = COR_BORDA_PLACAR
+placarBorda.Thickness = 1
+placarBorda.Parent = placar
+-- encaixa em tela pequena (celular)
+local placarEscala = Instance.new("UIScale")
+placarEscala.Parent = placar
+local function ajustarPlacar()
+	local v = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize
+	if v and v.X > 0 then placarEscala.Scale = math.clamp((v.X - 24) / PLACAR_W, 0.6, 1.1) end
+end
+ajustarPlacar()
+if workspace.CurrentCamera then workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(ajustarPlacar) end
 
-local scoreLabel = Instance.new("TextLabel")
-scoreLabel.Size = UDim2.new(1, 0, 1, 0)
-scoreLabel.BackgroundTransparency = 1
-scoreLabel.Font = Enum.Font.GothamBold
-scoreLabel.TextSize = 22
-scoreLabel.TextColor3 = Color3.new(1, 1, 1)
-scoreLabel.Text = string.format("%s 0  -  0 %s", TEAM_A, TEAM_B)
-scoreLabel.Parent = scoreBackground
+local LADO_W = (PLACAR_W - 120) / 2
+local function ladoDoTime(nome, cor, esquerda)
+	local lado = Instance.new("Frame")
+	lado.Name = "Time" .. (esquerda and "A" or "B")
+	lado.BackgroundTransparency = 1
+	lado.Size = UDim2.fromOffset(LADO_W, PLACAR_H)
+	lado.Position = esquerda and UDim2.fromOffset(0, 0) or UDim2.fromOffset(PLACAR_W - LADO_W, 0)
+	lado.Parent = placar
+
+	local faixa = Instance.new("Frame")
+	faixa.BackgroundColor3 = cor
+	faixa.BorderSizePixel = 0
+	faixa.AnchorPoint = Vector2.new(esquerda and 0 or 1, 0.5)
+	faixa.Position = UDim2.new(esquerda and 0 or 1, esquerda and 10 or -10, 0.5, 0)
+	faixa.Size = UDim2.fromOffset(5, 30)
+	faixa.Parent = lado
+	Instance.new("UICorner", faixa).CornerRadius = UDim.new(0, 3)
+
+	local rotulo = Instance.new("TextLabel")
+	rotulo.BackgroundTransparency = 1
+	rotulo.Font = Enum.Font.GothamBlack
+	rotulo.TextSize = 15
+	rotulo.TextColor3 = COR_TEXTO_MEDIO_PLACAR
+	rotulo.Text = maiusculas(nome)
+	rotulo.TextXAlignment = esquerda and Enum.TextXAlignment.Left or Enum.TextXAlignment.Right
+	rotulo.Size = UDim2.new(1, -78, 1, 0)
+	rotulo.Position = esquerda and UDim2.fromOffset(24, 0) or UDim2.fromOffset(54, 0)
+	rotulo.TextTruncate = Enum.TextTruncate.AtEnd
+	rotulo.Parent = lado
+
+	local gols = Instance.new("TextLabel")
+	gols.Name = "Gols"
+	gols.BackgroundTransparency = 1
+	gols.Font = Enum.Font.GothamBlack
+	gols.TextSize = 32
+	gols.TextColor3 = COR_TEXTO_PLACAR
+	gols.Text = "0"
+	gols.AnchorPoint = Vector2.new(esquerda and 1 or 0, 0.5)
+	gols.Position = UDim2.new(esquerda and 1 or 0, esquerda and -12 or 12, 0.5, 0)
+	gols.Size = UDim2.fromOffset(44, PLACAR_H)
+	gols.TextXAlignment = esquerda and Enum.TextXAlignment.Right or Enum.TextXAlignment.Left
+	gols.Parent = lado
+	local escalaGols = Instance.new("UIScale")
+	escalaGols.Parent = gols
+	return gols, escalaGols, faixa
+end
+local golsA, escalaGolsA = ladoDoTime(TEAM_A, COR_TIME_A, true)
+local golsB, escalaGolsB = ladoDoTime(TEAM_B, COR_TIME_B, false)
+
+-- relógio no meio
+local meio = Instance.new("Frame")
+meio.Name = "Relogio"
+meio.AnchorPoint = Vector2.new(0.5, 0.5)
+meio.Position = UDim2.fromScale(0.5, 0.5)
+meio.Size = UDim2.fromOffset(112, 40)
+meio.BackgroundColor3 = COR_MEIO_PLACAR
+meio.Parent = placar
+Instance.new("UICorner", meio).CornerRadius = UDim.new(0, 8)
+local meioBorda = Instance.new("UIStroke")
+meioBorda.Color = COR_BORDA_PLACAR
+meioBorda.Thickness = 1
+meioBorda.Parent = meio
+local relogio = Instance.new("TextLabel")
+relogio.Name = "Tempo"
+relogio.BackgroundTransparency = 1
+relogio.Size = UDim2.fromScale(1, 1)
+relogio.Font = Enum.Font.GothamBlack
+relogio.TextSize = 22
+relogio.TextColor3 = COR_TEXTO_PLACAR
+relogio.Text = "--:--"
+relogio.Parent = meio
+local relogioSub = Instance.new("TextLabel")
+relogioSub.Name = "Legenda"
+relogioSub.BackgroundTransparency = 1
+relogioSub.AnchorPoint = Vector2.new(0.5, 0)
+relogioSub.Position = UDim2.new(0.5, 0, 1, 2)
+relogioSub.Size = UDim2.fromOffset(160, 14)
+relogioSub.Font = Enum.Font.GothamBold
+relogioSub.TextSize = 11
+relogioSub.TextColor3 = COR_TEXTO_MEDIO_PLACAR
+relogioSub.Text = ""
+relogioSub.Parent = meio
+
+local ultimoPlacar = { A = 0, B = 0 }
+local function pulsarGols(label, escala, cor)
+	escala.Scale = 1.5
+	label.TextColor3 = cor
+	TweenService:Create(escala, TweenInfo.new(0.45, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1 }):Play()
+	TweenService:Create(label, TweenInfo.new(1.2), { TextColor3 = COR_TEXTO_PLACAR }):Play()
+end
 
 local function updateScoreLabel(score)
 	if typeof(score) ~= "table" then return end
-	scoreLabel.Text = string.format("%s %d  -  %d %s", TEAM_A, score[TEAM_A] or 0, score[TEAM_B] or 0, TEAM_B)
+	local a, b = score[TEAM_A] or 0, score[TEAM_B] or 0
+	golsA.Text = tostring(a)
+	golsB.Text = tostring(b)
+	if a > ultimoPlacar.A then pulsarGols(golsA, escalaGolsA, COR_TIME_A) end
+	if b > ultimoPlacar.B then pulsarGols(golsB, escalaGolsB, COR_TIME_B) end
+	ultimoPlacar.A, ultimoPlacar.B = a, b
 end
+
+local function atualizarRelogio(timeRemaining, countdown)
+	if countdown then
+		relogio.Text = tostring(countdown)
+		relogio.TextColor3 = COR_TEXTO_PLACAR
+		relogioSub.Text = "COMEÇA EM"
+		return
+	end
+	relogioSub.Text = ""
+	local restante = math.max(math.floor(tonumber(timeRemaining) or 0), 0)
+	relogio.Text = string.format("%02d:%02d", math.floor(restante / 60), restante % 60)
+	if restante <= 30 and restante > 0 then
+		relogio.TextColor3 = (restante % 2 == 0) and COR_ALERTA_PLACAR or COR_TEXTO_PLACAR
+		meioBorda.Color = COR_ALERTA_PLACAR
+	else
+		relogio.TextColor3 = COR_TEXTO_PLACAR
+		meioBorda.Color = COR_BORDA_PLACAR
+	end
+end
+
+-- o timer antigo (peça do Studio, Menu.Timer) ficava em cima do placar
+task.spawn(function()
+	local menu = playerGui:WaitForChild("Menu", 10)
+	local timerAntigo = menu and menu:WaitForChild("Timer", 5)
+	if timerAntigo then
+		if timerAntigo:IsA("GuiObject") then timerAntigo.Visible = false end
+		for _, d in ipairs(timerAntigo:GetDescendants()) do
+			if d:IsA("GuiObject") then d.Visible = false end
+		end
+	end
+	-- os botões de trocar de time (peça do Studio) ficavam ATRÁS do placar:
+	-- descem pra logo abaixo dele, menores, no mesmo visual
+	local trocaTime = menu and menu:FindFirstChild("TeamChangeFrame")
+	if trocaTime and trocaTime:IsA("GuiObject") then
+		trocaTime.AnchorPoint = Vector2.new(0.5, 0)
+		trocaTime.Position = UDim2.new(0.5, 0, 0, 10 + PLACAR_H + 8)
+		trocaTime.Size = UDim2.fromOffset(260, 28)
+		trocaTime.BackgroundTransparency = 1
+		for i, nome in ipairs({ "BlueTeamButton", "YellowTeamButton" }) do
+			local b = trocaTime:FindFirstChild(nome)
+			if b and b:IsA("GuiButton") then
+				b.AnchorPoint = Vector2.zero
+				b.Position = UDim2.fromOffset((i - 1) * 136, 0)
+				b.Size = UDim2.fromOffset(124, 28)
+				b.BackgroundColor3 = COR_PAINEL_PLACAR
+				b.BackgroundTransparency = 0.15
+				if b:IsA("TextButton") then
+					b.Font = Enum.Font.GothamBlack
+					b.TextSize = 12
+					b.TextScaled = false
+					b.TextColor3 = i == 1 and COR_TIME_A or COR_TIME_B
+					b.Text = "ENTRAR " .. maiusculas(i == 1 and TEAM_A or TEAM_B)
+				end
+				if not b:FindFirstChildOfClass("UICorner") then
+					Instance.new("UICorner", b).CornerRadius = UDim.new(0, 6)
+				end
+				local s = b:FindFirstChildOfClass("UIStroke") or Instance.new("UIStroke", b)
+				s.Color = i == 1 and COR_TIME_A or COR_TIME_B
+				s.Transparency = 0.5
+				s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+			end
+		end
+	end
+end)
 
 -- ---- Menu de troca de time ----
 task.spawn(function()
@@ -780,9 +1233,32 @@ goalLabel.TextTransparency = 1
 goalLabel.TextStrokeTransparency = 1
 goalLabel.Parent = goalGui
 
-local function playGoalCelebration()
+-- ⚠️ v110 — PEDIDO: "o nome personalizado dos slots dentro do jogo": embaixo
+-- do GOL! aparece quem marcou, com o nome do personagem (NomePersonagem).
+local autorGolLabel = Instance.new("TextLabel")
+autorGolLabel.Size = UDim2.new(0, 520, 0, 34)
+autorGolLabel.Position = UDim2.new(0.5, 0, 0.35, 62)
+autorGolLabel.AnchorPoint = Vector2.new(0.5, 0.5)
+autorGolLabel.BackgroundTransparency = 1
+autorGolLabel.Text = ""
+autorGolLabel.TextColor3 = Color3.fromRGB(238, 241, 248)
+autorGolLabel.TextSize = 26
+autorGolLabel.Font = Enum.Font.GothamBlack
+autorGolLabel.TextTransparency = 1
+autorGolLabel.TextStrokeTransparency = 1
+autorGolLabel.Parent = goalGui
+
+local function playGoalCelebration(scorer)
 	goalLabel.TextTransparency = 0
 	goalLabel.TextStrokeTransparency = 0
+	if typeof(scorer) == "Instance" and scorer:IsA("Player") then
+		local nome = scorer:GetAttribute("NomePersonagem")
+		if typeof(nome) ~= "string" or nome == "" then nome = scorer.DisplayName end
+		autorGolLabel.Text = "de " .. maiusculas(nome)
+		autorGolLabel.TextColor3 = scorer.Team and scorer.TeamColor.Color:Lerp(Color3.new(1, 1, 1), 0.35) or Color3.fromRGB(238, 241, 248)
+		autorGolLabel.TextTransparency = 0
+		autorGolLabel.TextStrokeTransparency = 0.2
+	end
 	goalLabel.Size = UDim2.new(0, 300, 0, 60)
 	TweenService:Create(goalLabel, TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
 		Size = UDim2.new(0, 500, 0, 100),
@@ -794,22 +1270,18 @@ local function playGoalCelebration()
 			TextStrokeTransparency = 1,
 		})
 		fadeOut:Play()
+		TweenService:Create(autorGolLabel, TweenInfo.new(0.5), { TextTransparency = 1, TextStrokeTransparency = 1 }):Play()
 	end)
 end
 
 -- ===== HUD: contagem regressiva / timer / placar =====
 Remotes.UpdateMatchState.OnClientEvent:Connect(function(timeRemaining, score, countdown)
-	local minutes = math.floor(timeRemaining / 60)
-	local seconds = timeRemaining % 60
-	local timerLabel = waitForPath(playerGui, { "Menu", "Timer", "Frame", "TimerLabel" }, 1)
-	if timerLabel then
-		timerLabel.Text = countdown and tostring(countdown) or string.format("%02d:%02d", minutes, seconds)
-	end
+	atualizarRelogio(timeRemaining, countdown) -- ⚠️ v103: relógio no placar unificado
 	updateScoreLabel(score)
 end)
 
 Remotes.GoalScored.OnClientEvent:Connect(function(scoringTeam, scorer, score)
-	playGoalCelebration()
+	playGoalCelebration(scorer)
 	shakeCamera(0.6, 0.5)
 	updateScoreLabel(score)
 end)
@@ -1041,9 +1513,14 @@ local function buildSummaryUI()
 	return frame, resultLabel, moneyValueLabel, xpValueLabel, statsContainer, mvpBadge
 end
 
+-- ⚠️ v104: o resumo de fim de partida agora é o TelaFinalClient.local.luau
+-- (estilo do lobby, com EMPATE). A tela antiga abaixo só roda se ele não
+-- existir no place.
+local telaFinalNova = script.Parent:FindFirstChild("TelaFinalClient") ~= nil
 local summaryFrame, resultLabel, moneyValueLabel, xpValueLabel, statsContainer, mvpBadge = buildSummaryUI()
 
 Remotes.ShowMatchSummary.OnClientEvent:Connect(function(data)
+	if telaFinalNova then return end
 	if data.MatchResult == "win" then
 		resultLabel.Text = "🏆 VITÓRIA!"
 		resultLabel.TextColor3 = Color3.fromRGB(85, 255, 127)

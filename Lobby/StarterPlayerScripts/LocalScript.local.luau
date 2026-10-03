@@ -18,7 +18,14 @@ local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
 -- Módulos
-local HissatsuData = require(ReplicatedStorage.Modules.HissatsuData)
+-- ⚠️ v110: este QTE é do sistema ANTIGO de Hissatsu (antes do Pulso/Instinto)
+-- e o módulo HissatsuData não existe mais — dava erro vermelho em todo
+-- carregamento do Lobby. Agora só sai quieto. (Pode apagar este LocalScript
+-- no Studio: nada no Lobby usa ele.)
+local pastaModulos = ReplicatedStorage:FindFirstChild("Modules")
+local moduloHissatsu = pastaModulos and pastaModulos:FindFirstChild("HissatsuData")
+if not moduloHissatsu then return end
+local HissatsuData = require(moduloHissatsu)
 
 -- ========================================
 -- CONFIGURAÇÃO

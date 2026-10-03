@@ -33,12 +33,65 @@ local Lighting = game:GetService("Lighting")
 -- ============================================================
 -- ESCOLHA AQUI
 -- ============================================================
-local ACTIVE_PRESET = "TardeDourada" -- "TardeDourada" | "NoiteDeEstadio"
+-- ⚠️ v112 — PEDIDO (com print de referência, estilo Blue Lock): "melhora o visual
+-- da atmosfera". Preset novo EstadioBlueLock: nítido, verde fundo, linhas brancas,
+-- luz fria e o azul da arquibancada vivo.
+-- ⚠️ v112: "muito claro... pode voltar pra iluminação que tinha antes, só dá um
+-- pouco de escurecida" — de volta ao TardeDourada, um pouco mais escuro (ver
+-- Brightness/ExposureCompensation dele). O EstadioBlueLock fica guardado.
+local ACTIVE_PRESET = "TardeDourada" -- "TardeDourada" | "EstadioBlueLock" | "NoiteDeEstadio"
 
 -- ============================================================
 -- PRESETS
 -- ============================================================
 local PRESETS = {
+	-- ⚠️ v112 — ESTÁDIO BLUE LOCK (ajustado ao vivo contra a print de referência
+	-- do usuário). O que mudou em relação ao TardeDourada e por quê:
+	--   • SEM Blur (era 4): a referência é nítida; o blur deixava tudo "lavado".
+	--   • Luz de sol limpa (sem o dourado nem o azul forte): branco branco.
+	--   • Gramado mais fundo (GramadoCor): o verde-amarelado original (122,182,82)
+	--     puxava o campo pro amarelo; tingir a imagem de azul pintava as linhas.
+	--   • Bloom com Threshold alto (1.7): o neon azul brilha, a linha branca não
+	--     estoura (com 1.25 ela virava uma faixa de luz).
+	EstadioBlueLock = {
+		Lighting = {
+			ClockTime = 13.5,              -- sol alto: sombra curta, campo todo iluminado
+			GeographicLatitude = 25,
+			-- ⚠️ v112: "não precisa ser tão azul... a gente tá a céu aberto, no sol,
+			-- pode esclarecer um pouquinho" — mais sol e exposição, sombra quase neutra
+			Brightness = 2.4,
+			ExposureCompensation = 0.08,
+			ShadowSoftness = 0.3,
+			GlobalShadows = true,
+			EnvironmentDiffuseScale = 1,
+			EnvironmentSpecularScale = 1,
+			OutdoorAmbient = Color3.fromRGB(145, 148, 156), -- sombra só um toque fria
+			Ambient = Color3.fromRGB(102, 104, 112),
+			ColorShift_Top = Color3.fromRGB(255, 252, 245), -- sol branco, levemente quente
+			ColorShift_Bottom = Color3.fromRGB(172, 178, 190),
+		},
+		Atmosphere = {
+			Density = 0.2,
+			Offset = 0,
+			Color = Color3.fromRGB(215, 220, 228), -- ar limpo de dia (quase neutro)
+			Decay = Color3.fromRGB(150, 160, 178),
+			Glare = 0,
+			Haze = 0.3,
+		},
+		Bloom = { Intensity = 0.7, Size = 30, Threshold = 1.7 },
+		SunRays = { Intensity = 0.02, Spread = 0.3 },
+		ColorCorrection = {
+			Brightness = 0.02,
+			Contrast = 0.15,
+			Saturation = 0.28,                        -- verde e uniformes vivos
+			TintColor = Color3.fromRGB(252, 253, 255), -- neutro (azul pintava as linhas)
+		},
+		Blur = { Size = 0 },
+		DepthOfField = { FarIntensity = 0.06, NearIntensity = 0, FocusDistance = 120, InFocusRadius = 300 },
+		-- cor do gramado (partes de material Grass dentro de workspace.Campo)
+		GramadoCor = Color3.fromRGB(64, 150, 70),
+	},
+
 	-- Jogo de fim de tarde: sol baixo e quente, sombras longas e definidas,
 	-- céu frio fazendo contraste. É o visual clássico de transmissão de
 	-- futebol — e o que mais valoriza o gramado, porque o verde estoura
@@ -56,10 +109,10 @@ local PRESETS = {
 			GeographicLatitude = 18,
 			-- Intensidade da luz do sol. Sobe o contraste entre a parte
 			-- iluminada e a sombra.
-			Brightness = 1.85, -- ⚠️ v35: era 2.1 ("tá muito claro")
+			Brightness = 1.6, -- ⚠️ v112: 1.85 -> 1.6 ("dá um pouco de escurecida") · v35: era 2.1 ("tá muito claro")
 			-- Exposição da "câmera" (como em fotografia). Um toque pra
 			-- cima deixa o gramado vivo sem lavar o branco das linhas.
-			ExposureCompensation = -0.06, -- ⚠️ v35: era +0.05
+			ExposureCompensation = -0.2, -- ⚠️ v112: -0.06 -> -0.2 (um pouco mais escuro) · v35: era +0.05
 			-- Borrão da borda da sombra: 0 = recorte duro, 1 = bem macia.
 			-- Estádio a céu aberto tem sombra bem definida — 0.2 mantém a
 			-- silhueta do jogador legível no chão.
@@ -245,7 +298,7 @@ end
 local function applyPreset(presetName)
 	local preset = PRESETS[presetName]
 	if not preset then
-		warn(("🎨 [Iluminação] preset '%s' não existe. Opções: TardeDourada, NoiteDeEstadio."):format(tostring(presetName)))
+		warn(("🎨 [Iluminação] preset '%s' não existe. Opções: EstadioBlueLock, TardeDourada, NoiteDeEstadio."):format(tostring(presetName)))
 		return
 	end
 
@@ -257,13 +310,31 @@ local function applyPreset(presetName)
 	applyProperties(ensure("DepthOfFieldEffect", "DepthOfField"), preset.DepthOfField, "DepthOfField")
 	applyProperties(ensure("BlurEffect", "Blur"), preset.Blur, "Blur")
 
+	-- ⚠️ v112: cor do gramado do preset (sem GramadoCor = volta a cor original)
+	local campo = workspace:FindFirstChild("Campo")
+	if campo then
+		for _, parte in ipairs(campo:GetDescendants()) do
+			if parte:IsA("BasePart") and (parte.Material == Enum.Material.Grass or parte.Material == Enum.Material.LeafyGrass) then
+				local original = parte:GetAttribute("CorOriginal")
+				if not original then
+					original = parte.Color
+					parte:SetAttribute("CorOriginal", original)
+				end
+				parte.Color = preset.GramadoCor or original
+			end
+		end
+	end
+
 	print(("🎨 [Iluminação] preset '%s' aplicado."):format(presetName))
 
 	-- Technology é somente-leitura em runtime — não dá pra consertar daqui,
 	-- só avisar. Sem Future, boa parte do preset (sombra de qualidade, luz
 	-- do céu, reflexo do ambiente) simplesmente não é renderizada.
-	if Lighting.Technology ~= Enum.Technology.Future then
-		warn(("🎨 [Iluminação] ⚠️ Lighting.Technology está em '%s'. Pra iluminação ficar como foi desenhada, abra o Studio, selecione Lighting no Explorer e mude Technology pra Future. Script nenhum consegue mudar isso em runtime."):format(Lighting.Technology.Name))
+	-- ⚠️ v110 FIX: nem LER o Technology o script pode ("cannot read 'Technology'
+	-- (lacking capability)") — o erro parava o resto do script depois do preset.
+	local okTec, tecnologia = pcall(function() return Lighting.Technology end)
+	if okTec and tecnologia ~= Enum.Technology.Future then
+		warn(("🎨 [Iluminação] ⚠️ Lighting.Technology está em '%s'. Pra iluminação ficar como foi desenhada, abra o Studio, selecione Lighting no Explorer e mude Technology pra Future. Script nenhum consegue mudar isso em runtime."):format(tecnologia.Name))
 	end
 end
 

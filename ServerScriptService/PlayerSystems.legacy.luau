@@ -3,7 +3,7 @@
 	LOCAL: ServerScriptService
 
 	Junta em um script só tudo que antes estava espalhado em ~6 scripts:
-	- Stamina + sprint
+	- Stamina (Fôlego) + velocidade de corrida (⚠️ NOVO: sem sprint — ver getRunSpeed)
 	- Grupos de colisão (jogadores não colidem com a bola, nem entre si)
 	- Highlight por time
 	- Troca de time (RequestTeamChange)
@@ -115,7 +115,7 @@ local function isPulseFrozen(player)
 end
 
 -- ===== ATRIBUTOS QUE AFETAM MOVIMENTO/CORPO =====
--- Velocidade (Speed): multiplica NORMAL_SPEED/SPRINT_SPEED. No default
+-- Velocidade (Speed): multiplica RUN_SPEED (⚠️ NOVO: única velocidade — sem sprint). No default
 -- (50) o multiplicador é 1.0x — ninguém que nunca mexeu no atributo
 -- sente diferença nenhuma.
 local function getSpeedMultiplier(player)
@@ -168,12 +168,14 @@ local function getPossessionMultiplier(player)
 	return 1
 end
 
-local function getNormalSpeed(player)
-	return Config.NORMAL_SPEED * getSpeedMultiplier(player) * getAbilitySpeedMultiplier(player) * getChargeMultiplier(player) * getPossessionMultiplier(player)
-end
-
-local function getSprintSpeed(player)
-	return Config.SPRINT_SPEED * getSpeedMultiplier(player) * getAbilitySpeedMultiplier(player) * getChargeMultiplier(player) * getPossessionMultiplier(player)
+-- ⚠️ NOVO — SEM SPRINT. PEDIDO: "Não haverá botão de corrida/sprint. O
+-- personagem deve correr normalmente usando WASD, e sua velocidade será
+-- determinada pelo atributo Velocidade." Antes eram duas velocidades
+-- (getNormalSpeed andando, getSprintSpeed segurando Shift); agora existe
+-- UMA só, Config.RUN_SPEED x Velocidade — com os mesmos multiplicadores de
+-- Hissatsu/Arma, carga de chute e freio de quem está com a bola.
+local function getRunSpeed(player)
+	return Config.RUN_SPEED * getSpeedMultiplier(player) * getAbilitySpeedMultiplier(player) * getChargeMultiplier(player) * getPossessionMultiplier(player)
 end
 
 -- Físico (Physical): escala o corpo do personagem (R15 BodyScale) — é
@@ -206,11 +208,15 @@ local function applyPhysicalScale(player, character)
 	end)
 end
 
--- ===== STAMINA / SPRINT =====
-local sprinting = {} -- [player] = bool
+-- ===== STAMINA (FÔLEGO) =====
+local runStartedAt = {} -- [player] = os.clock() de quando começou a se mover (ver GetSecondsSinceSprintStart)
+-- ⚠️ NOVO: sem sprint, o Fôlego não drena mais correndo — só as AÇÕES
+-- físicas gastam (finta, cabeçada, carrinho, via Config.SpendStamina), e o
+-- MaxStamina (54 + Fôlego x 10) decide quantas dá pra encadear antes de
+-- precisar esperar a recuperação.
 
 -- [Player] = snapshot dos atributos do personagem ativo do roster
--- (Physical/DribbleSkill/Speed/Kick/Stamina),
+-- (Physical/DribbleSkill/Speed/Kick/Energy/Technique/Stamina),
 -- recebido via TeleportData.Characters quando o jogador chega pelo
 -- matchmaking do place Lobby (ver Matchmaker.lua de lá). Substitui a
 -- tentativa antiga de chamar _G.GetPlayerData aqui — esse global só
@@ -228,7 +234,6 @@ local function setupStatValues(player)
 	if not player:FindFirstChild("IsExhausted") then
 		Instance.new("BoolValue", player).Name = "IsExhausted"
 	end
-	sprinting[player] = false
 	charging[player] = false
 end
 
@@ -241,100 +246,50 @@ RunService.Heartbeat:Connect(function(deltaTime)
 
 		-- Bônus de Pulso/Instinto na regeneração de stamina (ex: Pulso da
 		-- Fôlego Tático, Instinto de Fôlego Final) — só afeta REGENERAÇÃO,
-		-- não o gasto ao esprintar.
+		-- não o gasto das ações.
 		local regenMult = 1
 		if _G.GetPulseStaminaRegenMultiplier then regenMult *= _G.GetPulseStaminaRegenMultiplier(player) end
 		if _G.GetInstinctStaminaRegenMultiplier then regenMult *= _G.GetInstinctStaminaRegenMultiplier(player) end
 
 		-- Refresca o WalkSpeed a cada frame com os multiplicadores de
-		-- Pulso/Instinto em dia (eles ligam/desligam sozinhos com o tempo,
-		-- sem disparar UpdateSprinting de novo) — nunca durante stun (o
-		-- BallController é quem manda no WalkSpeed nesse caso).
-		if not isStunned(player) and not isFrozenForSetPiece(player) and not isPulseFrozen(player) and not exhausted.Value then
-			local character = player.Character
-			local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-			if humanoid then
-				humanoid.WalkSpeed = sprinting[player] and getSprintSpeed(player) or getNormalSpeed(player)
-			end
+		-- Pulso/Instinto em dia (eles ligam/desligam sozinhos com o tempo)
+		-- — nunca durante stun (o BallController é quem manda no WalkSpeed
+		-- nesse caso).
+		local character = player.Character
+		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+		if humanoid and not isStunned(player) and not isFrozenForSetPiece(player) and not isPulseFrozen(player) then
+			humanoid.WalkSpeed = getRunSpeed(player)
+		end
+
+		-- ⚠️ NOVO: "arranque" (Arma Pique, MaxSecondsAfterSprintStart) agora
+		-- conta a partir de quando o jogador COMEÇA A SE MOVER (WASD), já
+		-- que não existe mais tecla de sprint pra marcar esse instante.
+		local moving = humanoid ~= nil and humanoid.MoveDirection.Magnitude > 0.1
+		if moving and not runStartedAt[player] then
+			runStartedAt[player] = os.clock()
+		elseif not moving then
+			runStartedAt[player] = nil
 		end
 
 		if exhausted.Value then
 			stamina.Value = math.min(maxStamina.Value, stamina.Value + Config.EXHAUSTED_RECOVERY_RATE * deltaTime)
-		elseif sprinting[player] and not (_G.IsInTackleDash and _G.IsInTackleDash(player)) then
-			-- ⚠️ v67: o `and not IsInTackleDash` é o pedido "não pode gastar
-			-- stamina durante o carrinho mesmo segurando o shift" — ver o
-			-- comentário completo em _G.IsInTackleDash (BallController).
-			stamina.Value = math.max(0, stamina.Value - Config.SPRINT_DRAIN_RATE * deltaTime)
-			if stamina.Value <= 0 then
-				exhausted.Value = true
-				if not isStunned(player) and not isFrozenForSetPiece(player) and not isPulseFrozen(player) then
-					local character = player.Character
-					if character and character:FindFirstChild("Humanoid") then
-						character.Humanoid.WalkSpeed = getNormalSpeed(player)
-					end
-				end
-				task.delay(Config.EXHAUSTED_DURATION, function()
-					if not exhausted then return end
-					exhausted.Value = false
-
-					-- FIX: sem isso, quem ficasse segurando Shift durante e
-					-- depois da exaustão continuava andando em NORMAL_SPEED
-					-- até soltar e apertar Shift de novo — o sprint não
-					-- voltava sozinho quando a exaustão acabava.
-					if sprinting[player] and not isStunned(player) and not isFrozenForSetPiece(player) and not isPulseFrozen(player) then
-						local character = player.Character
-						if character and character:FindFirstChild("Humanoid") then
-							character.Humanoid.WalkSpeed = getSprintSpeed(player)
-						end
-					end
-				end)
-			end
 		else
 			stamina.Value = math.min(maxStamina.Value, stamina.Value + Config.RECOVERY_RATE * regenMult * deltaTime)
 		end
 	end
 end)
 
--- ⚠️ v5.2: quando cada jogador COMEÇOU a correr. O Instinto "Velocidade
--- Explosiva" só vale no arranque (primeiros segundos da corrida), então
--- precisa saber há quanto tempo o sprint começou — não basta saber que
--- ele está correndo. Zera quando ele para de correr.
-local sprintStartedAt = {} -- [player] = os.clock() do momento em que começou a correr
-
+-- ⚠️ v5.2: quando cada jogador COMEÇOU a correr. A Arma "Pique" só vale
+-- no arranque (primeiros segundos da corrida). ⚠️ NOVO: sem sprint, o
+-- arranque é o instante em que ele começa a se mover com WASD (marcado no
+-- Heartbeat acima, em runStartedAt). O Remote UpdateSprinting continua
+-- existindo em FootballConfig.Remotes, mas nenhum cliente dispara mais e
+-- o servidor não escuta — não existe tecla de corrida.
 _G.GetSecondsSinceSprintStart = function(player)
-	local t = sprintStartedAt[player]
-	if not t then return math.huge end -- não está correndo
+	local t = runStartedAt[player]
+	if not t then return math.huge end -- parado
 	return os.clock() - t
 end
-
-Remotes.UpdateSprinting.OnServerEvent:Connect(function(player, wantsToSprint)
-	local exhausted = player:FindFirstChild("IsExhausted")
-	if not exhausted then return end
-
-	wantsToSprint = wantsToSprint and true or false
-
-	-- Só marca o início quando ele SAI de "não correndo" pra "correndo" —
-	-- se marcasse a cada evento, segurar Shift reiniciaria o arranque o
-	-- tempo todo e o instinto ficaria ligado pra sempre.
-	if wantsToSprint and not sprinting[player] then
-		sprintStartedAt[player] = os.clock()
-	elseif not wantsToSprint then
-		sprintStartedAt[player] = nil
-	end
-
-	sprinting[player] = wantsToSprint
-
-	if isStunned(player) or isFrozenForSetPiece(player) or isPulseFrozen(player) then return end -- não acelera enquanto stunado, nem enquanto preso pra cobrar escanteio/lateral ou congelado por Pulso
-
-	local character = player.Character
-	if character and character:FindFirstChild("Humanoid") then
-		if wantsToSprint and not exhausted.Value then
-			character.Humanoid.WalkSpeed = getSprintSpeed(player)
-		else
-			character.Humanoid.WalkSpeed = getNormalSpeed(player)
-		end
-	end
-end)
 
 -- Segurando o botão de chute (carregando força) → anda mais devagar. O
 -- valor exato de WalkSpeed é sempre refrescado pelo heartbeat acima (que
@@ -350,7 +305,7 @@ Remotes.UpdateKickCharging.OnServerEvent:Connect(function(player, isChargingNow)
 
 	local character = player.Character
 	if character and character:FindFirstChild("Humanoid") then
-		character.Humanoid.WalkSpeed = sprinting[player] and getSprintSpeed(player) or getNormalSpeed(player)
+		character.Humanoid.WalkSpeed = getRunSpeed(player)
 	end
 end)
 
@@ -460,6 +415,10 @@ local MOVEMENT_ANIMATIONS = { "Idle", "Walk", "Run", "Jump", "Fall", "GKIdle" }
 local RUN_ANIMATION_MIN_SPEED = (Config.NORMAL_SPEED + Config.SPRINT_SPEED) / 2
 
 local function overrideMovementAnimations(character)
+	-- ⚠️ v96: com a animação por código ligada, andar/correr/parado/pulo são
+	-- do AnimadorProcedural (cliente) — tocar estas tracks aqui era uma das
+	-- três fontes que se embolavam no mesmo corpo.
+	if Config.ANIMACAO_PROCEDURAL then return end
 	local humanoid = character:WaitForChild("Humanoid", 5)
 	if not humanoid then return end
 
@@ -666,7 +625,7 @@ local function onCharacterAdded(player, character)
 	humanoid.HealthDisplayDistance = 0
 	humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
 
-	humanoid.WalkSpeed = getNormalSpeed(player)
+	humanoid.WalkSpeed = getRunSpeed(player)
 	applyPhysicalScale(player, character)
 	overrideMovementAnimations(character)
 
@@ -747,7 +706,7 @@ local function onPlayerAdded(player)
 		local snapshot = teleportData.Characters[tostring(player.UserId)]
 		if typeof(snapshot) == "table" then
 			characterSnapshots[player] = snapshot
-			for _, attrName in ipairs({ "Physical", "DribbleSkill", "Speed", "Kick", "Energy" }) do -- ⚠️ NOVO: Energy (alimenta o sistema de Pulsos)
+			for _, attrName in ipairs({ "Physical", "DribbleSkill", "Speed", "Kick", "Energy", "Technique" }) do -- ⚠️ NOVO: Energy (tanque de Hissatsu) · Technique (7º atributo)
 				if typeof(snapshot[attrName]) == "number" then
 					player:SetAttribute(attrName, snapshot[attrName])
 				end
@@ -768,6 +727,22 @@ local function onPlayerAdded(player)
 				player:SetAttribute(Config.ELEMENT_ATTRIBUTE_NAME, snapshot.Element)
 			end
 
+			-- ⚠️ v110 — PEDIDO: "implemente o nome personalizado que já tem nos
+			-- slots dentro do jogo" + cosméticos/Flow equipados no Lobby. O
+			-- nome do slot vira o atributo "NomePersonagem" (placa de nome,
+			-- placar, chat); cada cosmético vira "Cosm_<Slot>" (ver
+			-- Cosmeticos.luau — o CosmeticosServer/Client aplicam).
+			if typeof(snapshot.SlotName) == "string" and snapshot.SlotName ~= "" then
+				player:SetAttribute("NomePersonagem", string.sub(snapshot.SlotName, 1, 24))
+			end
+			if typeof(snapshot.Cosmeticos) == "table" then
+				for slotCosm, idCosm in pairs(snapshot.Cosmeticos) do
+					if typeof(slotCosm) == "string" and typeof(idCosm) == "string" then
+						player:SetAttribute("Cosm_" .. slotCosm, idCosm)
+					end
+				end
+			end
+
 			-- Pulso/Instinto equipados no Lobby (ver RollServer.legacy.luau
 			-- de lá e MatchDataTransfer.legacy.luau) — repassa pro
 			-- PulseController/InstinctController deste place. Esses scripts
@@ -783,6 +758,13 @@ local function onPlayerAdded(player)
 				-- dos 2 slots ativos recebe cada Pulso/Instinto) — por isso
 				-- aqui a partida NUNCA recebe EquippedPulse3/EquippedInstinct3,
 				-- mesmo que o jogador tenha ExtraPulseSlot/ExtraInstinctSlot.
+				-- ⚠️ v106: o task.defer não garante que o PulseController/
+				-- InstinctController já carregaram — se ainda não, o jogador
+				-- ficava SEM as Hissatsus/Armas a partida inteira, sem aviso.
+				-- Espera eles existirem (até 15s) e avisa a HUD (LoadoutVersao).
+				local limite = os.clock() + 15
+				while (not _G.SetPlayerLoadout or not _G.SetPlayerInstincts) and os.clock() < limite do task.wait(0.2) end
+				if not _G.SetPlayerLoadout then warn("[Loadout] PulseController não carregou — " .. player.Name .. " ficou sem Hissatsu") end
 				if _G.SetPlayerLoadout then
 					local slot1 = typeof(snapshot.EquippedPulse1) == "string" and snapshot.EquippedPulse1 or nil
 					local slot2 = typeof(snapshot.EquippedPulse2) == "string" and snapshot.EquippedPulse2 or nil
@@ -797,6 +779,7 @@ local function onPlayerAdded(player)
 					end
 					_G.SetPlayerInstincts(player, lista)
 				end
+				player:SetAttribute("LoadoutVersao", (player:GetAttribute("LoadoutVersao") or 0) + 1)
 			end)
 		end
 	end
@@ -831,8 +814,7 @@ end
 
 Players.PlayerAdded:Connect(onPlayerAdded)
 Players.PlayerRemoving:Connect(function(player)
-	sprinting[player] = nil
-	sprintStartedAt[player] = nil
+	runStartedAt[player] = nil
 	charging[player] = nil
 	characterSnapshots[player] = nil
 end)

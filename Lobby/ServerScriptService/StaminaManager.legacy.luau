@@ -16,8 +16,8 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
--- Comunicação com o Cliente
-local updateSprintingState = ReplicatedStorage:WaitForChild("UpdateSprintingState")
+-- ⚠️ NOVO: o Remote UpdateSprintingState (ReplicatedStorage) não é mais
+-- escutado — não existe sprint (ver "Gerenciamento do Estado de Corrida").
 
 -- Configurações de Balanceamento
 local BASE_STAMINA = 50
@@ -32,6 +32,9 @@ local EXHAUSTED_DURATION = 2
 -- escolha que faz diferença, não só um número maior em tudo.
 local SPRINT_SPEED = 25 * 1.35 -- 33.75 (era 25)
 local NORMAL_SPEED = 16
+-- ⚠️ NOVO: sem sprint, a velocidade de corrida é a ÚNICA — a mesma que o
+-- sprint do Lobby já tinha (33.75), pra ninguém sentir o Lobby mais lento.
+local RUN_SPEED = SPRINT_SPEED
 
 -- ⚠️ FIX (pedido do usuário: "um com 100 de speed e o outro com 70 no
 -- lobby, e os dois tinham a mesma velocidade... só conta os atributos
@@ -69,16 +72,11 @@ RunService.Heartbeat:Connect(function(deltaTime)
 end)
 
 -- Gerenciamento do Estado de Corrida
--- LOBBY: corrida sempre disponível, sem gastar/checar estamina.
-updateSprintingState.OnServerEvent:Connect(function(player, wantsToSprint)
-	isSprinting[player] = wantsToSprint
-
-	local character = player.Character
-	if character and character:FindFirstChild("Humanoid") then
-		local mult = speedMultiplierOf[player] or 1
-		character.Humanoid.WalkSpeed = (wantsToSprint and SPRINT_SPEED or NORMAL_SPEED) * mult
-	end
-end)
+-- ⚠️ NOVO: SEM SPRINT. PEDIDO: "Não haverá botão de corrida/sprint. O
+-- personagem deve correr normalmente usando WASD, e sua velocidade será
+-- determinada pelo atributo Velocidade." O handler de UpdateSprintingState
+-- saiu (o SprintClient não manda mais nada) — o personagem sempre anda na
+-- velocidade de corrida (RUN_SPEED abaixo) x multiplicador de Velocidade.
 
 -- ⚠️ FIX: calcula e aplica o multiplicador de Speed do slot ATIVO agora —
 -- extraído numa função à parte (em vez de só rodar dentro de
@@ -102,7 +100,7 @@ local function refreshSpeedMultiplier(player)
 	local character = player.Character
 	local humanoid = character and character:FindFirstChild("Humanoid")
 	if humanoid then
-		humanoid.WalkSpeed = (isSprinting[player] and SPRINT_SPEED or NORMAL_SPEED) * speedMultiplier
+		humanoid.WalkSpeed = RUN_SPEED * speedMultiplier
 	end
 
 	return speedMultiplier
@@ -123,7 +121,7 @@ local function onCharacterAdded(character)
 	if not player then return end
 
 	local humanoid = character:WaitForChild("Humanoid")
-	humanoid.WalkSpeed = NORMAL_SPEED
+	humanoid.WalkSpeed = RUN_SPEED
 
 	-- 1. Espera pelo "sinal verde" do PlayerDataManager.
 	print(string.format("StaminaManager: Esperando sinal 'DataLoaded' para %s...", player.Name))

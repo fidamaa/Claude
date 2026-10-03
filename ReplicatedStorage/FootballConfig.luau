@@ -183,8 +183,10 @@ Config.KICKOFF_TAKER_OFFSET = 4
 --
 -- HALF_DURATION continua existindo com o valor de DISPLAY porque é ele que
 -- a HUD usa; quem manda no tempo de verdade é HALF_REAL_SECONDS.
-Config.HALF_DURATION = 120          -- o que aparece no placar: 2:00
-Config.HALF_REAL_SECONDS = 150      -- o que dura de verdade: 2min30
+-- ⚠️ v123 — PEDIDO: "aumenta a duração da partida pra 3 minutos por rodada (continua 1
+-- no OT)". Mesmo "relógio esticado" de antes (1 segundo do placar = 1.25s de verdade).
+Config.HALF_DURATION = 180          -- o que aparece no placar: 3:00 (era 2:00)
+Config.HALF_REAL_SECONDS = 225      -- o que dura de verdade: 3min45 (era 2min30)
 
 -- ⚠️ v49 — PRORROGAÇÃO. PEDIDO: "quando der o overtime, o jogo estiver
 -- EMPATADO, os caras vão ter aquele 1 minuto, só que vai ser 1 minuto mais
@@ -211,11 +213,23 @@ Config.OVERTIME_DISPLAY_SECONDS = 60
 -- ⚠️ v52 — PEDIDO: "entre as transições, pra virar de lado ou dar o
 -- overtime, coloca só 3 segundos no máximo. O overtime tá com 15 segundos
 -- pra começar, não pode ser." Era 15.
-Config.HALFTIME_BREAK_DURATION = 3 -- segundos de intervalo entre os tempos
+-- ⚠️ v112 — PEDIDO: "diminua os tempos de intervalo... vai direto pro segundo tempo... coloca pra ir direto pra iniciar a partida, meio segundo depois do teleporte, pra não ter enrolação".
+Config.HALFTIME_BREAK_DURATION = 0 -- segundos de intervalo entre os tempos (era 3)
 
 -- ===== MOVIMENTO / STAMINA =====
 Config.NORMAL_SPEED = 22
 Config.SPRINT_SPEED = 38
+-- ⚠️ NOVO — PEDIDO: "Não haverá botão de corrida/sprint. O personagem deve
+-- correr normalmente usando WASD, e sua velocidade será determinada pelo
+-- atributo Velocidade." O Shift/botão SPRINT saiu (ver PlayerSystems.
+-- legacy.luau e FootballClient.local.luau): todo movimento é corrida, na
+-- velocidade RUN_SPEED x multiplicador de Velocidade (SPEED_MULTIPLIER_*).
+-- Igual ao antigo SPRINT_SPEED de propósito — é o ritmo em que o jogo foi
+-- balanceado (drible, carrinho, animação de Run). NORMAL_SPEED continua
+-- existindo só como referência do ritmo de ANDAR da animação (ver
+-- refreshTrackSpeed em PlayerSystems). Quer o jogo mais lento? Baixe só
+-- este número.
+Config.RUN_SPEED = 38
 -- PEDIDO: menos stamina MÁXIMA base, mas recuperando bem mais rápido —
 -- em vez de aguentar sprintar por muito tempo seguido, o jogador cansa
 -- mais rápido só que volta a poder agir logo em seguida (menos "correr
@@ -223,6 +237,9 @@ Config.SPRINT_SPEED = 38
 -- ⚠️ v67 — PEDIDO: "aumente um pouco a stamina base, 20%". 45 -> 54.
 Config.BASE_STAMINA = 54            -- era 45 (+20%)
 Config.STAMINA_PER_ATTRIBUTE_POINT = 10
+-- ⚠️ NOVO: sem sprint, o Fôlego não é mais gasto correndo — só pelas AÇÕES
+-- físicas (finta, cabeçada, carrinho — ver *_STAMINA_COST). SPRINT_DRAIN_
+-- RATE ficou sem uso; mantido só pra não quebrar quem ainda leia o campo.
 Config.SPRINT_DRAIN_RATE = 20
 Config.RECOVERY_RATE = 24           -- era 15
 Config.EXHAUSTED_RECOVERY_RATE = 8  -- era 5 — junto com a recuperação base maior
@@ -258,7 +275,12 @@ Config.AERIAL_PICKUP_MAX_PLAYER_SPEED = 20   -- studs/s: acima disso (sprintando
 -- estiver no nível mínimo — abaixo disso, o carrinho erra igual sempre
 -- (não é qualquer um que controla uma bola voando rápido no peito/pé).
 Config.TACKLE_AERIAL_CAPTURE_HEIGHT = 10
-Config.TACKLE_FAST_BALL_MIN_DRIBBLE_SKILL = 60 -- 0-100: nível mínimo de DribbleSkill pra carrinhar bola rápida/no ar
+-- ⚠️ NOVO: "controle de bolas difíceis" é da TÉCNICA agora (era o
+-- DribbleSkill) — ver Config.TECHNIQUE_ATTRIBUTE. Mesmo número de corte.
+-- ⚠️ v120b: carrinho só corta bola até a velocidade de um chute de 40% da barra
+-- (força base: KICK_MIN + 40% de KICK_MAX-KICK_MIN ≈ 97 studs/s); acima, só o GK
+Config.TACKLE_INTERCEPT_BAR_FRACTION = 0.4
+Config.TACKLE_FAST_BALL_MIN_TECHNIQUE = 60 -- 0-100: nível mínimo de Técnica pra carrinhar bola rápida/no ar
 Config.DRIBBLE_OFFSET = 1
 Config.DRIBBLE_HEIGHT_OFFSET = -2.6
 Config.DRIBBLE_CHASE_GAIN = 25
@@ -274,6 +296,16 @@ Config.DRIBBLE_MAX_LOOSE_EXTRA = 4.5
 Config.DRIBBLE_EXPOSE_THRESHOLD = 1.8
 Config.DRIBBLE_BOB_AMPLITUDE = 0.25
 Config.DRIBBLE_BOB_FREQUENCY = 6
+-- ⚠️ v104 — BOLA NOS PÉS. PEDIDO: "a bola estar na sua frente, como se
+-- fosse sob o seu domínio... ele esteja se movendo mesmo assim, a bola está
+-- ali na frente dele, nos pés dele". Com a posse, quem simula a bola é o
+-- CLIENTE de quem tem a posse (BolaNosPes.local.luau): ela fica colada na
+-- frente dos pés todo quadro, sem o atraso da rede. O servidor só confere.
+Config.BOLA_NOS_PES_LIGADO = true
+Config.BOLA_NOS_PES_DISTANCIA = 1.75   -- studs do centro do corpo ao centro da bola (na frente)
+Config.BOLA_NOS_PES_TOQUE = 0.35       -- correndo: a bola "vai e volta" um pouco (os toques de condução)
+Config.BOLA_NOS_PES_TOQUE_FREQ = 9     -- toques por segundo (em radianos/s ÷ 2π ≈ 1.4 toques/s) quando correndo
+Config.BOLA_NOS_PES_DIST_MAX = 9       -- o servidor retoma a bola se ela estiver mais longe que isso do dono
 
 -- REWORK: BallControl foi removido (o controle de bola em curvas
 -- rápidas agora usa o mesmo DribbleSkill do drible — ver getDribbleSkill
@@ -321,12 +353,120 @@ Config.DEFAULT_DRIBBLE_SKILL = 50
 -- de força), igual Kick/Physical já funcionam pros outros sistemas.
 Config.ENERGY_ATTRIBUTE = "Energy"
 Config.DEFAULT_ENERGY = 50
--- Multiplicador de força de chute a partir de Energy — mesma faixa do
--- Kick (0.85x em 0, 1.0x no default 50, 1.15x no teto), pra alimentar a
--- fórmula de força dos Pulsos de Chute junto com Kick (ver
--- getEnergyForceMultiplier em BallController.legacy.luau).
-Config.ENERGY_FORCE_MULTIPLIER_MIN = 0.85
-Config.ENERGY_FORCE_MULTIPLIER_MAX = 1.15
+-- ⚠️ NOVO — PEDIDO: "Energia é um RECURSO, e não um atributo que aumenta
+-- diretamente a potência das Hissatsus... Não fazer 'mais Energia =
+-- Hissatsu mais forte'." REMOVIDOS ENERGY_FORCE_MULTIPLIER_MIN/MAX (o
+-- atributo multiplicava a força do chute de Hissatsu) e o bônus de cliques
+-- do QTE por Energy (ver startHissatsuQTE em PulseController). O atributo
+-- Energy agora só decide o TAMANHO do tanque (PULSE_ENERGY_POOL_MIN/MAX —
+-- Energy 50 = tanque de 100) e cada Hissatsu custa energia pra usar
+-- (PULSE_ENERGY_COST_BY_RARITY, ou o EnergyCost da própria Hissatsu).
+
+-- ===== TÉCNICA (7º atributo) =====
+-- ⚠️ NOVO — PEDIDO: "Técnica representa a habilidade geral do jogador com a
+-- bola: domínio, primeiro toque, recepção de passes, controle de bolas
+-- difíceis, precisão de passes... Hissatsus que utilizem Técnica". Mesmo
+-- padrão dos outros atributos de skill (0-100, default 50 = neutro,
+-- sorteado/migrado no PlayerDataManager do Lobby, repassado via
+-- TeleportData — ver onPlayerAdded no PlayerSystems.lua). Não é mecânica
+-- nova: escala o que JÁ existia no BallController —
+--   • domínio/primeiro toque: raio de pickup da bola solta
+--     (POSSESSION_PICKUP_RADIUS);
+--   • recepção de passe / bola difícil: velocidade máxima de bola que dá
+--     pra dominar passivamente (LOOSE_BALL_PICKUP_MAX_SPEED) e altura da
+--     bola aérea dominável (AERIAL_PICKUP_HEIGHT);
+--   • bola rápida/no ar no carrinho: TACKLE_FAST_BALL_MIN_TECHNIQUE (era
+--     o Drible que decidia isso);
+--   • precisão de passe: o desvio de mira do PASSE lê Técnica em vez de
+--     Chute (hoje o desvio está zerado — ver AIM_DEVIATION_* — então só
+--     passa a valer se você religar o desvio).
+-- Todos os multiplicadores são 1.0x no default (50): quem nunca mexeu no
+-- atributo não sente diferença nenhuma.
+Config.TECHNIQUE_ATTRIBUTE = "Technique"
+Config.DEFAULT_TECHNIQUE = 50
+-- ⚠️ v98 — TÉCNICA REMOVIDA (PEDIDO: "verifica se realmente é algo bom de
+-- se manter, senão remove a técnica, e os buffs das Hissatsus pelos seus
+-- atributos"). Com a mira perfeita por projeto, "precisão de passe" não
+-- existe mais; o resto (domínio, primeiro toque, recepção, bola difícil) é
+-- controle de bola = DRIBLE. Então: tudo acima passa a ler o Drible, e as
+-- fórmulas das Hissatsus (PulseInstinctData) só usam o atributo da
+-- categoria. No Lobby ela some da ficha e não recebe mais ponto. true = volta
+-- ao comportamento antigo.
+Config.USAR_TECNICA = false
+Config.TECHNIQUE_PICKUP_RADIUS_MULT_MIN = 0.85   -- Técnica 0
+Config.TECHNIQUE_PICKUP_RADIUS_MULT_MAX = 1.15   -- Técnica 100
+Config.TECHNIQUE_RECEIVE_SPEED_MULT_MIN = 0.85   -- bola mais rápida que dá pra dominar
+Config.TECHNIQUE_RECEIVE_SPEED_MULT_MAX = 1.15
+Config.TECHNIQUE_AERIAL_HEIGHT_MULT_MIN = 0.85   -- bola aérea mais alta que dá pra dominar
+Config.TECHNIQUE_AERIAL_HEIGHT_MULT_MAX = 1.15
+
+-- Multiplicador genérico 0-100 -> MIN..MAX (mesma curva linear de todos os
+-- atributos do jogo: 50 = meio da faixa).
+function Config.AttributeCurve(value, minMult, maxMult)
+	local fraction = math.clamp(tonumber(value) or 50, 0, 100) / 100
+	return minMult + (maxMult - minMult) * fraction
+end
+
+-- ===== ESCALA DE HISSATSU POR ATRIBUTO (fórmula própria por Hissatsu) =====
+-- ⚠️ NOVO — PEDIDO: "Cada Hissatsu poderá utilizar atributos diferentes
+-- para determinar sua potência... Hissatsu ofensiva: 60% Chute + 40%
+-- Técnica; outra: 70% Físico + 30% Técnica". Cada Hissatsu em
+-- PulseInstinctData.luau pode declarar
+--     Scaling = { Kick = 0.6, Technique = 0.4 }
+-- (nomes internos dos atributos, pesos somando 1). A POTÊNCIA BASE continua
+-- sendo o que a Hissatsu já define (ForceMult do Bom/Perfect, raridade,
+-- raios/durações do efeito) — a fórmula só decide QUAL nota de atributo
+-- (média ponderada 0-100) entra nas curvas que já existiam:
+--   • força do chute de Hissatsu: curva KICK_FORCE_MULTIPLIER_* (antes era
+--     sempre Kick x Energy);
+--   • tamanho/potência de área: curva PULSE_EFFECT_POWER_SCALE_* (antes um
+--     atributo fixo por categoria);
+--   • cliques extras e janela do QTE "Tap" (antes era a Energy).
+-- Hissatsu SEM Scaling cai no atributo da categoria, igual sempre foi
+-- (HISSATSU_DEFAULT_SCALING logo abaixo). Energy e Stamina NUNCA entram
+-- na fórmula: Energy é recurso (custo), Stamina é Fôlego (escala própria).
+Config.HISSATSU_SCALABLE_ATTRIBUTES = {
+	Physical = "DEFAULT_PHYSICAL",
+	Kick = "DEFAULT_KICK",
+	DribbleSkill = "DEFAULT_DRIBBLE_SKILL",
+	Speed = "DEFAULT_SPEED",
+	Technique = "DEFAULT_TECHNIQUE",
+}
+
+-- Fórmula padrão de quem não declara Scaling — exatamente o atributo que
+-- cada categoria já lia antes (GK/desarme/Root = Físico, chute/cabeçada =
+-- Chute, drible = Drible). Buff de linha sem categoria = sem escala.
+function Config.GetHissatsuScaling(def)
+	if type(def) ~= "table" then return nil end
+	if type(def.Scaling) == "table" then return def.Scaling end
+	if def.RoleRequired == "GK" then return { Physical = 1 } end
+	if def.Action == "Shot" or def.Action == "Header" then return { Kick = 1 } end
+	if def.Action == "DribbleMove" then return { DribbleSkill = 1 } end
+	if def.Action == "Tackle" or def.Action == "Root" then return { Physical = 1 } end
+	return nil
+end
+
+-- Nota 0-100 do jogador pra ESTA Hissatsu: média ponderada dos atributos da
+-- fórmula. Pesos são normalizados (não precisam somar exatamente 1).
+-- Devolve nil se a Hissatsu não escala com nada.
+function Config.GetHissatsuAttributeRating(player, def)
+	local scaling = Config.GetHissatsuScaling(def)
+	if not scaling then return nil end
+	local total, weightSum = 0, 0
+	for attrName, weight in pairs(scaling) do
+		local defaultKey = Config.HISSATSU_SCALABLE_ATTRIBUTES[attrName]
+		if defaultKey and typeof(weight) == "number" and weight > 0 then
+			local value = player:GetAttribute(attrName)
+			if typeof(value) ~= "number" then value = Config[defaultKey] or 50 end
+			total += math.clamp(value, 0, 100) * weight
+			weightSum += weight
+		elseif attrName == "Energy" or attrName == "Stamina" then
+			warn(("[Hissatsu] %s: '%s' não pode entrar em Scaling (Energy é custo, Stamina é Fôlego) — ignorado."):format(tostring(def.Name), attrName))
+		end
+	end
+	if weightSum <= 0 then return nil end
+	return total / weightSum
+end
 
 -- ===== v8 PEDIDO: "as duas coisas juntas" — alcance máximo (MaxRange)
 -- por raridade + multiplicador de poder por raridade pros Pulsos de
@@ -371,7 +511,8 @@ Config.PULSE_RARITY_ORDER = { "Common", "Rare", "Epic", "Legendary", "Mythic" }
 -- Pulso: goleiro (RoleRequired="GK") usa Physical, chute (Action="Shot")
 -- usa Kick, drible (Action="DribbleMove") usa DribbleSkill, desarme
 -- (Action="Tackle") usa Physical também (ainda é força física, só que na
--- defesa). Mesma curva MIN/DEFAULT/MAX de sempre (ver getKickForceMultiplier
+-- defesa). ⚠️ NOVO: isso virou só o PADRÃO — a Hissatsu que declara
+-- Scaling usa a própria fórmula (ver Config.GetHissatsuScaling). Mesma curva MIN/DEFAULT/MAX de sempre (ver getKickForceMultiplier
 -- em BallController.lua): 0.75x no atributo 0, 1.0x no default (50), 1.30x
 -- no atributo 100.
 Config.PULSE_EFFECT_POWER_SCALE_MIN = 0.75
@@ -387,44 +528,18 @@ Config.PULSE_DEFENDER_CHIP_RANGE = 12
 -- genérico de Passe/Cobrança) — sem isso o cap antigo apagava toda a
 -- diferença entre raridades altas.
 Config.PULSE_SHOT_FORCE_CAP_MULT = 6.0
+-- ⚠️ v119: teto da VELOCIDADE do voo do chute de Hissatsu (a força/vida da bola não
+-- muda). Antes a velocidade era igual à força (Mítica = 600-900 studs/s).
+Config.HISSATSU_VELOCIDADE_MAX = 210
 
--- ⚠️ v36 — SANEAMENTO DA MIRA (bug "a Hissatsu jogou a bola pra cima/pro
--- nada"). O chute de Hissatsu voa RETO, sem gravidade, na direção
--- (alvo - bola). Quando o cliente mandava um ponto de mira degenerado
--- (um caso real do log: bola em Y=-185 e alvo em Y=-298, ou seja, 113
--- studs ABAIXO do gramado), a direção saía com Y=-0.99 e a bola
--- atravessava o chão viajando pra sempre. Estes três limites são
--- aplicados em _G.PulseComputeShotTarget (BallController) ANTES de virar
--- direção de chute:
---   MAX_DROP: quanto o alvo pode ficar ABAIXO da bola (mira no canto
---             inferior do gol continua valendo — o gol tem ~18 de altura).
---   MAX_RISE: quanto o alvo pode ficar ACIMA da bola (chute por cima da
---             barreira/cruzamento alto continua valendo).
---   MIN_HORIZONTAL: se depois do ajuste sobrar menos que isso de distância
---             horizontal, a mira não aponta pra lugar nenhum (o jogador
---             mirou no próprio pé) e o servidor usa a mira automática de
---             canto do gol adversário.
-Config.PULSE_AIM_MAX_DROP = 20
-Config.PULSE_AIM_MAX_RISE = 45
+-- ⚠️ v85 — MIRA DA HISSATSU SEM ASSISTENTE: o ponto sob o cursor é usado
+-- exatamente como vem (ver _G.PulseComputeShotTarget no BallController e
+-- computeAimPoint em HissatsuInput.local.luau). Saíram PULSE_AIM_MAX_DROP/
+-- MAX_RISE (travas de altura) e PULSE_AIM_ASSIST_STRENGTH (assistência).
+-- MIN_HORIZONTAL fica: mira com menos que isso de distância na horizontal
+-- (cursor no próprio pé) não aponta pra lugar nenhum, e o servidor usa a
+-- mira automática de canto do gol adversário.
 Config.PULSE_AIM_MIN_HORIZONTAL = 6
-
--- ⚠️ v67 — ASSISTÊNCIA DE MIRA DA HISSATSU, **SÓ NA ALTURA**.
--- PEDIDO: "as Hissatsus continuam subindo demais. Coloca meio que um
--- auto-aim: prioriza mirar onde você está mirando, só que corrige pra
--- direção do gol — se subir demais desce um pouco, se descer demais sobe um
--- pouco. MAS só no eixo Y. O eixo X mantém do jeito que está, porque você
--- PODE errar a Hissatsu muito pra direita ou pra esquerda."
---
--- Por isso a correção mexe SÓ no Y. Errar pro lado continua sendo erro seu e
--- a bola vai pro lado mesmo; o que deixa de acontecer é a bola sair pro céu
--- ou pro chão por causa de um pixel de diferença na mira.
---
--- ⚠️ v84: agora só vale ACIMA do travessão (ver aplicarAssistenciaDeAltura
--- no BallController) — dentro da boca do gol a mira não é mais mexida, e
--- abaixo da base ela sobe rente ao chão. STRENGTH é a fração do excesso que
--- é cortada: 0 desliga, 1 gruda no travessão. 0.6 corta 10 studs acima do
--- gol pra 4.
-Config.PULSE_AIM_ASSIST_STRENGTH = 0.6
 
 -- ⚠️ NOVO: PEDIDO — "coloque um print também, pra eu saber exatamente qual
 -- o número em cada lugar, e quanto a skill de GK ou DF tiraram, pra poder
@@ -489,6 +604,58 @@ Config.PULSE_DASH_TACKLE_MIN_HITBOX = 4
 -- Mythic estica a mesma queda até 330 studs, bem mais suave por stud).
 Config.PULSE_RANGE_FALLOFF_MIN = 0.7
 
+-- ⚠️ v103 — DUELO DE DEFESA. PEDIDO: "assim que uma hissatsu de chute colidir
+-- com uma hissatsu de defesa ou gol, esse diminuidor de força com a distância
+-- vai parar, e a força vai ficar paralisada. o que vai começar a dar dano é
+-- quantas vezes o defensor ou GK acertarem a hissatsu deles. ex: chegou no gol
+-- com 130 de vida, GK usa a mão demoníaca, acerta 2 QTEs, tira 100 de vida,
+-- sobra 30, bola continua sua trajetória e volta o diminuidor por distância."
+-- Dano de CADA acerto no QTE da Hissatsu de defesa, pela raridade dela (vezes
+-- a escala de atributo da própria Hissatsu — Físico pro goleiro, ~1.0 na nota
+-- 50). Acerto perfeito (faixa dourada) vale DEFESA_DANO_PERFEITO_MULT.
+-- ⚠️ v105 — REGRA DA MESMA RARIDADE. PEDIDO: "chute e defesa épicos, os dois
+-- com 50 de força/físico: do MEIO do campo, a Hissatsu do goleiro consegue
+-- defender. Da mesma raridade chutando de PERTO (um pouco na frente da área),
+-- não aguenta." Calibrado com as contas reais (campo 25% maior: meio ≈ 354
+-- studs do gol, frente da área ≈ 130): do meio, o chute PERFECT da mesma
+-- raridade cai dentro de 5 acertos BONS; da frente da área, o chute BOM passa
+-- mesmo com 5 acertos PERFEITOS. Vale pra todas as raridades (era 22/28/36/43/50
+-- — o goleiro comum/raro/lendário segurava até de perto, o mítico mal segurava
+-- do meio). Físico 100 dá +27% de dano por acerto; Chute 100 dá +15% de força.
+-- E a regra CRUZADA (pedido seguinte): "não é pra uma mítica não conseguir
+-- defender uma épica... dá até pra uma lendária não conseguir uma épica se a
+-- lendária sair ruim e a épica forte contra ela; senão não faz sentido".
+-- Então o goleiro de raridade R, com 5 acertos BONS, segura o chute PERFECT
+-- da raridade de baixo até na frente da área. Pra caber as duas regras, a
+-- Zona Morta (Lendária) e a Galáxia (Mítica) subiram de força (PulseInstinctData).
+-- v110 — PEDIDO: "-4 de força por acerto é foda; a Hissatsu mais fraca tem ~100 de
+-- vida de perto, a defesa comum tem que conseguir parar ela". Era 12/23/34/49/70.
+Config.DEFESA_DANO_POR_ACERTO = { Common = 30, Rare = 38, Epic = 46, Legendary = 58, Mythic = 70 }
+Config.DEFESA_DANO_PERFEITO_MULT = 1.15
+-- ⚠️ v107 — IMPACTO DA DEFESA. PEDIDO: "com a Galáxia do meio de campo, 300 de
+-- força, o GK acertou algumas e só tirou 150... são duas míticas, tem que ter
+-- briga. Mesmo com a maior desvantagem do mundo, ele tira 200 de 300, sobra 100".
+-- Antes a defesa inteira vinha dos acertos (5 x 70 na mítica) — errar 3 QTEs
+-- derrubava a defesa pra 40%. Agora a CAPACIDADE da Hissatsu de defesa é
+-- DANO_POR_ACERTO x RequiredHits (mesmo total de antes com todos os acertos), e
+-- metade dela entra de uma vez no IMPACTO (a mão/soco encontra a bola); a outra
+-- metade é dividida pelos acertos. Mítica x mítica do meio (300): neutro e 5
+-- acertos = 350 (segura); fraqueza elemental (x0.8) e 2 acertos = 196 (sobra ~100).
+Config.DEFESA_IMPACTO_FRACAO = 0.5
+-- ⚠️ v122 — BUG relatado: "chute lendário (Tornado do Dragão) contra defesa lendária
+-- (Punho da Justiça): a força foi de 180 pra 0". O IMPACTO (metade da capacidade, ~145-200
+-- na lendária com atributo/elemento) zerava o chute sozinho, antes de qualquer QTE.
+-- Agora o impacto tira no máximo essa fração da força que a bola tinha na colisão —
+-- o resto TEM que sair nos acertos do QTE (sempre tem duelo).
+Config.DEFESA_IMPACTO_MAX_DO_CHUTE = 0.55
+-- Goleiro BOT (sem QTE de verdade): "aperta" a cada GKBOT_DUELO_INTERVALO
+-- segundos com essa chance de acertar, até o número de acertos da Hissatsu dele.
+Config.GKBOT_DUELO_CHANCE_ACERTO = 0.6
+Config.GKBOT_DUELO_INTERVALO = 0.45
+-- ⚠️ v105: bot que PERDE o duelo fica atordoado esse tempo (a bola passa e entra —
+-- antes ele mergulhava/afastava a bola logo depois e jogava a Hissatsu pra fora)
+Config.GKBOT_ATORDOADO_APOS_FALHA = 1.6
+
 -- ⚠️ v9 PEDIDO original: "aumente um pouquinho a força dos chutes" — essa
 -- definição de Config.KICK_MAX_FORCE ficava AQUI (152), mas era
 -- reatribuída DE NOVO mais abaixo na seção "===== CHUTE" (linha ~949,
@@ -499,8 +666,8 @@ Config.PULSE_RANGE_FALLOFF_MIN = 0.7
 -- de verdade continua editável só na seção CHUTE, mais abaixo.
 
 -- ⚠️ v9 PEDIDO: "energia de ativação da Hissatsu, relacionada ao atributo
--- Energy" — pool separado do atributo Energy (que já mexe na FORÇA do
--- chute, ver getEnergyForceMultiplier): esse aqui é um "combustível" que
+-- Energy" — ⚠️ NOVO: é o ÚNICO papel do atributo Energy agora (ele não
+-- mexe mais na força de nada, ver Config.ENERGY_ATTRIBUTE): um "combustível" que
 -- todo Pulso Hissatsu (chute/defesa/arrancada/drible) GASTA pra ativar,
 -- que também escala com o atributo Energy (mais Energy = pool maior).
 -- Mostrado na HUD (ver AbilityHUD.local.luau) e verificado em
@@ -514,7 +681,11 @@ Config.PULSE_RANGE_FALLOFF_MIN = 0.7
 -- tempo, ver _G.ResetPulseEnergy chamado por performKickoff em
 -- MatchController.legacy.luau), nunca ambiente/contínuo durante o jogo.
 Config.PULSE_ENERGY_POOL_MIN = 60  -- pool máximo com atributo Energy = 0
-Config.PULSE_ENERGY_POOL_MAX = 140 -- pool máximo com atributo Energy = 100
+-- ⚠️ v108 — PEDIDO: "a energia tá bufando muito pouco... se você maximizar a
+-- energia, você ganha 200 a mais além do normal — pra usar duas Hissatsus
+-- míticas todas as vezes possíveis na partida". Era 140 no máximo; agora 340
+-- (140 + 200). Energy 50 = 200 (2 míticas e meia), Energy 100 = 340 (4 míticas).
+Config.PULSE_ENERGY_POOL_MAX = 340 -- pool máximo com atributo Energy = 100
 Config.PULSE_ENERGY_COST = 35 -- fallback: usado só se a raridade não estiver na tabela abaixo
 
 -- ⚠️ v27 — CUSTO DE ENERGIA POR RARIDADE.
@@ -553,10 +724,13 @@ Config.INSTINCT_COOLDOWN_BY_RARITY = {
 	Mythic = 90,
 }
 
--- ⚠️ v28 — O QTE "Tap" DA HISSATSU ESCALA COM O ATRIBUTO ENERGY.
--- MAX_BONUS_HITS: quantos alvos EXTRA o atributo pode liberar, além dos que
---   a Hissatsu já define. 3 no máximo (Energy 100), 0 no mínimo.
--- WINDOW_BONUS: quanto a janela de clique cresce no Energy 100 (+70%).
+-- ⚠️ v28 — O QTE "Tap" DA HISSATSU ESCALA COM ATRIBUTO.
+-- ⚠️ NOVO: não é mais a Energy (Energia é recurso, não potência) — é a nota
+-- da FÓRMULA da própria Hissatsu (Scaling, ver Config.GetHissatsuAttribute-
+-- Rating): um chute 60% Chute + 40% Técnica ganha cliques com esses dois.
+-- MAX_BONUS_HITS: quantos alvos EXTRA a nota pode liberar, além dos que
+--   a Hissatsu já define. 3 no máximo (nota 100), 0 no mínimo.
+-- WINDOW_BONUS: quanto a janela de clique cresce na nota 100 (+70%).
 --   Cresce mais rápido que os alvos de propósito — senão atributo alto
 --   viraria punição, com mais alvo pra clicar no mesmo tempo.
 -- BONUS_HIT_FORCE: quanto de força cada clique EXTRA acrescenta ao chute.
@@ -599,8 +773,18 @@ Config.INSTINCT_GK_OFF_LINE_DISTANCE = 12
 -- subir só a base achataria a diferença entre iniciante e maximizado.
 -- A janela continua fixa (DRIBBLE_ANIMATION_SECONDS), então isso também
 -- deixa o drible mais RÁPIDO na mesma proporção.
-Config.DRIBBLE_MOVE_MIN_DISTANCE = 12.1 -- era 10.5 (+15%)
-Config.DRIBBLE_MOVE_MAX_DISTANCE = 17.9 -- era 15.6 (+15%)
+-- ⚠️ v104 — PEDIDO: "quando você dribla, ele dá o dash dele depois, sempre,
+-- independente do que aconteça. O drible só dá esse dash de vantagem se você
+-- realmente driblar alguém — se alguém sofrer um ankle breaker". O que parecia
+-- dash era o PRÓPRIO deslocamento base (12-18 studs em 0.58s). Agora o drible
+-- normal é só o rolamento (passo curto) e a arrancada vem no mini-dash, que só
+-- existe quando alguém cai (DRIBBLE_MINIDASH_* abaixo). Driblando alguém, o
+-- total continua o de antes (12-18).
+Config.DRIBBLE_MOVE_MIN_DISTANCE = 4 -- era 12.1
+Config.DRIBBLE_MOVE_MAX_DISTANCE = 6 -- era 17.9
+-- A finta de HISSATSU (Pulso de drible) continua com o alcance longo de antes:
+Config.DRIBBLE_HISSATSU_MIN_DISTANCE = 12.1
+Config.DRIBBLE_HISSATSU_MAX_DISTANCE = 17.9
 -- ⚠️ v64 — PEDIDO: "faz a outra: mais longe E mais rápido."
 --
 -- ANTES a velocidade era fixa em 18 e a JANELA é que crescia com o nível
@@ -626,7 +810,7 @@ Config.DRIBBLE_MOVE_TRAVEL_SPEED = 18
 -- PEDIDO (atualizado): cooldown reduzido pra 1s — a finta volta a poder
 -- ser usada bem mais rápido (era 2s, que por sua vez tinha vindo de 0.5s
 -- pra evitar spam; o custo de stamina abaixo continua segurando o spam).
-Config.DRIBBLE_MOVE_COOLDOWN = 1      -- era 0.5, depois 2
+Config.DRIBBLE_MOVE_COOLDOWN = 2      -- ⚠️ v104: "muito spamável... dobra o tempo dele" (era 1; antes 0.5, depois 2)
 Config.DRIBBLE_MOVE_STAMINA_COST = 14 -- era 8
 Config.TACKLE_STUN_ON_FAILED_TIMING = 1.2
 
@@ -652,8 +836,8 @@ Config.ANKLE_BREAKER_STUN = 1  -- era 0.5 — tempo total sem controle (cobre o 
 -- DribbleSkill=100 (skill=1) ele chega a MAX_MULT vezes essa distância-
 -- base — não escala em cima da distância normal do drible inteiro
 -- (isso deixaria muito OP), só em cima desse valor pequeno próprio.
-Config.DRIBBLE_MINIDASH_BASE_DISTANCE = 3.5 -- distância extra com DribbleSkill = 0
-Config.DRIBBLE_MINIDASH_MAX_MULT = 2.5      -- multiplicador da base com DribbleSkill = 100 (entre o dobro e o triplo pedido)
+Config.DRIBBLE_MINIDASH_BASE_DISTANCE = 8 -- ⚠️ v104: a arrancada de vantagem (era 3.5) — distância extra com DribbleSkill = 0
+Config.DRIBBLE_MINIDASH_MAX_MULT = 1.5    -- ⚠️ v104: 8 -> 12 com DribbleSkill = 100 (era 2.5)
 
 -- ===== ATRIBUTO FÍSICO (usado no CARRINHO, disputa de bola solta, e
 -- agora também no tamanho do personagem/hitbox — ver onCharacterAdded
@@ -772,7 +956,8 @@ Config.GKBOT_CATCH_APPROACH_RADIUS = 6
 -- Raio (studs) da "defesa" do bot em cima da trajetória prevista da bola
 -- solta (chute/cruzamento vindo na direção dele). ⚠️ AUMENTADO (era 5,
 -- mesmo pedido de hitbox maior).
-Config.GKBOT_SHOT_REACT_RADIUS = 7
+-- ⚠️ v111 — PEDIDO: "aumente a distância dos dives do GK Bot, 50% maior — tanto pra cima, quanto pra diagonal, quanto pros lados"
+Config.GKBOT_SHOT_REACT_RADIUS = 18 -- ⚠️ v111: 12 -> 18 (+50%: tenta o dive de mais longe) -- ⚠️ v105: era 7 — "faça o GK dar mais dives": reage a mais chutes
 
 -- Só reage a bola solta se ela já estiver a essa distância (studs, no
 -- plano do chão) do bot — evita o bot reagir a um chute do outro lado do
@@ -817,7 +1002,7 @@ Config.GKBOT_CLEAR_FORCE = 45
 -- (GKBOT_DIVE_REACH/GKBOT_CHASE_SPEED), não da hitbox de contato.
 -- ⚠️ v67 — PEDIDO: "o goleiro bot não está pegando algumas bolas que são
 -- essenciais; pode melhorar um pouco mais o bot também". 6.5 -> 8.5.
-Config.GKBOT_CATCH_MAX_RANGE = 8.5 -- era 6.5 (+31%)
+Config.GKBOT_CATCH_MAX_RANGE = 8.5 -- ⚠️ v110: de volta a 8.5 (v109 tinha subido pra 10) ("aumenta um pouco a hitbox") -- era 6.5 (+31%)
 
 -- Ângulo (graus) entre "de frente pro campo" (linha do próprio gol até o
 -- gol adversário) e a direção bot→bola — acima disso, falha automática
@@ -994,8 +1179,11 @@ Config.HIGHLIGHT_OUTLINE_TRANSPARENCY = 0.35
 -- encolhe ao se aproximar). Está assim porque foi pedido assim, e
 -- confirmado no pedido. Se um dia quiser o comportamento físico, basta
 -- trocar MIN_SIZE por MAX_SIZE aqui — o script não precisa mudar.
-Config.BALL_SHADOW_MIN_SIZE = 3     -- bola no alto (círculo pequeno)
-Config.BALL_SHADOW_MAX_SIZE = 9     -- bola rente ao chão (círculo grande)
+-- ⚠️ v112 — PEDIDO: "a sombra da bola pode aparecer sempre... coloca um tamanho
+-- mínimo; mesmo muito distante ela não pode sumir, só fica no tamanho certo, pro
+-- cara ter uma ideia mínima de onde vai cair a bola". Mínimo 3 -> 4 e nunca some.
+Config.BALL_SHADOW_MIN_SIZE = 4     -- bola no alto (círculo pequeno — nunca menor que isso)
+Config.BALL_SHADOW_MAX_SIZE = 10    -- bola rente ao chão (círculo grande)
 -- Altura (studs) em que a sombra já está no tamanho MÍNIMO. Acima disso
 -- não encolhe mais.
 Config.BALL_SHADOW_MAX_HEIGHT = 45
@@ -1007,7 +1195,12 @@ Config.BALL_SHADOW_MAX_HEIGHT = 45
 -- cliente sabe por Remotes.PossessionChanged.
 Config.BALL_SHADOW_MIN_HEIGHT = 3
 -- Transparência da marca: mais apagada com a bola alta, mais escura perto.
-Config.BALL_SHADOW_MAX_TRANSPARENCY = 0.82 -- bola no alto
+Config.BALL_SHADOW_MAX_TRANSPARENCY = 0.82 -- (v112: não usado — ver BALL_SHADOW_MIN_ALPHA)
+-- ⚠️ v112: opacidade mínima da marca com a bola bem alta (0 = some, 1 = cheia)
+Config.BALL_SHADOW_MIN_ALPHA = 0.7
+-- ⚠️ v112: até onde procura o chão embaixo da bola (antes era 1.5 x MAX_HEIGHT = 67
+-- studs — bola mais alta que isso não achava o chão e a sombra sumia)
+Config.BALL_SHADOW_RAY_LENGTH = 600
 Config.BALL_SHADOW_MIN_TRANSPARENCY = 0.35 -- bola rente ao chão
 -- ⚠️ v51: a textura foi REMOVIDA. PEDIDO: "arruma a sombra, ela tá muito
 -- estranha, parece que é uma skin. Ela tem que ser um círculo embaixo da
@@ -1070,7 +1263,7 @@ Config.GKBOT_THROW_SPEED_REFERENCE = 30 -- studs/segundo usados pra escalar o te
 -- studs, a velocidade de pouso alvo cai até GKBOT_THROW_LONG_SPEED_MULT da
 -- normal — nunca a zero (a bola sempre continua andando um pouco, só não
 -- passa voando pelo companheiro).
-Config.GKBOT_THROW_LONG_REFERENCE_DISTANCE = 70
+Config.GKBOT_THROW_LONG_REFERENCE_DISTANCE = 84 -- ⚠️ v112: campo 20% maior ("aumenta o campo em vinte por cento, ajuste tudo")
 Config.GKBOT_THROW_LONG_SPEED_MULT = 0.55
 
 -- ⚠️ v23: quique da bola no lançamento do goleiro (Elasticity). Passe curto
@@ -1082,7 +1275,9 @@ Config.GKBOT_THROW_BOUNCE_LONG = 0.04
 
 -- ⚠️ v5.7: DOBRADO (era 18) — pedido esclarecido: "velocidade de
 -- caminhada" era sobre o GKBOT, não o Role="GK" humano.
-Config.GKBOT_WALK_SPEED = 36
+-- ⚠️ v110 — PEDIDO: "o bot está muito rápido, diminua a velocidade dele" (era 36;
+-- o jogador corre a 38 — patrulha agora é bem mais calma que a corrida dele)
+Config.GKBOT_WALK_SPEED = 26
 
 -- ⚠️ NOVO: velocidade (studs/s) usada SÓ enquanto o bot está perseguindo
 -- a bola/adversário de verdade numa tentativa de defesa/bote (ver
@@ -1100,7 +1295,8 @@ Config.GKBOT_WALK_SPEED = 36
 -- dive".
 -- ⚠️ v6.3: AUMENTADO de novo (era 54) — pedido: "melhore um pouco mais o
 -- dive do bot, pra dificultar pros players".
-Config.GKBOT_CHASE_SPEED = 66 -- ⚠️ v35: era 78 (original 58) -- ⚠️ v22: era 58 — com o alcance maior ele precisa CHEGAR lá dentro da duração do mergulho.
+-- ⚠️ v110: "o bot está muito rápido" — era 66 (quase o DOBRO do jogador, 38)
+Config.GKBOT_CHASE_SPEED = 44 -- ⚠️ v35: era 78 (original 58) -- ⚠️ v22: era 58 — com o alcance maior ele precisa CHEGAR lá dentro da duração do mergulho.
 
 -- ⚠️ NOVO (pulo em vez de perseguir a bola): altura (studs) da bola
 -- acima dos PÉS do bot a partir da qual ele pula pra tentar alcançar —
@@ -1119,7 +1315,7 @@ Config.GKBOT_JUMP_MIN_BALL_HEIGHT = 2
 -- updateBotMovement — só que numa velocidade bem maior, GKBOT_CHASE_
 -- SPEED, e sem o clamp lateral normal); só o pulo vertical continua
 -- sendo um impulso direto (ver maybeJumpForBall em GKBotController.lua).
-Config.GKBOT_DIVE_UP_SPEED = 32      -- ⚠️ v6.3 AUMENTADO (era 23): "melhore um pouco mais o dive do bot, pra dificultar pros players"
+Config.GKBOT_DIVE_UP_SPEED = 48 -- ⚠️ v111: 32 -> 48 (+50%)      -- ⚠️ v6.3 AUMENTADO (era 23): "melhore um pouco mais o dive do bot, pra dificultar pros players"
 -- ⚠️ v5.9: NOVO — pedido: "ele ainda não está dando o dive diagonal,
 -- apenas o pulo". Componente HORIZONTAL somado ao impulso vertical do
 -- mergulho aéreo (GKBOT_DIVE_UP_SPEED), na direção do alvo — sem isso o
@@ -1132,14 +1328,23 @@ Config.GKBOT_DIVE_UP_SPEED = 32      -- ⚠️ v6.3 AUMENTADO (era 23): "melhore
 -- pouco a distância do dive".
 -- ⚠️ v6.3: AUMENTADO de novo (era 22) — pedido: "melhore um pouco mais o
 -- dive do bot, pra dificultar pros players".
-Config.GKBOT_DIVE_DIAGONAL_KICK = 25
+Config.GKBOT_DIVE_DIAGONAL_KICK = 54 -- ⚠️ v111: 36 -> 54 (+50%) -- ⚠️ v105: +~50% (era 25) — o mergulho do bot vai mais longe
 -- ⚠️ REDUZIDO pra 0.35 (era 0.5): "diminua um pouco o atraso do pulo".
 -- ⚠️ v5.8: AUMENTADO um pouco de novo (windup maior, mesmo pedido do
 -- GKBOT_SHOT_REACT_MAX_RANGE acima) — 0.35s às vezes acabava/resolvia
 -- ANTES do bot terminar de chegar de verdade no ponto previsto, então a
 -- captura/repelida rolava tarde demais, depois da bola já ter cruzado a
 -- linha.
-Config.GKBOT_DIVE_DURATION = 0.45
+Config.GKBOT_DIVE_DURATION = 0.65 -- ⚠️ v110: 0.55 -> 0.65 (o voo agora dura de verdade, até 0.6s) · v109: era 0.45 — acompanha o mergulho de corpo (até 0.5s de voo)
+-- ⚠️ v109 — velocidade do MERGULHO DE CORPO do bot (studs/s): o corpo voa deitado
+-- até o ponto da bola, igual o mergulho do goleiro humano (antes ele só CORRIA)
+-- ⚠️ v110: TEMPO DE REAÇÃO — o bot só mergulha depois que o chute já é ameaça há
+-- esse tempo (antes reagia no mesmo quadro). Chute forte no canto chega antes.
+Config.GKBOT_TEMPO_REACAO = 0.17 -- ⚠️ v111: era 0.22 — "tenta fazer ele acelerar um pouquinho mais... se mirar num canto e chutar, ele não pega de jeito nenhum. Tem que pegar pelo menos algumas vezes"
+Config.GKBOT_DIVE_SPEED = 55 -- ⚠️ v111: 44 -> 55 ("pode deixar o mergulho um pouco mais rápido") · 38 -> 44 (mesmo pedido acima: chute no canto nunca era pego) -- ⚠️ v110: era 44 -- ⚠️ v110: era 52 ("o bot está muito rápido") -- ⚠️ v110: era 75 ("impossível de fazer gol, deixa ele um pouco mais fraco")
+-- ⚠️ v109: reage a chute que vai passar até esse tanto dele SE estiver indo pro gol
+-- dele (o raio pequeno de cima continua valendo pra bola que não vai no gol)
+Config.GKBOT_SHOT_REACT_RADIUS_NO_GOL = 22.5 -- ⚠️ v111: 15 -> 22.5 (+50%) -- ⚠️ v110: era 20 ("muito difícil de errar") -- ⚠️ v110: era 28
 
 -- ⚠️ v6.2: SUBSTITUI o antigo GKBOT_DIVE_MIN_LATERAL_DISTANCE (piso fixo,
 -- sem teto nenhum) — pedido: "ele precisa calcular se o dive vale a pena
@@ -1155,7 +1360,10 @@ Config.GKBOT_DIVE_DURATION = 0.45
 -- bot, pra dificultar pros players". Junto com GKBOT_DIVE_DIAGONAL_KICK/
 -- GKBOT_DIVE_UP_SPEED/GKBOT_CHASE_SPEED acima e GKBOT_CATCH_CHANCE_AT_MAX,
 -- o bot cobre mais chão E defende melhor quando chega no limite disso.
-Config.GKBOT_DIVE_REACH = 25 -- ⚠️ v35: era 34 (original 21) -- ⚠️ v22: era 21 — "melhora o dive dele pra caralho". Alcance real do mergulho.
+-- ⚠️ v110 — PEDIDO: "o GK ainda está muito difícil de errar... chuto no canto e é
+-- muito difícil fazer gol". Alcance 37 -> 26: canto bem batido fica fora do mergulho.
+-- ⚠️ v111 — PEDIDO: "aumente a distância dos dives do GK Bot, 50% maior — tanto pra cima, quanto pra diagonal, quanto pros lados"
+Config.GKBOT_DIVE_REACH = 39 -- ⚠️ v111: 26 -> 39 (+50%: alcance do mergulho pros lados/diagonal) -- ⚠️ v105: +50% junto do humano (era 25) — ⚠️ v35: era 34 (original 21) -- ⚠️ v22: era 21 — "melhora o dive dele pra caralho". Alcance real do mergulho.
 
 -- ⚠️ v3.3: PREVISÃO DE TRAJETÓRIA (pedido: "ele não dá dive pra diagonal
 -- ... você já começa a calcular antes, igual o sistema de trajetória, ele
@@ -1245,7 +1453,7 @@ Config.GKBOT_LOOSE_BALL_CHASE_RANGE = 20
 -- até a bola, como GKBOT_LOOSE_BALL_CHASE_RANGE acima, nem da Part
 -- GKArea_<Time>, que pode não existir/ter tamanho diferente na cena) —
 -- funciona como uma "área pequena" independente, sempre disponível.
-Config.GKBOT_SMALL_AREA_RADIUS = 45
+Config.GKBOT_SMALL_AREA_RADIUS = 67 -- ⚠️ v112: campo 20% maior ("aumenta o campo em vinte por cento, ajuste tudo") · 56 · ⚠️ v104: campo 25% maior (era 45)
 
 -- ⚠️ v5.8: PEDIDO — "às vezes quando ele vai pegar a bola, ela buga,
 -- talvez ele esteja pegando de novo depois de chutar de volta pros
@@ -1343,7 +1551,19 @@ Config.GKBOT_LATERAL_GOAL_FRACTION = 0.65
 -- ⚠️ v67: caixa de captura garantida do bot um pouco maior junto (mesmo
 -- pedido). Continua valendo só pra bola SEM Hissatsu vindo — chute de
 -- Hissatsu segue tendo que ser disputado de verdade.
-Config.GKBOT_GUARANTEED_CATCH_BOX = Vector3.new(5.5, 7, 5.5) -- era 4, 5.5, 4
+-- v110 — PEDIDO: "ele pega a bola sem sequer estar nela (chute no travessão, sem
+-- pular). A hitbox do GK é o GK — uma bola em volta dele, só". A caixa garantida
+-- e o alcance de 8.5 viraram uma ESFERA em volta do corpo (+ um pouco pras mãos).
+Config.GKBOT_CORPO_RAIO = 4
+Config.GKBOT_MAOS_EXTRA = 1.3
+-- altura máxima que o mergulho do bot sobe acima do chão (perto do travessão)
+Config.GKBOT_DIVE_ALTURA_MAX = 19.5 -- ⚠️ v111: 13 -> 19.5 (+50% pra cima)
+-- ⚠️ v111 — PEDIDO: "ele vai sempre tentar priorizar mais dar dives; só se a bola
+-- for realmente bem próximo dele ele não dá dive e anda normalmente até a bola".
+-- Bola passando a menos disso de lado = anda até ela; mais que isso = mergulha
+-- (antes o mínimo era a caixa de defesa garantida, 5.5).
+Config.GKBOT_DIVE_PERTO = 3.5
+Config.GKBOT_GUARANTEED_CATCH_BOX = Vector3.new(5.5, 7, 5.5) -- ⚠️ v110: de volta (v109 tinha subido pra 6.5, 7.5, 6.5) ("a bola passa direto nele") -- era 4, 5.5, 4
 
 -- Alcance de referência (studs) usado pra essa interpolação: a PROFUNDIDADE
 -- real da Part GKArea_<Time> (igual areaDepth em GKBotController.lua),
@@ -1351,7 +1571,7 @@ Config.GKBOT_GUARANTEED_CATCH_BOX = Vector3.new(5.5, 7, 5.5) -- era 4, 5.5, 4
 -- desenhado no Studio. GKBOT_LATERAL_FOLLOW_RANGE_FALLBACK só é usado se
 -- essa Part não existir na cena.
 Config.GKBOT_LATERAL_FOLLOW_RANGE_MULT = 1.5
-Config.GKBOT_LATERAL_FOLLOW_RANGE_FALLBACK = 30
+Config.GKBOT_LATERAL_FOLLOW_RANGE_FALLBACK = 36 -- ⚠️ v112: 30 -> 36 (campo 20% maior)
 
 -- ⚠️ v6.3: PEDIDO — "faça o bot ficar mais no centro se o atacante estiver
 -- aos lados direita ou diagonal do gol... deixa uma brecha". Piso do fator
@@ -1375,7 +1595,7 @@ Config.GKBOT_SAFE_GOAL_OFFSET = 4
 -- real entre os 2 gols (calculada na hora, campo por campo) — esse valor
 -- aqui é só um FALLBACK (studs) pro raríssimo caso de faltar 1 dos 2 gols
 -- na cena nesse instante.
-Config.GKBOT_GOAL_KICK_MAX_RANGE_FALLBACK = 60
+Config.GKBOT_GOAL_KICK_MAX_RANGE_FALLBACK = 72 -- ⚠️ v112: 60 -> 72 (campo 20% maior)
 
 -- ⚠️ NOVO (pedir passe, tecla T): quanto tempo (segundos) o pedido de
 -- passe de um jogador fica "ativo" (Attribute WantsPass + destaque
@@ -1447,11 +1667,14 @@ Config.SET_PIECE_BALL_HEIGHT = 2
 
 -- ===== CHUTE (também serve de PASSE — mire num companheiro em vez do
 -- gol — e de VOLEIO, se a bola estiver no ar e você não tiver posse) =====
-Config.KICK_MIN_FORCE = 30
+Config.KICK_MIN_FORCE = 48 -- v110: era 28 ("a força mínima é inútil, a bola cai no pé — o toquinho tem que ir um pouco à frente do personagem") · ⚠️ v104: -10% (era 30), depois +5% ("com chute em 60 está fraco demais")
 -- ⚠️ v67 — PEDIDO: "a força do chute está muito fraca; aumenta a força do
 -- chute base em 25%". 145 -> 181.
-Config.KICK_MAX_FORCE = 181
-Config.KICK_CHARGE_RATE = 155     -- era 140 — carrega um pouquinho mais rápido
+-- ⚠️ v104 — PEDIDO: "aumente o tamanho do campo pra 25% maior, e diminua 10%
+-- de força de chute base". 181 -> 163.
+-- Depois: "aumenta a força base do chute em 5%" — 163 -> 171.
+Config.KICK_MAX_FORCE = 171
+Config.KICK_CHARGE_RATE = 217     -- ⚠️ v123: "40% mais rápido pra carregar o chute" (155 x 1.4) · era 140 antes de 155
 Config.KICK_STAMINA_COST = 10
 Config.KICK_UPWARD_BOOST = 0.18
 Config.CURVE_STRENGTH = 45
@@ -1473,6 +1696,15 @@ Config.PASS_FORCE = 55
 -- ===== VOLEIO (chute sem posse prévia, bola no ar) =====
 Config.VOLLEY_MIN_BALL_HEIGHT = 3   -- igual à cabeçada: altura mínima da bola acima do chão
 Config.VOLLEY_RANGE = 6             -- alcance pra alcançar a bola no ar
+-- ⚠️ v121 — PEDIDO: "aumenta a hitbox do voleio e da cabeçada, os dois, ainda está muito
+-- difícil; é pra conseguir mesmo de uma distância considerável". Voleio: 6 x 2.2 = ~13 studs
+-- na HORIZONTAL (antes 9 em distância 3D — bola alta gastava o alcance na altura) e até
+-- VOLLEY_ALTURA_MAX de altura.
+Config.VOLLEY_HITBOX_MULT = 2.2     -- era 1.5 (v119)
+Config.VOLLEY_ALTURA_MAX = 14
+-- ⚠️ v121 — CHUTE ANTECIPADO. PEDIDO: "se eu soltar 0.2-0.3s ANTES de pegar a bola, ainda
+-- conta e a bola sai". O pedido de chute fica guardado por esse tempo e sai quando a bola chega.
+Config.CHUTE_ANTECIPADO_SEG = 0.35
 Config.VOLLEY_FORCE_MULTIPLIER = 1.25 -- voleio bem cronometrado sai mais forte que um chute normal
 
 -- ===== CABEÇADA =====
@@ -1489,10 +1721,33 @@ Config.HEADER_STAMINA_COST = 15
 --      a resposta principal a quem sobe com a bola — precisa poder
 --      tentar de novo.
 Config.HEADER_COOLDOWN = 1.2      -- era 3.0
-Config.HEADER_RANGE = 11          -- era 6 — agora é HORIZONTAL só
-Config.HEADER_MIN_BALL_HEIGHT = 1 -- era 3 (medido a partir do torso)
+-- ⚠️ v120b — PEDIDO: "o voleio tá difícil porque acerta a cabeçada: diminui a
+-- hitbox da cabeçada (o voleio fica como está)". 11 → 7 e a bola precisa estar
+-- um pouco mais alta.
+-- ⚠️ v121 — PEDIDO: "aumenta a hitbox da cabeçada também, de uma distância considerável"
+-- (v120b tinha diminuído pra 7 porque roubava o voleio; agora os dois maiores).
+Config.HEADER_RANGE = 13          -- era 7 (v120b), 11 (v5.3), 6 antes — HORIZONTAL só
+Config.HEADER_MIN_BALL_HEIGHT = 1 -- era 2 (v120b), 1 (v5.3), 3 antes (medido a partir do torso)
 Config.HEADER_MAX_BALL_HEIGHT = 15 -- ⚠️ NOVO: teto da faixa cabeceável
-Config.HEADER_FORCE = 65
+-- ⚠️ v105 — PEDIDO: "a cabeçada tá muito fraca... coloque a força dela pra ir
+-- mais longe". 65 -> 115, e sobe mais (HEADER_ELEVACAO) pra ganhar distância.
+Config.HEADER_FORCE = 115
+Config.HEADER_ELEVACAO = 16 -- velocidade pra cima somada à cabeçada (era 8 fixo)
+-- ⚠️ v105: voleio "de reação" (toque rápido no ar com a bola abaixo da
+-- cabeça, sem ter carregado o chute) — fraco de propósito.
+Config.VOLLEY_FRACO_FORCA = 55
+-- ⚠️ v108 — PRIMEIRO TOQUE. PEDIDO: "nem precisa dominar, ele pode chutar direto,
+-- antes mesmo do domínio. Se a bola estiver fraca na frente dele, ele usa o chute
+-- ou a cabeçada. Mas se a bola estiver forte, já não dá pra pegar." Velocidade
+-- máxima (studs/s) da bola solta pra dar pra chutar/cabecear de primeira. A
+-- cabeçada aceita um pouco mais (cruzamento chega mais rápido que um passe).
+Config.PRIMEIRO_TOQUE_VEL_MAX = 80
+-- ⚠️ v123 — PEDIDO: "ficar um pouco mais fácil de pegar a bola, depender de menos força
+-- pra conseguir dominar só passando por cima". Velocidade máxima da bola solta que se
+-- domina SÓ encostando/passando nela (antes 30, fixo no BallController). Só o domínio
+-- passivo usa isto — goleiro, carrinho e defesa continuam com o valor antigo.
+Config.DOMINIO_VEL_MAX = 42
+Config.HEADER_VEL_MAX = 95
 
 -- ===== GRAVIDADE E JOGABILIDADE DA BOLA =====
 -- Workspace.Gravity é GLOBAL (afeta jogador também) — pra bola "pesar"
@@ -1561,10 +1816,14 @@ Config.FOG_HIDDEN_TRANSPARENCY = 0.85
 --
 -- O medidor vai a 100. Com estes números: ~9 passes dados, ~7 recebidos,
 -- 5 desarmes, ou 2 gols. A mistura é o caminho normal.
-Config.FLOW_CHARGE_PASS_GIVEN = 11
-Config.FLOW_CHARGE_PASS_RECEIVED = 14
-Config.FLOW_CHARGE_STEAL = 20
-Config.FLOW_CHARGE_GOAL = 50
+-- ⚠️ v113 — PEDIDO: "deixa o Flow mais difícil" (e só 1 por partida): cargas
+-- ~metade do que eram (11/14/20/50). A carga por ARMA disparando é
+-- Config.FLOW_CHARGE_ARMA.
+Config.FLOW_CHARGE_PASS_GIVEN = 6
+Config.FLOW_CHARGE_PASS_RECEIVED = 8
+Config.FLOW_CHARGE_STEAL = 12
+Config.FLOW_CHARGE_GOAL = 35
+Config.FLOW_CHARGE_ARMA = 5 -- efeito de Arma disparando numa ação / ativa usada (era 10)
 
 -- Propriedades físicas da bola (Density/Friction/Elasticity) — sem isso
 -- a bola usa o padrão genérico do Roblox (que não foi pensado pra
@@ -1591,9 +1850,9 @@ Config.FLOW_CHARGE_GOAL = 50
 Config.BALL_PHYSICAL_PROPERTIES = {
 	Density = 0.7,
 	Friction = 1.5,           -- era 1.15/0.95/0.85/0.7/0.55/0.35 — mais "grude" no chão, desliza menos
-	Elasticity = 0.65,        -- era 0.6/0.4 — quica mais
+	Elasticity = 0.78,        -- ⚠️ v123: "faça a bola quicar mais" · era 0.65/0.6/0.4
 	FrictionWeight = 4.2,     -- era 3.2/2.6/2.2/1.8/1.4/1 — domina de vez sobre o material do chão
-	ElasticityWeight = 1.6,   -- era 1.4/1
+	ElasticityWeight = 2.2,   -- ⚠️ v123: a elasticidade da bola manda mais no quique · era 1.6/1.4/1
 }
 
 -- ===== ⚠️ v20: SAÍDA LIMPA DO CHUTE ("a bola bate no corpo e para") =====
@@ -1647,9 +1906,24 @@ Config.BALL_ANGULAR_DAMPING_PER_SECOND = 0.10 -- ⚠️ v37 (era 0.20/0.35/0.55/
 -- ⚠️ v34/v37: AUMENTADO de novo (os três) — pedido: "diminua MAIS AINDA o
 -- deslizamento da bola".
 -- ⚠️ v84: +40% nos dois (pedido "diminua o deslize").
-Config.BALL_ROLLING_DECELERATION = 42         -- era 30/20/13/8/3.2/1.6 — studs/s², abaixo de BALL_ROLLING_MAX_SPEED (ainda deslizando muito? sobe esse número de novo)
-Config.BALL_ROLLING_FAST_DECELERATION = 70    -- era 50/36/24/16/6.5 — studs/s², ACIMA de BALL_ROLLING_MAX_SPEED
+-- ⚠️ v97: +20% nos dois (pedido "às vezes ela desliza demais"). Parte do
+-- "deslizar" também vinha do giro solto virando movimento no chão — isso foi
+-- resolvido na raiz (giro sempre coerente, ver BallController v97), então o
+-- aumento aqui é moderado.
+-- ⚠️ v120b — PEDIDO: "faça a bola perder MENOS velocidade ao deslizar no chão": −30% nos três.
+Config.BALL_ROLLING_DECELERATION = 36         -- era 42/30/20/13/8/3.2/1.6 — studs/s², abaixo de BALL_ROLLING_MAX_SPEED (ainda deslizando muito? sobe esse número de novo)
+Config.BALL_ROLLING_FAST_DECELERATION = 60    -- era 70/50/36/24/16/6.5 — studs/s², ACIMA de BALL_ROLLING_MAX_SPEED
 Config.BALL_ROLLING_MAX_SPEED = 8             -- era 10/14/18 — abaixa o limiar, entra na frenagem "rápida" mais cedo
+-- ⚠️ v103 — PEDIDO: "diminui mais ainda o deslize... se eu jogar muito longe a
+-- bola, ela desliza mais do que deveria". Frenagem EXTRA proporcional à
+-- velocidade (1/s): bola que cai de um lançamento longo chega rápida e agora
+-- freia muito mais; o rolinho devagar quase não muda. Medida de cabeça: caindo
+-- a 80 studs/s ela desliza ~24 studs (antes ~38). Mais = desliza menos.
+Config.BALL_ROLLING_ARRASTO = 0.7
+
+-- ⚠️ v103 — PEDIDO: "Não é pra existir desvio aleatório em nenhum chute."
+-- false = nenhum chute/passe/Hissatsu desvia da mira (ver applyAimDeviation).
+Config.DESVIO_ALEATORIO_LIGADO = false
 
 -- ===== DESVIO DE MIRA (aim deviation) =====
 -- Todo chute (KickBall e cabeçada) sofre um desvio ALEATÓRIO na direção
@@ -1686,9 +1960,11 @@ Config.AIM_DEVIATION_PRESSURE_DEGREES = 0  -- era 6
 -- ⚠️ v36: AUMENTADO de novo (os três) — pedido: "melhore o GK normal sem
 -- ser o bot, aumente a distância do dive".
 Config.GK_DIVE_DISTANCE = 19          -- era 15/10 — studs percorridos no mergulho de ALTURA (Up)
-Config.GK_DIVE_DISTANCE_SIDE = 26     -- era 21/14 — studs percorridos no mergulho pro LADO (Left/Right)
-Config.GK_DIVE_DISTANCE_DIAGONAL = 24 -- era 19.5/13 — studs percorridos no mergulho na DIAGONAL (UpLeft/UpRight)
-Config.GK_DIVE_DURATION = 0.35        -- segundos que o mergulho dura (também a janela de captura)
+-- ⚠️ v122 — PEDIDO: "o dive um pouco mais longe" (era 48)
+Config.GK_DIVE_DISTANCE_SIDE = 54     -- ⚠️ v105: +50% ("ele precisa ir mais longe com o dive") — era 32 (v103), 26/21/14 antes
+Config.GK_DIVE_DISTANCE_DIAGONAL = 29 -- ⚠️ v103: idem (era 24/19.5/13) — studs percorridos no mergulho na DIAGONAL (UpLeft/UpRight)
+-- ⚠️ v120b — PEDIDO: "coloca pra demorar um pouco mais pra cair o dive; só no final ele cai, rápido" (era 0.35)
+Config.GK_DIVE_DURATION = 0.5         -- segundos que o mergulho dura (também a janela de captura)
 -- FIX: antes a captura comparava a distância 3D cheia (inclui altura)
 -- contra GK_DIVE_CAPTURE_RADIUS — uma bola alta (cabeceio/cruzamento)
 -- "gastava" boa parte do raio só na diferença de altura, sobrando pouca
@@ -1722,6 +1998,12 @@ Config.GK_DIVE_CAPTURE_HEIGHT = 18    -- era 16.5/11/14
 -- goleiro). ⚠️ v5.7: REVERTIDO pro valor original — o pedido era sobre o
 -- GKBOT (ver Config.GKBOT_ACTION_COOLDOWN), não o Role="GK" humano.
 Config.GK_DIVE_COOLDOWN = 1.0         -- segundos antes de poder mergulhar de novo
+-- ⚠️ v122 — PEDIDO: "o GK levanta mais devagar do dive pro lado e do dash pra frente, e
+-- uma PUNIÇÃO pra quem erra o dive". Errou (não pegou a bola) = fica no chão e levanta
+-- devagar, preso (stun) por esse tempo depois que o mergulho/avanço termina — bate com o
+-- fim da animação de levantar (AnimacoesProcedurais: GKDive 1.6s, GKForwardDash 1.5s).
+Config.GK_DIVE_ERRO_STUN = 1.0
+Config.GK_FORWARD_ERRO_STUN = 0.85
 
 -- ===== GOLEIRO: DASH PRA FRENTE (tecla F) =====
 -- Avança em linha reta (LookVector). Se um ADVERSÁRIO com a bola estiver
@@ -1739,10 +2021,22 @@ Config.GK_DIVE_COOLDOWN = 1.0         -- segundos antes de poder mergulhar de no
 -- segurança GK_FORWARD_DASH_MAX_DISTANCE, numa velocidade fixa — dash
 -- mais longe demora mais, não "voa"); sem ninguém nesse raio, cai pro
 -- dash curto de sempre (GK_FORWARD_DASH_DISTANCE), reto pra frente.
-Config.GK_FORWARD_DASH_DISTANCE = 14
-Config.GK_FORWARD_DASH_DURATION = 0.35
+Config.GK_FORWARD_DASH_DISTANCE = 42 -- v110: era 28 (distância maior) · ⚠️ v105: x2 ("tá muito perto, pode dobrar") — era 14
+Config.GK_FORWARD_DASH_DURATION = 0.45 -- v110: era 0.35 (voo mais longo)
 Config.GK_FORWARD_CHASE_RANGE = 50      -- studs: alcance pra "travar" um alvo (adversário com bola ou bola solta) e perseguir ele
-Config.GK_FORWARD_DASH_MAX_DISTANCE = 45 -- studs: teto de segurança pro dash perseguindo um alvo longe
+Config.GK_FORWARD_DASH_MAX_DISTANCE = 85 -- v110: era 70 · studs: teto de segurança pro dash perseguindo um alvo longe (⚠️ v105: era 45)
+-- ⚠️ v105 — PULO ALTO DO GOLEIRO. PEDIDO: "tira o dive pra cima... o jogador vai
+-- pular alto quando estiver no gol, até a altura do travessão, e aí pula e dá o
+-- dive pro lado". JumpHeight (studs) do goleiro DENTRO da própria área.
+-- ⚠️ v120b — PEDIDO: "o GK player pula 20% mais alto e chega no ápice mais rápido" (era 14).
+-- A subida mais rápida vem de GK_PULO_GRAVIDADE_MULT (gravidade extra só no pulo dele, ver GKInput).
+Config.GK_PULO_ALTURA = 16.8
+Config.GK_PULO_GRAVIDADE_MULT = 1.7
+-- ⚠️ v105 — "a hitbox do goleiro vai pegar automaticamente: se a bola passar
+-- nele, no meio dele, ele pega na hora" (goleiro humano; o bot já tinha a caixa
+-- GKBOT_GUARANTEED_CATCH_BOX). Cilindro em volta do HumanoidRootPart.
+-- ⚠️ v120b: um pouco maior que o corpo ("hitbox em volta dele, um pouco maior que ele") — era 2.8/3.4/3.8
+Config.GK_CORPO_CAPTURA = { Raio = 3.3, Baixo = 3.6, Alto = 4.2 }
 Config.GK_FORWARD_DASH_SPEED = 45        -- studs/s: velocidade do dash quando perseguindo (define a duração — quanto mais longe, mais tempo demora)
 Config.GK_FORWARD_STEAL_RANGE = 8       -- ⚠️ v5.5: +2 (era 6) — alcance pra roubar de um adversário com a bola (o alvo pode ter se mexido durante o dash mais longo)
 Config.GK_FORWARD_CAPTURE_RANGE = 7     -- ⚠️ v5.5: +2 (era 5) — alcance pra capturar a bola solta/vindo
@@ -1823,11 +2117,11 @@ Config.TACKLE_VICTIM_STUN = 1.25
 -- PEDIDO: antes não tinha cooldown nenhum (só o custo de stamina
 -- segurava, igual o sprint) — dava pra spamar a tecla. Agora tem um
 -- cooldown FIXO de 4s por tentativa, acertando ou errando.
-Config.TACKLE_COOLDOWN = 4
+Config.TACKLE_COOLDOWN = 3 -- ⚠️ v123: "diminua o cooldown do carrinho pra 3 segundos" · era 4.2 (v111)
 -- ⚠️ v17 — PEDIDO: "quem tá com a bola fica 10% mais lento". Multiplicador
 -- aplicado em cima da velocidade final de quem está conduzindo (ver
 -- getPossessionMultiplier em PlayerSystems.legacy.luau). 1 desliga.
-Config.BALL_CARRIER_SPEED_MULT = 0.9
+Config.BALL_CARRIER_SPEED_MULT = 0.8 -- v110: era 0.9 ("perder 20% da velocidade com a bola, não 10") — incentiva o toque pra frente
 
 -- ⚠️ v19 (ver refreshTrackSpeed em PlayerSystems.legacy.luau).
 -- ⚠️ v61 — TRANSIÇÕES DO MOVIMENTO (ver playTrack em PlayerSystems).
@@ -1886,6 +2180,18 @@ Config.TACKLE_LOOSE_BALL_IMPULSE = 20
 -- 0.5 = 34.1 studs.
 Config.TACKLE_DASH_FORCE = 68.2
 Config.TACKLE_DASH_DURATION = 0.5
+
+-- ⚠️ v86 — DASH (tecla F). PEDIDO: "o carrinho, na verdade, é o Q, quando
+-- você não estiver com a bola... o F pode ser utilizado para dar um dash, que
+-- é meio que um avanço para frente". Não rouba bola e não derruba ninguém: é
+-- só um arranque curto na direção do WASD (parado = pra onde o personagem
+-- olha). Vale com ou sem a bola — com ela, a condução acompanha sozinha.
+-- O deslocamento é aplicado pelo PRÓPRIO cliente (Remotes.ApplyDisplacement),
+-- então o jogador continua andando normalmente durante o arranque.
+Config.DASH_DISTANCE = 16      -- studs percorridos a mais pelo arranque
+Config.DASH_DURATION = 0.25    -- segundos que o arranque leva
+Config.DASH_COOLDOWN = 1.5 -- ⚠️ v123: "o dash pra 1.5 segundos" · era 2.5
+Config.DASH_STAMINA_COST = 12
 
 -- Se o carrinho não rouba a posse nem chega na bola solta, o jogador
 -- fica estirado no chão (sem se mover) por esse tempo.
@@ -1991,6 +2297,11 @@ Config.ANIMATIONS = {
 	-- A velocidade de reprodução é ajustada pra caber na janela do drible,
 	-- que cresce com o DribbleSkill (ver DRIBBLE_MOVE_* logo abaixo) — é
 	-- assim que "quanto mais upado, mais longe" aparece também na animação.
+	-- ⚠️ v86: o drible pra FRENTE não tem animação própria — PEDIDO: "a
+	-- animação do para frente é só você fazer a animação do para trás, só que
+	-- no reverse". Ele toca o Back de trás pra frente (ver `reverso` no
+	-- playAnimation do BallController). Se um dia existir uma animação
+	-- própria, é só adicionar `Forward = "rbxassetid://..."` aqui.
 	Dribble = {
 		Left  = "rbxassetid://111126363124140",
 		Back  = "rbxassetid://78743173200051",
@@ -2114,6 +2425,18 @@ Config.ANIMATIONS = {
 --             propósito — ver v63 no BallController)
 -- HoldAtEnd = a animação para no último quadro e SEGURA a pose até alguém
 -- dar Stop (preparo do chute enquanto o botão está segurado).
+-- ⚠️ v96 — ANIMAÇÃO POR CÓDIGO (AnimadorProcedural.local.luau +
+-- AnimacoesProcedurais.luau). Ligado: nenhum asset de animação toca em
+-- personagem de jogador/goleiro — o servidor só AVISA a ação
+-- (Remotes.AcaoAnimada) e cada cliente anima. Desligado (false): volta tudo
+-- pro sistema antigo de assets (as IDs de ANIMATIONS acima).
+Config.ANIMACAO_PROCEDURAL = true
+
+-- ⚠️ v97: curva "banana" automática nos chutes de Hissatsu (CurveMult dos
+-- Pulsos). Desligada: a bola vai reta pro ponto mirado (pedido "precisa ir
+-- sempre reto aonde foi mirado").
+Config.PULSE_CURVA_AUTOMATICA = false
+
 function Config.BuildAnimationRules()
 	local rules = {}
 	local function add(id, priority, looped, holdAtEnd)
@@ -2167,9 +2490,14 @@ Config.WHISTLE_FADE_SECONDS = 0.3     -- fade out no fim desse trecho
 Config.WHISTLE_FALLBACK_SECONDS = 1.6 -- usado só se o som não tiver carregado a tempo de informar a duração real
 
 -- ===== SONS =====
+-- ⚠️ v110 FIX: Kick/Goal/Tackle apontavam pra ids que NÃO são áudio ("Failed to
+-- load sound ... Asset type does not match requested type" em todo Play — chute,
+-- gol e carrinho ficavam mudos). Trocados por sons que já vêm com o Roblox
+-- (rbxasset://sounds/..., testados carregando). Pra usar os seus, cole o
+-- rbxassetid:// do áudio aqui.
 Config.SOUNDS = {
-	Kick = "rbxassetid://9125451105",
-	Goal = "rbxassetid://9125451687",
+	Kick = "rbxasset://sounds/hit.wav",
+	Goal = "rbxasset://sounds/electronicpingshort.wav",
 	-- ⚠️ v30 — PEDIDO: "vou baixar um som de apito pra quando o jogo começar,
 	-- ou a bola sair, ou quando acabar cada tempo. Separe um local específico
 	-- pra colocar o som do apito."
@@ -2183,7 +2511,7 @@ Config.SOUNDS = {
 	-- Aceita com ou sem o prefixo (ver Config.NormalizeAnimationId — a
 	-- mesma normalização vale pra som).
 	Whistle = "rbxassetid://86973351197753",
-	Tackle = "rbxassetid://9125452312",
+	Tackle = "rbxasset://sounds/collide.wav",
 
 	-- PEDIDO: "quero mudar o som de passos, remova-o por enquanto, mas
 	-- coloque um espaço pra eu poder alterá-lo, junto com o de pulo
@@ -2211,6 +2539,10 @@ Config.REWARDS = {
 	WIN_XP = 200,
 	LOSE_MONEY = 100,
 	LOSE_XP = 50,
+	-- ⚠️ v104: EMPATE agora é resultado próprio (antes contava como derrota
+	-- pros dois times) — meio caminho entre vitória e derrota.
+	DRAW_MONEY = 250,
+	DRAW_XP = 110,
 	GOAL_MONEY = 150,
 	GOAL_XP = 100,
 	ASSIST_MONEY = 75,
@@ -2239,6 +2571,18 @@ local function getOrCreateRemote(parent, name)
 	local existing = parent:FindFirstChild(name)
 	if existing then return existing end
 	local remote = Instance.new("RemoteEvent")
+	remote.Name = name
+	remote.Parent = parent
+	return remote
+end
+
+-- ⚠️ v109: evento NÃO-confiável (pra coisa que atualiza todo quadro, ex. a
+-- mira do dono da bola pra Metavisão — perder um pacote não importa, o próximo
+-- chega no quadro seguinte)
+local function getOrCreateUnreliable(parent, name)
+	local existing = parent:FindFirstChild(name)
+	if existing then return existing end
+	local remote = Instance.new("UnreliableRemoteEvent")
 	remote.Name = name
 	remote.Parent = parent
 	return remote
@@ -2386,7 +2730,10 @@ Config.GOAL_MUSIC_FADE_SECONDS = 2 -- os últimos X segundos desses 8 desvanecem
 -- esse caminho gravado e move a câmera atrás dela por
 -- GOAL_REPLAY_PLAYBACK_SECONDS — puramente visual, não afeta o jogo real
 -- (a bola de verdade já foi reposicionada pro centro nesse momento).
-Config.GOAL_REPLAY_DURATION = 8 -- quantos segundos de histórico ficam guardados (a jogada toda até o gol)
+-- ⚠️ v112: 8 -> 12. Com 8 (+1 de folga), uma cutscene de Hissatsu que começou uns
+-- 5-6s antes do gol já tinha sido apagada da lista de eventos quando o replay saía
+-- ("só no primeiro gol aparece a Hissatsu").
+Config.GOAL_REPLAY_DURATION = 12 -- quantos segundos de histórico ficam guardados (a jogada toda até o gol)
 Config.GOAL_REPLAY_SAMPLE_INTERVAL = 0.05 -- a cada quanto tempo guarda um ponto (20 por segundo — suave sem pesar a rede)
 Config.GOAL_REPLAY_PLAYBACK_SECONDS = 6 -- quanto tempo o replay dura na tela (pode ser diferente do histórico guardado — toca os últimos N segundos antes do gol)
 
@@ -2415,6 +2762,11 @@ Config.Remotes = {
 	UpdateSprinting = getOrCreateRemote(remotesFolder, "UpdateSprinting"),
 	UpdateKickCharging = getOrCreateRemote(remotesFolder, "UpdateKickCharging"), -- FireServer(bool) — segurando o botão de chute (carregando força), reduz WalkSpeed (ver PlayerSystems.lua)
 	SuppressShiftLockRotation = getOrCreateRemote(remotesFolder, "SuppressShiftLockRotation"), -- ⚠️ NOVA
+	AcaoAnimada = getOrCreateRemote(remotesFolder, "AcaoAnimada"), -- ⚠️ v96: server→TODOS, FireAllClients(model, chave, duração, parâmetros) — dispara uma ação no AnimadorProcedural ("Kick", "Dribble.Left", "GKDive.Up"... ou "parar:<chave>")
+	UpdatePulseAim = getOrCreateRemote(remotesFolder, "UpdatePulseAim"), -- ⚠️ v92: FireServer(ponto) — mira ao vivo durante o PREPARO da Hissatsu de chute (ver HissatsuInput/PulseController)
+	HissatsuCutscene = getOrCreateRemote(remotesFolder, "HissatsuCutscene"), -- ⚠️ v87: server→TODOS, FireAllClients(nome, chutador, CFrame inicial, bola local, horário do servidor) — toca a cutscene da Hissatsu (ver HissatsuCutscenes.luau)
+	AttemptDash = getOrCreateRemote(remotesFolder, "AttemptDash"), -- ⚠️ v86: FireServer(direção) — dash de avanço da tecla F (não é carrinho)
+	ApplyDisplacement = getOrCreateRemote(remotesFolder, "ApplyDisplacement"), -- ⚠️ v86: server→client, FireClient(deslocamento: Vector3, duração) — o cliente soma esse deslocamento ao próprio personagem ao longo da duração, SEM travar o andar (drible e dash, ver FootballClient)
 	PossessionChanged = getOrCreateRemote(remotesFolder, "PossessionChanged"),
 	UpdateMatchState = getOrCreateRemote(remotesFolder, "UpdateMatchState"),
 	GoalScored = getOrCreateRemote(remotesFolder, "GoalScored"),
@@ -2423,6 +2775,20 @@ Config.Remotes = {
 	-- que uma faixa é cortada no meio, com fade — ver MusicClient).
 	OvertimeStarted = getOrCreateRemote(remotesFolder, "OvertimeStarted"),
 	ShowMatchSummary = getOrCreateRemote(remotesFolder, "ShowMatchSummary"),
+	GoldenGoal = getOrCreateRemote(remotesFolder, "GoldenGoal"), -- ⚠️ v104: gol na prorrogação encerra a partida
+	-- ⚠️ v104: TUTORIAL (TutorialServer / TutorialClient)
+	TutorialPasso = getOrCreateRemote(remotesFolder, "TutorialPasso"), -- servidor -> cliente: passo atual / feito / fim
+	TutorialAcao = getOrCreateRemote(remotesFolder, "TutorialAcao"), -- cliente -> servidor: "continuar" / "pular"
+	-- ⚠️ v106: VFX próprio de cada Arma (ArmasVFX.local.luau) — no lugar da bolha azul
+	ArmaVFX = getOrCreateRemote(remotesFolder, "ArmaVFX"), -- servidor -> todos: (personagem, nomeDaArma, raridade, ligado, duracao)
+	-- ⚠️ v108: Metavisão — o dono da bola manda pra onde está mirando (~10x/s);
+	-- o servidor grava no atributo "MiraBola" do jogador (replica pra todos)
+	MiraDoDono = getOrCreateRemote(remotesFolder, "MiraDoDono"),
+	-- ⚠️ v109: a mira agora vai TODO QUADRO por aqui (cliente dono -> servidor ->
+	-- todos), sem passar por atributo (que atrasava e "travava" a linha)
+	MiraDoDonoU = getOrCreateUnreliable(remotesFolder, "MiraDoDonoU"),
+	-- ⚠️ v109: VFX das Hissatsus sem cutscene (HissatsuVFXClient.local.luau)
+	HissatsuVFX = getOrCreateRemote(remotesFolder, "HissatsuVFX"), -- servidor -> todos: (personagem, nome, elemento)
 	RequestTeamChange = getOrCreateRemote(remotesFolder, "RequestTeamChange"),
 	UsePulse = getOrCreateRemote(remotesFolder, "UsePulse"), -- ⚠️ REWORK: FireServer(slotNumber) — dispara o Pulso do slot 1 ou 2 NA HORA (executa a ação sozinho). Jogador de linha: Q=1, E=2. Goleiro: só slot 1, tecla R (Q/E são do dive, ver GKInput.local.luau)
 	PulsePrecisionInput = getOrCreateRemote(remotesFolder, "PulsePrecisionInput"), -- ⚠️ v3: FireServer(slotNumber, keyName) — um PASSO do combo de teclas do Pulso. keyName é "Q"/"E"/"R"; o servidor é quem sabe qual passo estava aberto no instante em que recebeu e se a tecla era a certa (ver PulseController.legacy.luau)
@@ -2509,7 +2875,7 @@ Config.CUTSCENE_TUNNEL_START_PREFIX = "CutsceneTunnelStart_"
 Config.CUTSCENE_TUNNEL_END_PREFIX = "CutsceneTunnelEnd_"
 
 Config.ENTRANCE_CUTSCENE_ENABLED = true -- true = joga a cutscene 1x no início de cada partida (antes da contagem de kickoff); false = pula direto pra contagem, igual antes
-Config.ENTRANCE_CUTSCENE_QUEUE_SPACING = 5 -- distância (studs) entre um jogador e o de trás dele na fila
+Config.ENTRANCE_CUTSCENE_QUEUE_SPACING = 6.5 -- ⚠️ v112: era 5 ("distancie eles um pouco mais") -- distância (studs) entre um jogador e o de trás dele na fila
 -- ⚠️ NOVO: PEDIDO — "aumente um pouco a duração, deixe os personagens um
 -- pouco mais lentos" — mesma distância (Start->End da Part), mais tempo
 -- pra percorrer = anda mais devagar.
@@ -2545,8 +2911,8 @@ Config.CUTSCENE_AIR_CAMERA_NAME = "CutsceneAirCamera"
 -- montarEncaramento em EntranceCutsceneClient.local.luau.
 -- (CUTSCENE_AIR_CAMERA_NAME acima não é mais lido — a Part pode ser apagada.)
 Config.CUTSCENE_FACEOFF_HOLD_SECONDS = 2    -- tempo parado em CADA lado
-Config.CUTSCENE_FACEOFF_RADIUS = 46         -- raio do círculo central (medido no Studio: ~46.7)
-Config.CUTSCENE_FACEOFF_SPACING = 11        -- distância entre um jogador e o próximo na fila
+Config.CUTSCENE_FACEOFF_RADIUS = 70 -- ⚠️ v112: 58 -> 70 (campo 20% maior)         -- raio do círculo central (⚠️ v104: campo 25% maior — medido: ~58.4; era 46)
+Config.CUTSCENE_FACEOFF_SPACING = 5         -- distância entre um jogador e o próximo na fila (⚠️ v112: era 11 — a câmera de rosto passa de um pro outro)
 Config.CUTSCENE_FACEOFF_CAMERA_DISTANCE = 42 -- o quanto a câmera fica ATRÁS da fila
 Config.CUTSCENE_FACEOFF_CAMERA_HEIGHT = 13   -- altura da câmera
 -- ⚠️ v33: o zoom lento em cima do time exibido. A câmera começa na posição
@@ -2586,7 +2952,40 @@ Config.ENTRANCE_CUTSCENE_CAMERA_HEIGHT = 6
 -- take aéreo), não o teto de segurança do cliente (esse é
 -- TUNNEL_SAFETY_SECONDS, bem mais folgado de propósito, só pra nunca
 -- travar o jogador preso na cutscene se algo der errado).
-Config.ENTRANCE_CUTSCENE_DURATION = Config.ENTRANCE_CUTSCENE_TUNNEL_SECONDS + 4 + Config.ENTRANCE_CUTSCENE_OVERHEAD_SECONDS
+-- ⚠️ v112 — CUTSCENE DE ENTRADA REFEITA. PEDIDO: "tem que ser os players entrando,
+-- vendo os dois times entrando em duas linhas retas; depois demonstrar os dois
+-- times — tá muito longe, tem que dar mais zoom pra mostrar o rosto dos dois; e
+-- eles não vão poder se mexer nem ativar a trava do shift enquanto tiver na
+-- cutscene" + "o local de entrada já tá muito grande pro tamanho dos personagens".
+-- FASE 1: as duas filas saem do túnel lado a lado e seguem reto pro gramado,
+-- com a câmera na frente delas, recuando junto (plano fechado).
+Config.ENTRADA_VELOCIDADE = 11          -- studs/s da caminhada das filas
+Config.ENTRADA_INICIO_ANTES_DO_FIM = 38 -- a frente da fila começa isso antes da boca do túnel
+Config.ENTRADA_ANDA_DEPOIS_DO_FIM = 26  -- e anda isso pelo gramado até a fase 2
+Config.ENTRADA_DISTANCIA_ENTRE_FILAS = 10 -- as duas filas lado a lado (antes: 54 studs, uma em cada túnel) · "distancie eles um pouco mais" (era 7)
+Config.ENTRADA_CAMERA_FRENTE = 13       -- câmera à frente da primeira dupla
+Config.ENTRADA_CAMERA_ALTURA = 4.5
+Config.ENTRADA_CAMERA_FOV = 60
+-- FASE 2: cada time em fila no círculo central; a câmera passa rente, na altura do
+-- rosto, de um jogador ao outro (um time, corta, o outro).
+Config.ENTRADA_APRESENTACAO_SEGUNDOS = 2.5 -- por time
+Config.ENTRADA_ROSTO_DISTANCIA = 7.5       -- câmera a isso na frente dos rostos
+Config.ENTRADA_ROSTO_FOV = 40
+-- ⚠️ v112: "tem que aparecer todo mundo da lista, o rosto de todo mundo, dos dois
+-- lados" — o tempo de cada time cresce com quantos jogadores a câmera passa
+Config.ENTRADA_SEGUNDOS_POR_JOGADOR = 0.8
+Config.EntradaTempoDoTime = function(quantos)
+	return math.max(Config.ENTRADA_APRESENTACAO_SEGUNDOS, Config.ENTRADA_SEGUNDOS_POR_JOGADOR * (quantos or 1))
+end
+-- duração total (servidor espera isto): caminhada + um plano por time + 0.5s
+Config.EntradaDuracao = function(quantosPorTime)
+	local total = (Config.ENTRADA_INICIO_ANTES_DO_FIM + Config.ENTRADA_ANDA_DEPOIS_DO_FIM) / Config.ENTRADA_VELOCIDADE
+	for _, n in ipairs(quantosPorTime) do
+		if n > 0 then total += Config.EntradaTempoDoTime(n) end
+	end
+	return total + 0.5
+end
+Config.ENTRANCE_CUTSCENE_DURATION = Config.EntradaDuracao({ 1, 1 })
 
 -- ============================================================
 -- ELEMENTOS (reinserido a pedido do usuário — a versão antiga, puramente
@@ -2650,6 +3049,17 @@ end
 -- potência dele sobe 10%.
 Config.PULSE_ELEMENT_SELF_MATCH_MULT = 1.1
 
+-- ⚠️ v107: multiplicador da DEFESA pelo elemento (antes GetElementMultiplier
+-- existia mas ninguém chamava — o duelo ignorava elemento). Se o CHUTE tem
+-- vantagem sobre a defesa (ex.: Galáxia/Luz contra Mão do Demônio/Void, 1.2),
+-- a defesa tira 0.8x; se a DEFESA tem vantagem sobre o chute, tira 1.2x.
+-- Sempre entre 0.8 e 1.2 (não soma os dois lados da mesma relação).
+function Config.MultElementalDaDefesa(elementoChute, elementoDefesa)
+	local contra = Config.GetElementMultiplier(elementoChute, elementoDefesa)
+	if contra ~= 1 then return math.clamp(2 - contra, 0.8, 1.2) end
+	return math.clamp(Config.GetElementMultiplier(elementoDefesa, elementoChute), 0.8, 1.2)
+end
+
 -- ============================================================
 -- ARQUIBANCADA (torcida com os amigos do Roblox de cada cliente)
 -- ============================================================
@@ -2682,7 +3092,9 @@ Config.CROWD_AREA_NAME_PREFIX = "CrowdArea" -- Parts em workspace com nome come�
 -- ⚠️ PEDIDO: "faça todos os npcs nascerem mais separados, o dobro da
 -- distância atual" — dobrado (3 -> 6, 3.2 -> 6.4).
 Config.CROWD_SEAT_WIDTH = 13    -- studs entre um torcedor e o próximo (colunas, ao longo do Size.X da Part)
-Config.CROWD_ROW_DEPTH = 7   -- studs entre uma fileira e a próxima (linhas, ao longo do Size.Z da Part)
+-- ⚠️ v104: campo 25% maior — os degraus das arquibancadas (workspace.Arquibancadas,
+-- só no Studio) ficaram 25% mais fundos: 7 -> 8.75. TEM que bater com o degrau.
+Config.CROWD_ROW_DEPTH = 10.5 -- ⚠️ v112: 8.75 x 1.2 (degraus 20% mais fundos com o campo)   -- studs entre uma fileira e a próxima (linhas, ao longo do Size.Z da Part)
 Config.CROWD_ROW_RISE = 4.5    -- quanto cada fileira sobe em Y (efeito "degrau" de arquibancada de verdade)
 
 -- ⚠️ v30: quanto o torcedor recua DENTRO da própria fileira, pra ficar em
@@ -2690,7 +3102,7 @@ Config.CROWD_ROW_RISE = 4.5    -- quanto cada fileira sobe em Y (efeito "degrau"
 -- CrowdClient.local.luau). Tem que acompanhar onde o banco foi construído
 -- na geometria das arquibancadas: hoje o banco está a 0.78 da profundidade
 -- da fileira, ou seja 7 * 0.78 = 5.46.
-Config.CROWD_SEAT_BACK_OFFSET = 5.1
+Config.CROWD_SEAT_BACK_OFFSET = 7.65 -- ⚠️ v112: 6.375 x 1.2 -- ⚠️ v104: 5.1 * 1.25 (campo/arquibancada 25% maiores)
 -- ⚠️ PEDIDO: "pode preencher o espaço da crowd toda, a arquibancada é a
 -- area selecionada, não tem problema, se estiver travando, a gente
 -- remove" — com isso true, CROWD_MAX_SEATS_PER_AREA (mais abaixo) é
@@ -2752,5 +3164,28 @@ Config.CROWD_PANTS_ID = ""
 -- Só entra em ação se Config.CROWD_FILL_ENTIRE_AREA = false (ver acima) —
 -- por pedido do usuário, o padrão agora é preencher a área toda.
 Config.CROWD_MAX_SEATS_PER_AREA = 80
+
+-- ⚠️ v112 — PEDIDO: "no replay, só no primeiro gol aparece a Hissatsu, depois não
+-- aparece mais nenhuma, nem arma, nem algumas animações". Os efeitos de Arma
+-- (ArmaVFX) e de Hissatsu de drible/carrinho (HissatsuVFX) iam direto pros
+-- clientes e NUNCA eram gravados no replay. Todo disparo desses passa por aqui:
+-- manda pra todo mundo E grava o evento (o replay repete no fantasma). Só o
+-- servidor chama (o RegistrarEventoReplay mora no BallController).
+Config.DispararVFX = function(nomeRemoto, character, ...)
+	local remoto = Config.Remotes and Config.Remotes[nomeRemoto]
+	if not remoto then return end
+	remoto:FireAllClients(character, ...)
+	if _G.RegistrarEventoReplay and _G.IdDoAtorReplay then
+		local ator = _G.IdDoAtorReplay(character)
+		if ator then
+			-- argumentos com chave em texto: lista com buraco (nil no meio) não
+			-- atravessa o RemoteEvent inteira
+			local n = select("#", ...)
+			local args = {}
+			for i = 1, n do args[tostring(i)] = (select(i, ...)) end
+			_G.RegistrarEventoReplay("VFX", { ator = ator, remoto = nomeRemoto, args = args, n = n })
+		end
+	end
+end
 
 return Config

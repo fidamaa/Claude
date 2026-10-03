@@ -123,7 +123,26 @@ local POOL_MAX_BASE_STAT = 15
 -- goleiro, ver conversa de balanceamento). Por já estar na lista de
 -- SKILL_ATTRIBUTE_NAMES, migrateAttributeNames (abaixo) preenche
 -- sozinho quem já tinha personagem salvo sem Energy.
+-- ⚠️ NOVO: "Technique" (TÉCNICA) entra como 6º atributo de skill (7º no
+-- total, com Stamina) — domínio, primeiro toque, recepção, precisão de
+-- passe e Hissatsus com Técnica na fórmula (ver Config.TECHNIQUE_ATTRIBUTE
+-- no place Game). Estar nesta lista já faz migrateAttributeNames (abaixo)
+-- dar Técnica = meio da faixa (25) pra todo personagem salvo sem ela — sem
+-- invalidar save nenhum. ⚠️ Energy também mudou de papel: agora é só o
+-- TANQUE de energia das Hissatsus (custo), não força.
+-- ⚠️ v98 — TÉCNICA REMOVIDA (pedido: "verifica se realmente é algo bom de se
+-- manter, senão remove a técnica"): o que ela fazia (domínio, recepção,
+-- bola difícil) virou do Drible, e as Hissatsus escalam só pelo atributo da
+-- categoria. Sai da lista de skill (não é mais exigida nem criada) e entra
+-- em REMOVED_ATTRIBUTE_BASELINES logo abaixo: pontos investidos nela voltam
+-- como pontos livres.
 local SKILL_ATTRIBUTE_NAMES = { "Physical", "DribbleSkill", "Speed", "Kick", "Energy" }
+-- ⚠️ v104: pontos de atributo por nível (TEM que bater com
+-- ATTRIBUTE_POINTS_PER_LEVEL do LevelManager). Cada slot guarda com quantos
+-- pontos/nível ele foi upado (PontosPorNivel); se for menos que isso, a
+-- migração em validateCharacterSlot devolve a diferença dos níveis já subidos.
+local PONTOS_POR_NIVEL_ATUAL = 5
+local PONTOS_POR_NIVEL_ANTIGO = 3 -- valor em uso antes do v104 (slots sem a marca)
 local POOL_ATTRIBUTE_NAMES = { "Stamina" }
 -- Atributos removidos do jogo (nomes antigos) cujos pontos investidos
 -- viram AttributePoints livres na migração — ver migrateAttributeNames.
@@ -134,6 +153,10 @@ local REMOVED_ATTRIBUTE_BASELINES = {
 	Aura = POOL_MIN_BASE_STAT,
 	BallControl = SKILL_MIN_BASE_STAT,
 	CrossingSkill = SKILL_MIN_BASE_STAT,
+	-- ⚠️ v98: base = o MÁXIMO de nascimento (40), não o mínimo: devolve o que
+	-- foi investido acima do que dava pra nascer, sem dar pontos de graça pelo
+	-- valor sorteado (a Técnica nascia 10-40 em todo personagem).
+	Technique = SKILL_MAX_BASE_STAT,
 }
 
 -- ========================================
@@ -177,11 +200,11 @@ local function rollSkillStat()
 	return math.random(SKILL_MIN_BASE_STAT, SKILL_MAX_BASE_STAT)
 end
 
--- Sorte 0-100 só pra exibição (estrelas) — média dos 5 atributos
--- sorteados (⚠️ agora incluindo Energy), remapeada de
+-- Sorte 0-100 só pra exibição (estrelas) — média dos 6 atributos
+-- sorteados (⚠️ agora incluindo Energy e Technique), remapeada de
 -- [SKILL_MIN_BASE_STAT, SKILL_MAX_BASE_STAT] pra [0, 100].
 local function luckFromAttributes(physical, dribble, speed, kick, energy)
-	local avg = (physical + dribble + speed + kick + energy) / 5
+	local avg = (physical + dribble + speed + kick + energy) / 5 -- ⚠️ v98: sem Técnica
 	local span = SKILL_MAX_BASE_STAT - SKILL_MIN_BASE_STAT
 	if span <= 0 then return 50 end
 	return math.clamp(math.floor(((avg - SKILL_MIN_BASE_STAT) / span) * 100), 0, 100)
@@ -295,7 +318,7 @@ function CharacterCreator.new(slotName, role)
 	local kick = rollSkillStat()
 	local energy = rollSkillStat() -- ⚠️ NOVO: alimenta o sistema de Pulsos
 	local stamina = math.random(POOL_MIN_BASE_STAT, POOL_MAX_BASE_STAT)
-	local luck = luckFromAttributes(physical, dribble, speed, kick, energy)
+	local luck = luckFromAttributes(physical, dribble, speed, kick, energy) -- ⚠️ v98: Técnica removida
 
 	return {
 		SlotName = slotName,
@@ -319,7 +342,7 @@ function CharacterCreator.new(slotName, role)
 			DribbleSkill = dribble,
 			Speed = speed,
 			Kick = kick,
-			Energy = energy, -- ⚠️ NOVO: alimenta o sistema de Pulsos
+			Energy = energy, -- ⚠️ NOVO: tanque de energia das Hissatsus (custo, não força)
 			Stamina = stamina,
 			-- ⚠️ NOVO (fix "fôlego sem teto"): guarda o valor de NASCIMENTO do
 			-- Stamina separado do valor atual — LevelManager usa isso pra
@@ -340,7 +363,8 @@ function CharacterCreator.new(slotName, role)
 		-- ⭐ SISTEMA DE NÍVEIS
 		Level = 1,
 		CurrentXP = 0,
-		AttributePoints = 0
+		AttributePoints = 0,
+		PontosPorNivel = PONTOS_POR_NIVEL_ATUAL, -- ⚠️ v104: ver migração em validateCharacterSlot
 	}
 end
 
@@ -348,7 +372,7 @@ end
 -- Validar Estrutura de Dados
 -- ========================================
 -- FIX: migra slots salvos com formatos antigos de atributos pro formato
--- atual (Physical/DribbleSkill/Speed/Kick/Stamina), em vez de invalidar
+-- atual (Physical/DribbleSkill/Speed/Kick/Energy/Technique/Stamina), em vez de invalidar
 -- o personagem inteiro. "Dribble" bem antigo vira DribbleSkill (mesmo
 -- conceito, só renomeado). Qualquer atributo faltando (Speed/Kick pra
 -- quem só tinha BallControl/CrossingSkill, por exemplo) ganha o valor
@@ -430,7 +454,7 @@ local function validateCharacterSlot(slotData)
 	local removedRefund = migrateAttributeNames(slotData.Attributes)
 	if removedRefund > 0 then
 		slotData.AttributePoints = (slotData.AttributePoints or 0) + removedRefund
-		print(string.format("♻️ Migração: devolvidos %d pontos de atributo (Aura/BallControl/CrossingSkill) pro slot '%s'", removedRefund, tostring(slotData.SlotName)))
+		print(string.format("♻️ Migração: devolvidos %d pontos de atributo (Aura/BallControl/CrossingSkill/Technique) pro slot '%s'", removedRefund, tostring(slotData.SlotName)))
 	end
 
 	-- Migração: personagem criado antes do sistema de Sorte não tem
@@ -463,6 +487,22 @@ local function validateCharacterSlot(slotData)
 		slotData.CurrentXP = 0
 		slotData.AttributePoints = 0
 	end
+
+	-- ⚠️ v104: pontos por nível subiram (3 -> 5, ver PONTOS_POR_NIVEL_ATUAL).
+	-- Quem já tinha subido de nível recebe, UMA vez, a diferença de cada
+	-- nível já conquistado — assim um nível 50 antigo fica igual a um nível
+	-- 50 novo (e consegue maximizar os status como pedido).
+	local pontosDoSlot = tonumber(slotData.PontosPorNivel) or PONTOS_POR_NIVEL_ANTIGO
+	if pontosDoSlot < PONTOS_POR_NIVEL_ATUAL then
+		local niveisSubidos = math.max(0, (tonumber(slotData.Level) or 1) - 1)
+		local bonus = (PONTOS_POR_NIVEL_ATUAL - pontosDoSlot) * niveisSubidos
+		slotData.AttributePoints = (slotData.AttributePoints or 0) + bonus
+		if bonus > 0 then
+			print(string.format("♻️ Migração v104: +%d pontos de atributo pro slot '%s' (nível %d, %d -> %d pontos/nível)",
+				bonus, tostring(slotData.SlotName), slotData.Level, pontosDoSlot, PONTOS_POR_NIVEL_ATUAL))
+		end
+	end
+	slotData.PontosPorNivel = PONTOS_POR_NIVEL_ATUAL
 
 	return true
 end
@@ -528,6 +568,18 @@ local function validatePlayerData(data)
 	-- no place Lobby). Dado antigo nunca vai ter esse campo.
 	if type(data.Wins) ~= "number" then
 		data.Wins = 0
+	end
+	-- ⚠️ v115 — CareerStats: estatísticas de CARREIRA (soma de todas as partidas),
+	-- mostradas pelo NPC de estatísticas (Bentes, no banco da praça). PEDIDO:
+	-- "o Bentes/Pepe Nep vira o NPC de estatísticas, com painel e marcador".
+	-- Dado antigo começa zerado (só Wins já existia).
+	if type(data.CareerStats) ~= "table" then
+		data.CareerStats = {}
+	end
+	for _, chave in ipairs({ "Goals", "Assists", "Tackles", "Dribbles", "Saves", "MVPs", "Matches", "Shots", "Passes", "Hissatsus", "Draws", "Losses", "BestGoals" }) do -- (v123: +6)
+		if type(data.CareerStats[chave]) ~= "number" then
+			data.CareerStats[chave] = 0
+		end
 	end
 	-- ⚠️ NOVO: Quests — missões oferecidas/escolhidas por esse jogador.
 	-- Guardado aqui (não num DataStore separado) pra viajar junto no mesmo
@@ -599,7 +651,8 @@ local function validatePlayerData(data)
 	-- também — como Instinto é PASSIVO (condição bate sozinha, sem
 	-- tecla pra escolher qual), os equipados TODOS ficam checados ao
 	-- mesmo tempo (ver InstinctController.legacy.luau no place Game).
-	for _, campo in ipairs({ "EquippedPulse1", "EquippedPulse2", "EquippedPulse3", "EquippedInstinct1", "EquippedInstinct2", "EquippedInstinct3" }) do
+	-- ⚠️ v102: + slot 4 (reserva paga; o 3 virou a reserva de graça)
+	for _, campo in ipairs({ "EquippedPulse1", "EquippedPulse2", "EquippedPulse3", "EquippedPulse4", "EquippedInstinct1", "EquippedInstinct2", "EquippedInstinct3", "EquippedInstinct4" }) do
 		if data[campo] ~= nil and type(data[campo]) ~= "string" then
 			data[campo] = nil
 		end
@@ -658,6 +711,7 @@ local function createDefaultData()
 		UsedCodes = {},
 		RollCredits = 0,
 		Wins = 0,
+		CareerStats = { Goals = 0, Assists = 0, Tackles = 0, Dribbles = 0, Saves = 0, MVPs = 0, Matches = 0 },
 		Quests = { PeriodId = nil, Offered = {}, Active = {}, Progress = {}, Completed = {} },
 		OwnedCosmetics = {},
 		EquippedCosmetics = {},
@@ -672,9 +726,11 @@ local function createDefaultData()
 		EquippedPulse1 = nil,
 		EquippedPulse2 = nil,
 		EquippedPulse3 = nil,
+		EquippedPulse4 = nil, -- ⚠️ v102: reserva paga
 		EquippedInstinct1 = nil,
 		EquippedInstinct2 = nil,
 		EquippedInstinct3 = nil,
+		EquippedInstinct4 = nil, -- ⚠️ v102: reserva paga
 		ExtraPulseSlot = false,
 		ExtraInstinctSlot = false,
 		RollCreditsRobux = 0,
@@ -733,11 +789,22 @@ end
 -- ========================================
 -- Salvar Dados com Retry e Exponential Backoff
 -- ========================================
+-- ⚠️ v118 — PROTEÇÃO CONTRA PERDA DE DADOS. Quando o DataStore falha ao CARREGAR
+-- (ex.: "Access forbidden"/HTTP 403, queda do Roblox), o jogo entra com dados
+-- padrão temporários pra pessoa não ficar travada. Esses dados NUNCA podem ser
+-- salvos: o primeiro save gravaria um personagem nível 1 com $1000 por cima do
+-- save verdadeiro. Antes isso acontecia (autosave/saída).
+local dadosTemporarios = {} -- [userId] = true
+
 local function savePlayerData(player, isShutdown)
 	local userId = player.UserId
 
 	if not onlinePlayersData[userId] then
 		warn("⚠️ Tentando salvar dados inexistentes para", player.Name)
+		return false
+	end
+	if dadosTemporarios[userId] then
+		warn("🛡️ Não salvando dados TEMPORÁRIOS de " .. player.Name .. " (o carregamento falhou — o save real fica intacto)")
 		return false
 	end
 
@@ -865,7 +932,8 @@ local function loadPlayerData(player)
 	if not dataLoaded then
 		warn(string.format("❌ FALHA CRÍTICA: Não foi possível carregar dados válidos para %s", player.Name))
 		onlinePlayersData[userId] = createDefaultData()
-		warn(string.format("🆘 Usando dados padrão temporários para %s", player.Name))
+		dadosTemporarios[userId] = true -- ⚠️ v118: nunca salvar por cima do save real
+		warn(string.format("🆘 Usando dados padrão temporários para %s (NÃO serão salvos)", player.Name))
 	end
 
 	-- Validação final
@@ -949,6 +1017,45 @@ _G.AddPlayerWin = function(player)
 	return true
 end
 
+-- ⚠️ v115: soma as estatísticas de UMA partida na carreira (chamado pelo
+-- LobbyRewardsReceiver junto com o AddPlayerWin). `stats` é o Stats do Game:
+-- { Goals, Assists, Tackles, Dribbles, Saves, MVP, Won }.
+-- ⚠️ v123: + Shots, Passes, Hissatsus e o RESULTADO (empate/derrota; vitória continua
+-- em data.Wins). Partida só conta em "Matches" se terminou (win/lose/draw) — quem saiu
+-- no meio ("ongoing") soma o que fez, mas não conta partida.
+_G.AddCareerStats = function(player, stats, resultado)
+	local data = onlinePlayersData[player.UserId]
+	if not data or type(stats) ~= "table" then return false end
+	local c = data.CareerStats
+	if type(c) ~= "table" then
+		c = {}
+		data.CareerStats = c
+	end
+	local function soma(chave, valor)
+		if type(valor) == "number" and valor > 0 then
+			c[chave] = (c[chave] or 0) + math.floor(valor)
+		end
+	end
+	soma("Goals", stats.Goals)
+	soma("Assists", stats.Assists)
+	soma("Tackles", stats.Tackles)
+	soma("Dribbles", stats.Dribbles)
+	soma("Saves", stats.Saves)
+	soma("Shots", stats.Shots)
+	soma("Passes", stats.Passes)
+	soma("Hissatsus", stats.Hissatsus)
+	if stats.MVP == true then soma("MVPs", 1) end
+	if resultado == nil or resultado == "win" or resultado == "lose" or resultado == "draw" then
+		soma("Matches", 1)
+	end
+	if resultado == "draw" then soma("Draws", 1) end
+	if resultado == "lose" then soma("Losses", 1) end
+	-- recorde de gols numa partida só
+	if type(stats.Goals) == "number" and stats.Goals > (c.BestGoals or 0) then c.BestGoals = math.floor(stats.Goals) end
+	_G.RequestSave(player)
+	return true
+end
+
 _G.RequestSave = function(player)
 	local userId = player.UserId
 	if pendingDebouncedSave[userId] then
@@ -986,6 +1093,7 @@ end
 local setActiveSlotFunc = getOrCreateRemoteFunction("SetActiveSlot")
 local getSlotsOverviewFunc = getOrCreateRemoteFunction("GetSlotsOverview")
 local setSlotRoleFunc = getOrCreateRemoteFunction("SetSlotRole")
+local getCareerStatsFunc = getOrCreateRemoteFunction("GetCareerStats") -- ⚠️ v115: painel do Bentes
 
 setActiveSlotFunc.OnServerInvoke = function(player, slotIndex)
 	if type(slotIndex) ~= "number" or slotIndex < 1 or slotIndex > 5 then
@@ -1073,6 +1181,22 @@ setSlotRoleFunc.OnServerInvoke = function(player, slotIndex, newRole)
 	return true, { SlotIndex = slotIndex, Role = newRole }
 end
 
+getCareerStatsFunc.OnServerInvoke = function(player)
+	local data = onlinePlayersData[player.UserId]
+	if not data then return nil end
+	local c = data.CareerStats or {}
+	return {
+		Goals = c.Goals or 0, Assists = c.Assists or 0, Tackles = c.Tackles or 0,
+		Dribbles = c.Dribbles or 0, Saves = c.Saves or 0, MVPs = c.MVPs or 0,
+		-- ⚠️ v123
+		Shots = c.Shots or 0, Passes = c.Passes or 0, Hissatsus = c.Hissatsus or 0,
+		Draws = c.Draws or 0, Losses = c.Losses or 0, BestGoals = c.BestGoals or 0,
+		-- quem já tinha vitórias antes do contador de partidas não fica com "0 partidas":
+		-- o mínimo coerente é o número de vitórias
+		Matches = math.max(c.Matches or 0, data.Wins or 0), Wins = data.Wins or 0,
+	}
+end
+
 getSlotsOverviewFunc.OnServerInvoke = function(player)
 	local playerData = onlinePlayersData[player.UserId]
 	if not playerData then return nil end
@@ -1115,6 +1239,7 @@ Players.PlayerRemoving:Connect(function(player)
 	print(string.format("👋 %s saindo. Salvando dados...", player.Name))
 	savePlayerData(player)
 	onlinePlayersData[player.UserId] = nil
+	dadosTemporarios[player.UserId] = nil
 end)
 
 -- ========================================

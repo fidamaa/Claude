@@ -39,6 +39,12 @@ local function overrideMovementAnimations(character)
 	local humanoid = character:WaitForChild("Humanoid", 5)
 	if not humanoid then return end
 
+	-- ⚠️ v107: a animação customizada de andar (Config.ANIMATIONS.Walk) é R15 —
+	-- no corpo R6 ela não mexe junta nenhuma, só ficava tocando em prioridade
+	-- Action por cima do Animate ("uma animação atrapalhando a outra"). No R6 o
+	-- andar é o do próprio Animate.
+	if humanoid.RigType == Enum.HumanoidRigType.R6 then return end
+
 	local animator = humanoid:FindFirstChildOfClass("Animator")
 	if not animator then
 		animator = Instance.new("Animator")

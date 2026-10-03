@@ -133,6 +133,15 @@ end
 -- chamar setAuraActive(player, def, false) — usado pelos instintos
 -- contínuos, que ficam acesos enquanto a condição valer.
 local function setAuraActive(player, def, active, duration)
+	-- ⚠️ v106 — PEDIDO: "tira aquela bolinha que fica em volta dele, aquela bola
+	-- azul estranha. Faz um VFX próprio... do impacto na bola, do R, conforme o
+	-- anime". A esfera de ForceField (na cor da raridade — azul no Chute
+	-- Direto, que é Raro) saiu: cada Arma agora tem efeito próprio desenhado no
+	-- cliente (ArmasVFX.local.luau), avisado por aqui.
+	if Config.Remotes.ArmaVFX and player.Character then
+		Config.DispararVFX("ArmaVFX", player.Character, def and def.Name, def and def.Rarity, active and true or false, duration)
+	end
+	if true then return end -- (bolha antiga desligada — o resto fica só como referência)
 	local aura = getAura(player)
 	if not aura then return end
 
@@ -192,8 +201,29 @@ local ATIVA_EXECUTORS = {
 	DribbleMove = function(player, effect) return _G.PulseExecuteDribbleMove and _G.PulseExecuteDribbleMove(player, effect) end,
 	AerialControl = function(player, effect) return _G.PulseExecuteAerialControl and _G.PulseExecuteAerialControl(player, effect) end,
 }
+-- ⚠️ v111 — PEDIDO: "tem muitas armas de status... tem que ter utilidade
+-- diversa: um drible criativo, alguma coisa diferente". As ativas novas
+-- (Arranque, Drible do Monstro, Sumir, Tabela, Passe Curvo, Colar,
+-- Interceptar, Passo Fantasma, Saída do Gol, Segundo Fôlego) ficam no
+-- BallController como _G.ArmaAtiva_<AtivaAction> — lá estão a bola, a posse e
+-- o deslocamento. Cada uma devolve (true) ou (false, "motivo pro HUD").
+setmetatable(ATIVA_EXECUTORS, { __index = function(_, acao)
+	local f = _G["ArmaAtiva_" .. tostring(acao)]
+	return f and function(player, effect) return f(player, effect) end or nil
+end })
 
-local ativaReadyAt = {} -- [player] = tick() em que a ativa pode rodar de novo
+-- ⚠️ v118: cooldown POR ARMA (antes era um só por jogador: usar a do E travava a
+-- do R também, e o HUD novo mostra cada uma separada)
+local ativaReadyAtPorNome = {} -- [player] = { [nomeDaArma] = tick() em que pode de novo }
+local function prontaEm(player, nome)
+	local t = ativaReadyAtPorNome[player]
+	return t and t[nome] or nil
+end
+local ativaReadyAt = setmetatable({}, {
+	__newindex = function(_, player, valor)
+		if valor == nil then ativaReadyAtPorNome[player] = nil end
+	end,
+})
 
 local debugNoCooldown = {} -- [player] = true (ferramenta de teste, ver DebugAbilitySelector)
 
@@ -201,6 +231,14 @@ local debugNoCooldown = {} -- [player] = true (ferramenta de teste, ver DebugAbi
 -- sem esperar. Chamado pelo DebugAbilitySelector.legacy.luau.
 _G.SetInstinctDebugNoCooldown = function(player, enabled)
 	debugNoCooldown[player] = enabled and true or nil
+end
+-- ⚠️ v110 (debugger): zera AGORA o cooldown da ativa da arma
+_G.ZerarInstinctCooldown = function(player)
+	local t = ativaReadyAtPorNome[player]
+	if t then
+		for nome in pairs(t) do player:SetAttribute("ArmaCD_" .. nome, nil) end
+	end
+	ativaReadyAtPorNome[player] = nil
 end
 
 local function tryRunAtiva(player, def)
@@ -219,7 +257,7 @@ local function tryRunAtiva(player, def)
 	local cooldown = def.AtivaCooldown
 		or (Config.INSTINCT_COOLDOWN_BY_RARITY and Config.INSTINCT_COOLDOWN_BY_RARITY[def.Rarity])
 		or 10
-	local readyAt = ativaReadyAt[player]
+	local readyAt = prontaEm(player, def.Name)
 	if readyAt and tick() < readyAt and not debugNoCooldown[player] then return false end
 
 	-- ⚠️ v5.6: Instinct Mode agora amplifica TODO buff que o instinto daria
@@ -242,13 +280,17 @@ local function tryRunAtiva(player, def)
 		_G.PulseExecuteBallMagnet(player, ativaEffect)
 	end
 
-	local ok = executor(player, ativaEffect)
+	local ok, motivo = executor(player, ativaEffect)
 	if ok then
 		-- Só entra em cooldown quando a jogada REALMENTE aconteceu — se
 		-- não tinha bola no ar, o jogador não fica penalizado por isso.
-		ativaReadyAt[player] = tick() + cooldown
+		ativaReadyAtPorNome[player] = ativaReadyAtPorNome[player] or {}
+		ativaReadyAtPorNome[player][def.Name] = tick() + cooldown
+		-- ⚠️ v118: o HUD de habilidades lê daqui (contagem e escurecer o slot)
+		player:SetAttribute("ArmaCD_" .. def.Name, workspace:GetServerTimeNow() + cooldown)
+		player:SetAttribute("ArmaCDTotal_" .. def.Name, cooldown)
 	end
-	return ok and true or false
+	return ok and true or false, motivo
 end
 
 -- ⚠️ v76 — VIROU LISTA. PEDIDO: "inclua DOIS slot pra arma... pro player
@@ -281,11 +323,61 @@ _G.GetEquippedInstincts = function(player)
 	return EquippedList[player] or {}
 end
 
+-- ⚠️ v120b — PEDIDO: "o chute do Rin não faz curva, vai reto". O _G.CheckInstinct
+-- devolve só a PRIMEIRA arma equipada cuja condição bate — com Ego do Rei/Zona de
+-- Ouro/Olho de Predador junto, o Tiro Destruidor era engolido. A curva agora é lida
+-- à parte: qualquer arma equipada com Effect.Curva e o mesmo Trigger do chute.
+_G.CurvaDaArmaEquipada = function(player, trigger)
+	for _, n in ipairs(EquippedList[player] or {}) do
+		local def = findInstinct(n)
+		if def and def.Effect and def.Effect.Curva and def.Trigger == trigger then
+			return def.Effect.Curva
+		end
+	end
+	return nil
+end
+
+-- ⚠️ v120b — COUNTERS AUTOMÁTICOS (Monstro do Drible, Última Barreira): a arma
+-- reage sozinha quando o lance acontece. Se `nome` está equipada e fora do
+-- cooldown, marca o cooldown (igual a ativa normal, com o HUD) e devolve o
+-- AtivaEffect dela; senão nil.
+_G.UsarCounterDaArma = function(player, nome)
+	local equipada = false
+	for _, n in ipairs(EquippedList[player] or {}) do
+		if findInstinct(n) and findInstinct(n).Name == nome then equipada = true break end
+	end
+	if not equipada then return nil end
+	local def = findInstinct(nome)
+	if not def then return nil end
+	local readyAt = prontaEm(player, def.Name)
+	if readyAt and tick() < readyAt and not debugNoCooldown[player] then return nil end
+	local cooldown = def.CounterCooldown or def.AtivaCooldown or 10
+	ativaReadyAtPorNome[player] = ativaReadyAtPorNome[player] or {}
+	ativaReadyAtPorNome[player][def.Name] = tick() + cooldown
+	player:SetAttribute("ArmaCD_" .. def.Name, workspace:GetServerTimeNow() + cooldown)
+	player:SetAttribute("ArmaCDTotal_" .. def.Name, cooldown)
+	return def.CounterEffect or def.AtivaEffect or {}
+end
+
 -- Compat: quem só quer "o principal" (slot 1) — usado pelo loop de carga
 -- contínua e pelos poucos lugares que ainda pensam em 1 só.
 local function equippedPrimary(player)
 	local lista = EquippedList[player]
 	return lista and lista[1]
+end
+
+-- ⚠️ v106 — "as armas não estão funcionando direito, algumas estão, outras
+-- estranhas". Arma CONTÍNUA (Trigger "Instant", ex.: Pique) só era lida no
+-- slot 1 — no slot 2 ela nunca ligava. Agora vale a primeira contínua
+-- equipada, em qualquer slot (duas contínuas juntas: vale a do slot 1).
+local function primeiraContinua(player)
+	local lista = EquippedList[player]
+	if not lista then return nil end
+	for _, nome in ipairs(lista) do
+		local def = findInstinct(nome)
+		if def and def.Trigger == "Instant" then return nome end
+	end
+	return nil
 end
 
 -- ================================================================
@@ -307,7 +399,8 @@ local InstinctModeState = {} -- [player] = { ExpiresAt }
 -- instinc pro dobro das atuais". Era 20 (5 disparos enchiam o medidor) —
 -- metade disso dobra a quantidade de disparos necessários (10 agora).
 local INSTINCT_CHARGE_PER_TRIGGER = 10 -- flat por enquanto (ver comentário acima) — 10 disparos enchem o medidor
-local INSTINCT_MODE_DURATION = 9
+-- ⚠️ v120b — PEDIDO: "tem que durar o Flow uns 25 segundos" (era 9)
+local INSTINCT_MODE_DURATION = 25
 -- ⚠️ v5.6: era 1.75 (bônus ficava +75% maior), depois 1.12 (+12%).
 -- ⚠️ v5.7: PEDIDO — "instinct mode na real é 25% bonus": a PORÇÃO de
 -- bônus (delta acima da baseline) de cada chave do Effect/AtivaEffect
@@ -324,9 +417,20 @@ end
 -- exatamente o comportamento antigo — todas as chamadas internas
 -- continuam iguais. Clamp em 100 e o "MeterUpdate" pro cliente também
 -- continuam idênticos.
+-- ⚠️ v113 — PEDIDO: "só 1 Flow por partida". Quem já usou não carrega mais
+-- (o medidor fica em 0 e o HUD mostra "usado"). Zera no começo da partida
+-- (_G.ResetarFlowsDaPartida, chamado pelo MatchController).
+local FlowsUsados = {}
+_G.ResetarFlowsDaPartida = function()
+	for player in pairs(FlowsUsados) do
+		if player.Parent then player:SetAttribute("FlowUsado", nil) end
+	end
+	table.clear(FlowsUsados)
+end
 local function addInstinctCharge(player, amount)
-	amount = tonumber(amount) or INSTINCT_CHARGE_PER_TRIGGER
+	amount = tonumber(amount) or (Config.FLOW_CHARGE_ARMA or INSTINCT_CHARGE_PER_TRIGGER)
 	if amount <= 0 then return end
+	if FlowsUsados[player] then return end
 	local current = InstinctCharge[player] or 0
 	if current >= 100 then return end
 	current = math.min(100, current + amount)
@@ -429,22 +533,13 @@ end
 
 -- Carga por TEMPO dos instintos "gerais" — um loop simples, independente
 -- do resto (não depende de nenhum trigger de ação acontecer).
-task.spawn(function()
-	while true do
-		task.wait(1)
-		for _, player in ipairs(Players:GetPlayers()) do
-			if not _G.IsInInstinctMode(player) then
-				-- ⚠️ v76: checa TODOS os slots equipados agora, não só um —
-				-- cada Instinto "geral" equipado contribui carga própria.
-				for _, name in ipairs(EquippedList[player] or {}) do
-					if INSTINCT_GENERAL[name] then
-						addInstinctCharge(player, INSTINCT_TIME_CHARGE_PER_SECOND)
-					end
-				end
-			end
-		end
-	end
-end)
+-- ⚠️ v113 — BUG: "o Flow enche por segundo com a bola; tem que ser por AÇÃO".
+-- Este laço dava carga TODO SEGUNDO pras Armas "gerais" equipadas — foi
+-- desligado. (A outra metade do bug: a Arma contínua que LIGA — ex.: a
+-- condição "com a bola", que liga/desliga a cada toque — dava carga cheia a
+-- cada vez; também saiu, ver "Avisa só na TRANSIÇÃO".) O Flow agora só vem de
+-- AÇÃO: passe dado/recebido, roubo, gol, Arma disparando numa jogada e ativa
+-- usada.
 
 -- Exposta pro PulseController: a chave de Effect "InstinctCharge" (0-100)
 -- de um Pulso soma direto no medidor de Instinct Mode do jogador — é o
@@ -519,21 +614,44 @@ local function loosenCondition(condition)
 end
 
 Remotes.ActivateInstinctMode.OnServerEvent:Connect(function(player)
+	if _G.HissatsuCutsceneActive then return end -- ⚠️ v87: ninguém age durante a cutscene de Hissatsu
 	local charge = InstinctCharge[player] or 0
 	if charge < 100 then return end -- medidor não cheio — cliente já trava o botão, isso é defesa em profundidade
 	if _G.IsInInstinctMode(player) then return end -- já ativo
-
-	InstinctCharge[player] = 0
-	InstinctModeState[player] = { ExpiresAt = tick() + INSTINCT_MODE_DURATION }
-	Remotes.InstinctModeFeedback:FireClient(player, "ModeActivated", INSTINCT_MODE_DURATION)
-	Remotes.InstinctModeFeedback:FireClient(player, "MeterUpdate", 0)
-
-	task.delay(INSTINCT_MODE_DURATION, function()
-		local state = InstinctModeState[player]
-		if state and tick() >= state.ExpiresAt then
-			InstinctModeState[player] = nil
-			Remotes.InstinctModeFeedback:FireClient(player, "ModeEnded")
+	if FlowsUsados[player] then return end -- ⚠️ v113: 1 Flow por partida
+	-- ⚠️ v120b — PEDIDO: "ninguém pode usar um Flow em cima do outro: quem tiver com
+	-- Flow ativo vai durar a duração do Flow". Com o Flow (ou a cena) de outro
+	-- jogador valendo, o medidor fica cheio e ele tenta de novo depois.
+	for outro, estado in pairs(InstinctModeState) do
+		if outro ~= player and estado and estado.ExpiresAt and tick() < estado.ExpiresAt then
+			Remotes.InstinctModeFeedback:FireClient(player, "FlowOcupado", math.ceil(estado.ExpiresAt - tick()))
+			return
 		end
+	end
+
+	FlowsUsados[player] = true
+	player:SetAttribute("FlowUsado", true)
+	InstinctCharge[player] = 0
+	Remotes.InstinctModeFeedback:FireClient(player, "MeterUpdate", 0)
+	-- ⚠️ v113: primeiro a CENA do Flow (congela a partida, ver PulseController
+	-- _G.TocarCenaFlow); os 9s de Flow só começam quando ela acaba
+	local cena = _G.TocarCenaFlow and _G.TocarCenaFlow(player) or 0
+	-- trava contra apertar de novo durante a cena
+	InstinctModeState[player] = { ExpiresAt = tick() + cena + INSTINCT_MODE_DURATION }
+	task.delay(cena, function()
+		if not player.Parent then return end
+		InstinctModeState[player] = { ExpiresAt = tick() + INSTINCT_MODE_DURATION }
+		Remotes.InstinctModeFeedback:FireClient(player, "ModeActivated", INSTINCT_MODE_DURATION)
+		-- ⚠️ v110 — FLOW ESCOLHIDO NA LOJA (Blue Lock): cada Flow soma atributos
+		-- e/ou velocidade enquanto dura + a cena de ativação (ver CosmeticosServer).
+		if _G.AtivarFlow then _G.AtivarFlow(player, INSTINCT_MODE_DURATION) end
+		task.delay(INSTINCT_MODE_DURATION, function()
+			local state = InstinctModeState[player]
+			if state and tick() >= state.ExpiresAt then
+				InstinctModeState[player] = nil
+				Remotes.InstinctModeFeedback:FireClient(player, "ModeEnded")
+			end
+		end)
 	end)
 end)
 
@@ -605,7 +723,7 @@ local function conditionMet(def, player, ctx)
 
 	if c.MaxDistanceToGoal and not (ctx.DistanceToGoal and ctx.DistanceToGoal <= c.MaxDistanceToGoal) then return false end
 	if c.MinDistanceToGoal and not (ctx.DistanceToGoal and ctx.DistanceToGoal >= c.MinDistanceToGoal) then return false end
-	if c.TargetMaxDistanceToGoal and not (ctx.DistanceToGoal and ctx.DistanceToGoal <= c.TargetMaxDistanceToGoal) then return false end
+	if c.TargetMaxDistanceToGoal and not ((ctx.TargetDistanceToGoal or ctx.DistanceToGoal) and (ctx.TargetDistanceToGoal or ctx.DistanceToGoal) <= c.TargetMaxDistanceToGoal) then return false end -- ⚠️ v111: distância do PONTO MIRADO
 	if c.MaxSecondsAfterReceive and not (ctx.SecondsAfterReceive and ctx.SecondsAfterReceive <= c.MaxSecondsAfterReceive) then return false end
 	if c.MaxDistanceToOwnGoal and not (ctx.DistanceToOwnGoal and ctx.DistanceToOwnGoal <= c.MaxDistanceToOwnGoal) then return false end
 	if c.MaxDistanceOpponent and not (ctx.OpponentDistance and ctx.OpponentDistance <= c.MaxDistanceOpponent) then return false end
@@ -700,6 +818,11 @@ local function conditionMet(def, player, ctx)
 	-- "A Zona": você está com a bola há N segundos sem largar.
 	if c.MinSecondsInPossession and not (ctx.SecondsInPossession and ctx.SecondsInPossession >= c.MinSecondsInPossession) then return false end
 
+	-- ⚠️ v110 — condições das Armas novas (ver Data.Instincts, bloco v110)
+	if c.DefendingHalf and ctx.AttackingHalf ~= false then return false end -- no PRÓPRIO campo
+	if c.CarrierMaxDistance and not (ctx.CarrierDistance and ctx.CarrierDistance <= c.CarrierMaxDistance) then return false end
+	if c.RequirePossession and not ctx.HasPossession then return false end
+
 	return true
 end
 
@@ -735,7 +858,7 @@ _G.CheckInstinct = function(player, trigger, ctx)
 	-- ⚠️ v5: acende a aura na cor do instinto (todo mundo vê) e, se esse
 	-- instinto tiver um momento ativo, executa a jogada sozinho.
 	setAuraActive(player, def, true, AURA_PULSE_SECONDS)
-	tryRunAtiva(player, def)
+	if not def.AtivaSoNaTecla then tryRunAtiva(player, def) end -- ⚠️ v111: a de tecla só no aperto
 
 	addInstinctCharge(player) -- Instinct Mode: +carga toda vez que o Effect dispara de verdade
 
@@ -746,12 +869,18 @@ _G.CheckInstinct = function(player, trigger, ctx)
 end
 
 -- ===== INSTINTOS "Instant" (contínuos, sem ação) =====
--- Reavaliados a cada 0.25s por jogador — só olham pro PRÓPRIO instinto
--- equipado, então é barato. Guardam o resultado atual em
+-- Reavaliados a cada 0.25s por jogador. Guardam o efeito COMBINADO em
 -- LiveEffect[player] pros getters abaixo lerem.
-local LiveEffect = {}
-local LiveEffectActive = {} -- [player] = bool — só pra saber quando avisar o cliente da TRANSIÇÃO (evita FireClient toda vez à toa)
-local passivoReadyAt = {}   -- ⚠️ v5.2: [player] = tick() em que um instinto contínuo com CooldownSeconds pode valer de novo
+-- ⚠️ v111 — PEDIDO: "faça todas as armas funcionar". Só a PRIMEIRA Arma
+-- contínua equipada valia (ver primeiraContinua): com duas contínuas (ex.:
+-- Pulmão de Aço + Maestro do Campo) a segunda nunca ligava. Agora cada uma tem
+-- o próprio estado (ligada/cooldown) e os efeitos se somam: multiplicadores
+-- (…Mult) multiplicam, o resto (AllBoost, PickupRadiusAdd…) soma.
+local LiveEffect = {}       -- [player] = efeito combinado das contínuas ligadas
+local LiveEffectActive = {} -- [player] = { [nome] = true } — pra avisar só na TRANSIÇÃO
+local passivoReadyAt = {}   -- [player] = { [nome] = tick() } — cooldown de cada contínua
+local Lentidao = {}         -- [player] = { Mult, Ate } — ⚠️ v111: A Zona desacelera quem está perto
+local Impulso = {}          -- [player] = { Mult, Ate } — ⚠️ v111: arranque/colar
 
 local function getCharacterRoot(player)
 	local character = player.Character
@@ -775,105 +904,150 @@ local function computeNoOpponentAhead(player, radius)
 	return true
 end
 
+local function combinarEfeitos(lista)
+	if #lista == 0 then return nil end
+	if #lista == 1 then return lista[1] end
+	local c = {}
+	for _, e in ipairs(lista) do
+		for k, v in pairs(e) do
+			if c[k] == nil then
+				c[k] = v
+			elseif typeof(v) == "number" and typeof(c[k]) == "number" then
+				if string.sub(k, -4) == "Mult" then
+					c[k] *= v
+				elseif k == "ChanceSet" or string.sub(k, -4) == "Raio" then
+					c[k] = math.max(c[k], v)
+				else
+					c[k] += v
+				end
+			end
+		end
+	end
+	return c
+end
+
 task.spawn(function()
 	while true do
 		task.wait(0.25)
 		for _, player in ipairs(Players:GetPlayers()) do
-			-- ⚠️ v76: só slot 1 pros contínuos ("Instant") — ver nota grande
-			-- em EquippedList/SetPlayerInstincts, no topo do arquivo.
-			local name = equippedPrimary(player)
-			if not name then continue end
-			local def = findInstinct(name)
-			if not def or def.Trigger ~= "Instant" then continue end
-			if def.RoleRequired and player:GetAttribute("Role") ~= def.RoleRequired then continue end
+			local estado = LiveEffectActive[player] or {}
+			LiveEffectActive[player] = estado
+			local prontos = passivoReadyAt[player] or {}
+			passivoReadyAt[player] = prontos
+			local ligados = {}
+			local vistos = {}
+			local ctx = nil
 
-			local ctx = { HasPossession = _G.GetBallOwner and _G.GetBallOwner() == player }
-			local c = def.Condition or {}
-			if c.NoOpponentAheadRadius then
-				ctx.NoOpponentAhead = computeNoOpponentAhead(player, c.NoOpponentAheadRadius)
-			end
+			for _, name in ipairs(EquippedList[player] or {}) do
+				local def = findInstinct(name)
+				if not def or def.Trigger ~= "Instant" or vistos[name] then continue end
+				vistos[name] = true
+				local isActive = false
+				if not (def.RoleRequired and player:GetAttribute("Role") ~= def.RoleRequired) then
+					if not ctx then
+						ctx = { HasPossession = _G.GetBallOwner and _G.GetBallOwner() == player }
+						-- ⚠️ v5: a geometria de campo vem do BallController (dono dos gols)
+						if _G.GetInstinctFieldContext then
+							local field = _G.GetInstinctFieldContext(player)
+							if field then
+								for chave, valor in pairs(field) do
+									if ctx[chave] == nil then ctx[chave] = valor end
+								end
+							end
+						end
+					end
+					local c = def.Condition or {}
+					if c.NoOpponentAheadRadius then
+						ctx.NoOpponentAhead = computeNoOpponentAhead(player, c.NoOpponentAheadRadius)
+					end
+					isActive = conditionMet(def, player, ctx)
+				end
 
-			-- ⚠️ v5: até a v4 o contexto contínuo só tinha "tem a bola?" e
-			-- "tem adversário na frente?", então condições de POSIÇÃO
-			-- (perto do gol, campo de ataque, linha de fundo) nunca
-			-- disparavam num instinto contínuo — elas simplesmente não
-			-- chegavam aqui. Agora a geometria de campo vem do
-			-- BallController, que é quem carrega os dois gols.
-			if _G.GetInstinctFieldContext then
-				local field = _G.GetInstinctFieldContext(player)
-				if field then
-					for chave, valor in pairs(field) do
-						if ctx[chave] == nil then ctx[chave] = valor end
+				-- ⚠️ v5.2/v28: COOLDOWN de cada contínua (def.CooldownSeconds ou o
+				-- da raridade) — conta a partir de quando ela DESLIGA.
+				local instinctCooldown = def.CooldownSeconds
+					or (Config.INSTINCT_COOLDOWN_BY_RARITY and Config.INSTINCT_COOLDOWN_BY_RARITY[def.Rarity])
+				if instinctCooldown then
+					if isActive then
+						if prontos[name] and tick() < prontos[name] then isActive = false end
+					elseif estado[name] then
+						prontos[name] = tick() + instinctCooldown
 					end
 				end
-			end
 
-			local isActive = conditionMet(def, player, ctx)
-
-			-- ⚠️ v5.2: COOLDOWN de instinto contínuo (def.CooldownSeconds).
-			-- Sem isto, "Velocidade Explosiva" voltaria a valer no instante
-			-- em que o jogador soltasse e apertasse Shift de novo — bastava
-			-- martelar a tecla pra ficar com o bônus pra sempre. Com o
-			-- cooldown, o arranque é um recurso: usou, espera.
-			-- ⚠️ v28: COOLDOWN GERAL. Antes só valia pra quem declarava
-			-- CooldownSeconds (só o Pique). Agora TODA Arma contínua tem
-			-- cooldown: quem não declara herda o da raridade (ver
-			-- Config.INSTINCT_COOLDOWN_BY_RARITY). Sem isso, uma Arma
-			-- contínua ligava e desligava o jogo inteiro sem custo nenhum,
-			-- enquanto a Hissatsu equivalente esperava 2 minutos.
-			local instinctCooldown = def.CooldownSeconds
-				or (Config.INSTINCT_COOLDOWN_BY_RARITY and Config.INSTINCT_COOLDOWN_BY_RARITY[def.Rarity])
-			if instinctCooldown then
-				local readyAt = passivoReadyAt[player]
 				if isActive then
-					if readyAt and tick() < readyAt then
-						isActive = false -- ainda descansando do uso anterior
+					local effect = def.Effect or {}
+					if _G.IsInInstinctMode(player) then effect = amplifyEffect(effect) end
+					table.insert(ligados, effect)
+					-- ⚠️ v110: Armas que aceleram os COMPANHEIROS em volta
+					if effect.TeamSpeedMult and _G.PulseTeamBuff then
+						_G.PulseTeamBuff(player, effect.TeamRaio or 40, effect.TeamSpeedMult, 0.45)
 					end
-				elseif LiveEffectActive[player] then
-					-- Acabou de desligar: começa a contar o cooldown agora.
-					passivoReadyAt[player] = tick() + instinctCooldown
+					-- ⚠️ v111: A Zona — quem está perto de você fica mais lento
+					if effect.LentidaoRaio and effect.LentidaoMult then
+						local root = getCharacterRoot(player)
+						if root then
+							for _, other in ipairs(Players:GetPlayers()) do
+								if other ~= player and other.Team and player.Team and other.Team ~= player.Team then
+									local r = getCharacterRoot(other)
+									if r and (r.Position - root.Position).Magnitude <= effect.LentidaoRaio then
+										Lentidao[other] = { Mult = effect.LentidaoMult, Ate = tick() + 0.45 }
+									end
+								end
+							end
+						end
+					end
+				end
+
+				-- Avisa só na TRANSIÇÃO (ligou/desligou agora)
+				if isActive ~= (estado[name] or false) then
+					estado[name] = isActive or nil
+					Remotes.InstinctFeedback:FireClient(player, isActive, name)
+					setAuraActive(player, def, isActive, nil)
+					-- (⚠️ v113: ligar uma Arma contínua não carrega mais o Flow)
+				end
+
+				-- ⚠️ v5: a ativa de um instinto contínuo é tentada enquanto a
+				-- condição valer (ex.: Domínio segurando bola caindo perto)
+				-- ⚠️ v120b: AtivaSempre (o trap do Domínio) tenta mesmo com a passiva desligada
+				if (isActive or def.AtivaSempre) and def.AtivaAction and not def.AtivaSoNaTecla then
+					tryRunAtiva(player, def)
 				end
 			end
 
-			local effect = isActive and def.Effect or nil
-			if effect and _G.IsInInstinctMode(player) then
-				effect = amplifyEffect(effect)
-			end
-			LiveEffect[player] = effect
-
-			-- Avisa o cliente só na TRANSIÇÃO (ligou/desligou agora), não a
-			-- cada 0.25s à toa — pro HUD mostrar "Instinto ativo" em tempo
-			-- real pros instintos contínuos (Trigger == "Instant"). É
-			-- também nessa transição (ligou AGORA) que soma carga no
-			-- medidor de Instinct Mode — um instinto "Instant" continua
-			-- ativo por vários ciclos de 0.25s seguidos, então só conta
-			-- quando liga, não a cada reavaliação.
-			if isActive ~= (LiveEffectActive[player] or false) then
-				LiveEffectActive[player] = isActive
-				Remotes.InstinctFeedback:FireClient(player, isActive, name)
-				-- ⚠️ v5: instinto contínuo mantém a aura ACESA o tempo todo
-				-- em que a condição vale (sem duração), e apaga quando ela
-				-- deixa de valer.
-				setAuraActive(player, def, isActive, nil)
-				if isActive then
-					addInstinctCharge(player)
+			-- Arma trocada/desequipada com o efeito ligado: desliga
+			for name in pairs(estado) do
+				if not vistos[name] then
+					estado[name] = nil
+					Remotes.InstinctFeedback:FireClient(player, false, name)
+					setAuraActive(player, findInstinct(name), false, nil)
 				end
 			end
 
-			-- ⚠️ v5: a ativa de um instinto contínuo é tentada enquanto a
-			-- condição valer (o cooldown dela é que segura o ritmo) — é
-			-- assim que "bola caindo perto do gol" vira finalização
-			-- acrobática sozinha, sem o jogador apertar nada.
-			if isActive and def.AtivaAction then
-				tryRunAtiva(player, def)
-			end
+			LiveEffect[player] = combinarEfeitos(ligados)
 		end
 	end
 end)
 
 _G.GetInstinctSpeedMultiplier = function(player)
 	local effect = LiveEffect[player]
-	return (effect and effect.SpeedMult) or 1
+	-- ⚠️ v110: FlowVelocidade = multiplicador do Flow ativo (CosmeticosServer)
+	local flow = player:GetAttribute("FlowVelocidade")
+	local mult = ((effect and effect.SpeedMult) or 1) * (typeof(flow) == "number" and flow or 1)
+	local lento = Lentidao[player]
+	if lento then
+		if tick() < lento.Ate then mult *= lento.Mult else Lentidao[player] = nil end
+	end
+	local imp = Impulso[player]
+	if imp then
+		if tick() < imp.Ate then mult *= imp.Mult else Impulso[player] = nil end
+	end
+	return mult
+end
+
+-- ⚠️ v111: impulso de velocidade de uma ativa (Arranque, Colar)
+_G.ArmaImpulsoVelocidade = function(player, mult, duracao)
+	Impulso[player] = { Mult = mult, Ate = tick() + duracao }
 end
 
 _G.GetInstinctStaminaRegenMultiplier = function(player)
@@ -884,6 +1058,21 @@ end
 _G.GetInstinctAllBoost = function(player)
 	local effect = LiveEffect[player]
 	return (effect and effect.AllBoost) or 0
+end
+
+-- ⚠️ v111: alcance extra de recepção das contínuas (Passo Furtivo, Leitura de
+-- Passe, Domínio). O BallController chamava _G.CheckInstinct(plr, "Instant")
+-- a cada quadro de bola solta — isso piscava o HUD, acendia a aura e ENCHIA o
+-- medidor do Flow sem parar. Agora só lê o efeito que já está ligado.
+_G.GetInstinctPickupRadiusAdd = function(player)
+	local effect = LiveEffect[player]
+	return (effect and effect.PickupRadiusAdd) or 0
+end
+
+-- ⚠️ v111: Defesa Zumbi — stun/queda duram menos (StunMult < 1)
+_G.GetInstinctStunMult = function(player)
+	local effect = LiveEffect[player]
+	return (effect and effect.StunMult) or 1
 end
 
 -- ============================================================
@@ -902,6 +1091,7 @@ end
 -- mergulhos diagonais do goleiro.
 -- ============================================================
 Remotes.ActivateInstinct.OnServerEvent:Connect(function(player, aimPoint, slotIndex)
+	if _G.HissatsuCutsceneActive then return end -- ⚠️ v87: ninguém age durante a cutscene de Hissatsu
 	-- ⚠️ v67: guarda a mira que o cliente mandou no MESMO lugar que a
 	-- Hissatsu usa (LastAimPoint, via _G.SetPulseAimPoint). Sem isto, um
 	-- Instinto de chute (Chute Direto) lia o ponto sobrado da última
@@ -944,15 +1134,31 @@ Remotes.ActivateInstinct.OnServerEvent:Connect(function(player, aimPoint, slotIn
 	-- Instinto estava quebrado ou se era só a condição que não bateu.
 	-- Agora todo aperto que NÃO vira jogada explica o motivo no console do
 	-- servidor (Studio), com os números reais.
-	if not conditionMet(def, player, ctx) then
+	-- ⚠️ v111: a arma pode ter uma condição só pra tecla (AtivaCondition) e
+	-- outra pro passivo (Condition) — ex.: Monstro do Drible.
+	local defTecla = def
+	if def.AtivaCondition then
+		defTecla = setmetatable({ Condition = def.AtivaCondition }, { __index = def })
+	end
+	if not conditionMet(defTecla, player, ctx) then
 		local motivo = "condição não bateu"
-		local c = def.Condition or {}
+		local c = defTecla.Condition or {}
 		if c.MaxDistanceToGoal and ctx.DistanceToGoal then
 			motivo = string.format("longe do gol (%.1f, precisa <= %.1f)", ctx.DistanceToGoal, c.MaxDistanceToGoal)
 		elseif c.MaxSecondsAfterReceive and ctx.SecondsAfterReceive then
 			motivo = string.format("faz %.2fs que você recebeu (precisa <= %.2fs)", ctx.SecondsAfterReceive, c.MaxSecondsAfterReceive)
 		elseif c.RequireInsideEnemyArea and not ctx.InsideEnemyArea then
 			motivo = "fora da área adversária (precisa estar dentro)"
+		elseif c.RequirePossession and not ctx.HasPossession then
+			motivo = "precisa estar com a bola"
+		elseif c.RequireNoPossession and ctx.HasPossession then
+			motivo = "só sem a bola"
+		elseif c.RequireOwnArea and not ctx.InOwnArea then
+			motivo = "só dentro da sua área"
+		elseif c.DefendingHalf and ctx.AttackingHalf ~= false then
+			motivo = "só no seu campo"
+		elseif c.CarrierMaxDistance then
+			motivo = string.format("nenhum adversário com a bola a até %d studs", c.CarrierMaxDistance)
 		end
 		-- ⚠️ v5.4: PEDIDO — "nunca consegui acertar o R do Predador da
 		-- Área". Antes o motivo só ia pro console do servidor (só o HOST
@@ -964,14 +1170,16 @@ Remotes.ActivateInstinct.OnServerEvent:Connect(function(player, aimPoint, slotIn
 		return
 	end
 
-	local aconteceu = tryRunAtiva(player, def)
+	local aconteceu, motivoAtiva = tryRunAtiva(player, def)
 	if not aconteceu then
 		-- A condição bateu, mas a AÇÃO não pôde acontecer (cooldown, ou
 		-- não havia bola cabeceável na janela).
 		local motivo = "em cooldown"
-		local readyAt = ativaReadyAt[player]
-		if not (readyAt and tick() < readyAt) then
-			motivo = "a jogada não era possível agora"
+		local readyAt = prontaEm(player, def.Name)
+		if readyAt and tick() < readyAt and not debugNoCooldown[player] then
+			motivo = string.format("em cooldown (%.0fs)", readyAt - tick())
+		else
+			motivo = motivoAtiva or "a jogada não era possível agora"
 			if def.AtivaAction == "Header" and _G.PulseHeaderFailReason then
 				motivo = _G.PulseHeaderFailReason(player, def.AtivaEffect or {})
 			end
@@ -982,7 +1190,9 @@ Remotes.ActivateInstinct.OnServerEvent:Connect(function(player, aimPoint, slotIn
 	end
 
 	setAuraActive(player, def, true, AURA_PULSE_SECONDS)
-	Remotes.InstinctFeedback:FireClient(player, true, name)
+	-- ⚠️ v111: 4º parâmetro = cooldown da ativa, pro HUD contar
+	local cd = (not debugNoCooldown[player]) and prontaEm(player, def.Name) and (prontaEm(player, def.Name) - tick()) or nil
+	Remotes.InstinctFeedback:FireClient(player, true, name, nil, cd)
 	task.delay(1.5, function()
 		Remotes.InstinctFeedback:FireClient(player, false, name)
 	end)
@@ -994,8 +1204,12 @@ Players.PlayerRemoving:Connect(function(player)
 	debugNoCooldown[player] = nil
 	LiveEffect[player] = nil
 	LiveEffectActive[player] = nil
+	passivoReadyAt[player] = nil
+	Lentidao[player] = nil
+	Impulso[player] = nil
 	InstinctCharge[player] = nil
 	InstinctModeState[player] = nil
+	FlowsUsados[player] = nil
 	-- ⚠️ v5: a aura vive dentro do Character, mas a referência fica aqui —
 	-- sem isso a tabela cresce pra sempre num servidor de longa duração.
 	local aura = auraByPlayer[player]

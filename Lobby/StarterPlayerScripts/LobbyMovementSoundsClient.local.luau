@@ -42,11 +42,26 @@ local function overrideMovementSound(rootPart, soundName, configKey)
 	end)
 end
 
+-- ⚠️ v106 — PEDIDO: "tira esse som de passo no lobby, que tá horrível — a gente
+-- tinha tirado no jogo, agora tira no lobby também". Trocar só o SoundId não
+-- bastava; agora todo som de MOVIMENTO do personagem fica mudo (volume 0), e
+-- continua mudo se algum script religar.
+local SONS_DE_MOVIMENTO = { Running = true, Jumping = true, Landing = true, FreeFalling = true, Climbing = true }
+local function silenciar(sound)
+	if not sound:IsA("Sound") or not SONS_DE_MOVIMENTO[sound.Name] then return end
+	sound.Volume = 0
+	sound:GetPropertyChangedSignal("Volume"):Connect(function()
+		if sound.Volume ~= 0 then sound.Volume = 0 end
+	end)
+end
+
 local function onCharacterAdded(character)
 	local rootPart = character:WaitForChild("HumanoidRootPart", 10)
 	if not rootPart then return end
 	overrideMovementSound(rootPart, "Running", "Footstep")
 	overrideMovementSound(rootPart, "Jumping", "Jump")
+	for _, d in ipairs(character:GetDescendants()) do silenciar(d) end
+	character.DescendantAdded:Connect(silenciar)
 end
 
 local function onPlayerAdded(player)

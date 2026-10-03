@@ -51,12 +51,35 @@ local function setupNpc(npcModel)
 		prompt = Instance.new("ProximityPrompt")
 		prompt.Name = PROMPT_NAME
 		prompt.ActionText = DEFAULT_ACTION_TEXT
-		prompt.ObjectText = npcModel.Name
+		prompt.ObjectText = npcModel:GetAttribute("NomeNpc") or npcModel.Name
 		prompt.HoldDuration = DEFAULT_HOLD_DURATION
 		prompt.MaxActivationDistance = DEFAULT_MAX_DISTANCE
 		prompt.RequiresLineOfSight = false
 		prompt.Parent = anchorPart
 	end
+	prompt.ObjectText = npcModel:GetAttribute("NomeNpc") or npcModel.Name -- ⚠️ v118: nome certo mesmo em prompt que já existia
+end
+
+-- ⚠️ v115 — PEDIDO: "o Bentes/Pepe Nep sentado no banco da praça vira o NPC de
+-- ESTATÍSTICAS". O boneco já existe no mapa (Bpepnep) mas sem tag: aqui ele
+-- ganha a tag, o DialogueId e o nome que aparece no prompt, por script — assim
+-- não depende de mexer no Studio.
+local estatistico = workspace:FindFirstChild("Bpepnep", true)
+if estatistico and estatistico:IsA("Model") then
+	estatistico:SetAttribute("DialogueId", "Estatisticas")
+	estatistico:SetAttribute("NomeNpc", "Bentes")
+	CollectionService:AddTag(estatistico, DIALOGUE_TAG)
+end
+
+-- ⚠️ v118 — PEDIDO: "muda os nomes: Zelador põe Tiluca, Lojista põe o Lavinho, o do
+-- Roll é o Pedro, o Bentes está certo e o Kogamalotigo é o Fidama". O nome que
+-- aparece no prompt "Conversar" (o diálogo usa o Speaker do DialogueData).
+local NOME_POR_DIALOGO = {
+	QuestGiver = "Tiluca", ShopKeeper = "Lavinho", RollMaster = "Pedro", Kogamalotigo = "Fidama", Estatisticas = "Bentes",
+}
+for _, m in ipairs(CollectionService:GetTagged(DIALOGUE_TAG)) do
+	local nome = NOME_POR_DIALOGO[m:GetAttribute("DialogueId") or m.Name]
+	if nome then m:SetAttribute("NomeNpc", nome) end
 end
 
 for _, npcModel in ipairs(CollectionService:GetTagged(DIALOGUE_TAG)) do

@@ -560,6 +560,7 @@ local function cmdHelp(admin, args)
 	print("  /resetdata [jogador]")
 	print("  /resetall CONFIRM (⚠️ Super Admin)")
 	print("  /saveall (⚠️ Super Admin)")
+	print("  /cosmeticos [jogador] (⚠️ Super Admin) — libera todos os cosméticos e Flows")
 	print("")
 	print("ℹ️ INFORMAÇÕES:")
 	print("  /playerinfo [jogador]")
@@ -594,10 +595,44 @@ local function cmdListAdmins(admin, args)
 	notify(admin, string.format("%d admin(s) online", count))
 end
 
+-- ⚠️ v110 — /cosmeticos [jogador]: libera TODOS os cosméticos e Flows da Loja
+-- (pra testar o Armário/Flow sem gastar dinheiro). Só Super Admin.
+local function cmdCosmeticos(admin, args)
+	if not isSuperAdmin(admin) then
+		notify(admin, "Só Super Admin pode usar /cosmeticos", true)
+		return
+	end
+	local target = args[1] and findPlayer(args[1]) or admin
+	if not target then
+		notify(admin, "Jogador não encontrado: " .. tostring(args[1]), true)
+		return
+	end
+	local playerData = _G.GetPlayerData(target)
+	if not playerData then
+		notify(admin, "Dados não encontrados", true)
+		return
+	end
+	local Cosmeticos = require(game:GetService("ReplicatedStorage"):WaitForChild("Cosmeticos"))
+	local n = 0
+	for _, cat in ipairs(Cosmeticos.CATEGORIAS) do
+		for _, item in ipairs(Cosmeticos[cat]) do
+			if not playerData.OwnedCosmetics[item.Id] then
+				playerData.OwnedCosmetics[item.Id] = true
+				n += 1
+			end
+		end
+	end
+	if _G.AplicarCosmeticosLobby then _G.AplicarCosmeticosLobby(target) end
+	if _G.SavePlayerData then task.spawn(_G.SavePlayerData, target) end
+	logCommand(admin, "cosmeticos", target)
+	notify(admin, string.format("%d cosméticos/Flows liberados para %s", n, target.Name))
+end
+
 -- ========================================
 -- PROCESSADOR DE COMANDOS
 -- ========================================
 local commands = {
+	["cosmeticos"] = cmdCosmeticos, -- ⚠️ v110
 	-- XP e Níveis
 	["addxp"] = cmdAddXP,
 	["setlevel"] = cmdSetLevel,

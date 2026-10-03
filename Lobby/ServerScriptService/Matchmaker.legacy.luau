@@ -44,6 +44,25 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local MemoryStoreService = game:GetService("MemoryStoreService")
+-- ⚠️ v123 — PEDIDO: "puxamos uma partida e não puxou servidor BR (5 amigos no Brasil);
+-- tenha certeza que puxe servidor BR". O Roblox NÃO deixa escolher a região do servidor:
+-- o servidor reservado sobe perto de quem CHEGA PRIMEIRO no teleporte. Então a partida
+-- leva a região de cada jogador e a da MAIORIA; quem é da maioria teleporta na hora e os
+-- de outras regiões esperam um pouco (ver onMatchFound) — o servidor nasce perto da maioria.
+local regiaoPorUsuario = {} -- [tostring(userId)] = país (LocalizationService), vindo da fila
+local function regioesDaPartida(assignments)
+	local regioes, conta = {}, {}
+	for uid in pairs(assignments) do
+		local r = regiaoPorUsuario[tostring(uid)] or "UNKNOWN"
+		regioes[tostring(uid)] = r
+		if r ~= "UNKNOWN" then conta[r] = (conta[r] or 0) + 1 end
+	end
+	local maioria, max = nil, 0
+	for r, n in pairs(conta) do
+		if n > max then maioria, max = r, n end
+	end
+	return regioes, maioria
+end
 local MessagingService = game:GetService("MessagingService")
 local TeleportService = game:GetService("TeleportService")
 local HttpService = game:GetService("HttpService")
@@ -66,28 +85,46 @@ end
 -- DP 0/1 knapsack de existência, com reconstrução. n e targetSum são
 -- sempre pequenos aqui (targetSum <= 7, grupos <= MAX_PARTY_SIZE de 5),
 -- não precisa de nada mais esperto que isso.
-local function findExactSubset(groups, targetSum)
-	local achievable = { [0] = true }
-	local cameFrom = {} -- [sum] = { prevSum = , groupIndex = }
+-- ⚠️ v104: `precisaGK` — nil = tanto faz; true = o time precisa ter pelo
+-- menos 1 goleiro (grupo com GK > 0); false = nenhum goleiro no time (o GK
+-- bot completa). Estado do DP = (soma, tem goleiro?).
+local function findExactSubset(groups, targetSum, precisaGK)
+	local function chave(s, g) return s * 2 + g end
+	local alcancavel = { [0] = true }
+	local veioDe = {} -- [chave] = { anterior = chave, idx = grupo }
 
 	for idx = 1, #groups do
 		local size = groups[idx].Size
-		for s = targetSum, size, -1 do
-			if achievable[s - size] and not achievable[s] then
-				achievable[s] = true
-				cameFrom[s] = { prevSum = s - size, groupIndex = idx }
+		local gk = ((groups[idx].GK or 0) > 0) and 1 or 0
+		if not (precisaGK == false and gk == 1) then
+			local atuais = {}
+			for k in pairs(alcancavel) do table.insert(atuais, k) end
+			for _, k in ipairs(atuais) do
+				local s, g = k // 2, k % 2
+				local ns = s + size
+				if ns <= targetSum then
+					local nk = chave(ns, math.max(g, gk))
+					if not alcancavel[nk] then
+						alcancavel[nk] = true
+						veioDe[nk] = { anterior = k, idx = idx }
+					end
+				end
 			end
 		end
 	end
 
-	if not achievable[targetSum] then return nil end
+	local alvo
+	if precisaGK == true then alvo = chave(targetSum, 1)
+	elseif precisaGK == false then alvo = chave(targetSum, 0)
+	else alvo = alcancavel[chave(targetSum, 1)] and chave(targetSum, 1) or chave(targetSum, 0) end
+	if not alcancavel[alvo] then return nil end
 
 	local chosenIndices = {}
-	local s = targetSum
-	while s > 0 do
-		local step = cameFrom[s]
-		table.insert(chosenIndices, step.groupIndex)
-		s = step.prevSum
+	local k = alvo
+	while k ~= 0 do
+		local passo = veioDe[k]
+		table.insert(chosenIndices, passo.idx)
+		k = passo.anterior
 	end
 	return chosenIndices
 end
@@ -106,7 +143,7 @@ end
 -- inteiro (todas as regiões misturadas, ainda ordenado por Wins) — assim
 -- a fila NUNCA fica travada esperando uma condição perfeita, só prefere
 -- ela quando dá.
-local function findPreferredSubset(pool, targetSum)
+local function findPreferredSubset(pool, targetSum, precisaGK, soMesmaRegiao)
 	local byRegion = {}
 	for idx, group in ipairs(pool) do
 		local list = byRegion[group.Region or "UNKNOWN"]
@@ -123,7 +160,7 @@ local function findPreferredSubset(pool, targetSum)
 		for _, idx in ipairs(indices) do
 			table.insert(subPool, pool[idx])
 		end
-		local subIndices = findExactSubset(subPool, targetSum)
+		local subIndices = findExactSubset(subPool, targetSum, precisaGK)
 		if not subIndices then return nil end
 		local mapped = {}
 		for _, subIdx in ipairs(subIndices) do
@@ -140,7 +177,9 @@ local function findPreferredSubset(pool, targetSum)
 
 	-- 2) ninguém fechou sozinho: cai pro pool inteiro, misturando região,
 	-- ainda ordenado por Wins (mantém a preferência de nível mesmo sem a
-	-- de região).
+	-- de região). ⚠️ v104: só depois de MATCH_REGION_STRICT_SECONDS de
+	-- espera — antes disso, ping bom (mesma região) é obrigatório.
+	if soMesmaRegiao then return nil end
 	local allIndices = {}
 	for idx in ipairs(pool) do
 		table.insert(allIndices, idx)
@@ -168,9 +207,9 @@ end
 -- soma fixa. É isso que permite cada time fechar com um tamanho
 -- DIFERENTE do outro (ex.: 7v6), já que os dois times chamam isto de
 -- forma independente em tryCloseMatch.
-local function findPreferredSubsetAnyTarget(pool, targetSums)
+local function findPreferredSubsetAnyTarget(pool, targetSums, precisaGK, soMesmaRegiao)
 	for _, targetSum in ipairs(targetSums) do
-		local found = findPreferredSubset(pool, targetSum)
+		local found = findPreferredSubset(pool, targetSum, precisaGK, soMesmaRegiao)
 		if found then return found end
 	end
 	return nil
@@ -235,6 +274,9 @@ local function pullNewGroups(modeId)
 		pulled += 1
 
 		if typeof(item) == "table" and typeof(item.Members) == "table" then
+			for _, uid in ipairs(item.Members) do
+				regiaoPorUsuario[tostring(uid)] = typeof(item.Region) == "string" and item.Region or "UNKNOWN"
+			end
 			table.insert(pendingPool[modeId], {
 				LeaderUserId = item.LeaderUserId,
 				Members = item.Members,
@@ -245,6 +287,7 @@ local function pullNewGroups(modeId)
 				-- como isso vira preferência na hora de fechar os times.
 				Region = typeof(item.Region) == "string" and item.Region or "UNKNOWN",
 				AvgWins = typeof(item.AvgWins) == "number" and item.AvgWins or 0,
+				GK = typeof(item.GK) == "number" and item.GK or 0, -- ⚠️ v104
 			})
 		end
 	end
@@ -264,6 +307,7 @@ local function requeueStuckGroups(modeId)
 					QueuedAt = os.time(),
 					Region = group.Region, -- ⚠️ v3.4: preserva a preferência ao devolver pra fila (senão o grupo "esquece" a região/nível dele)
 					AvgWins = group.AvgWins,
+						GK = group.GK, -- ⚠️ v104
 				}, Config.QUEUE_ITEM_EXPIRATION)
 			end)
 			if not ok then
@@ -295,11 +339,29 @@ local function tryCloseMatch(modeId)
 		table.insert(targetSums, mode.PerTeam - 1)
 	end
 
-	local teamAIndices = findPreferredSubsetAnyTarget(pool, targetSums)
-	if not teamAIndices then return end
+	-- ⚠️ v104 — GOLEIROS + PING. Tenta, em ordem: os dois times COM goleiro
+	-- humano; depois (menos no 7v7, que obriga GK) os dois SEM goleiro. Nunca
+	-- um com e outro sem ("quatro na linha e um a mais no gol"). E, até
+	-- MATCH_REGION_STRICT_SECONDS de espera, só com gente da mesma região.
+	local espera = oldestWaitSeconds(pool)
+	local soMesmaRegiao = espera < (Config.MATCH_REGION_STRICT_SECONDS or 0)
+	local opcoesGK = { true }
+	if not (Config.MODES_GK_OBRIGATORIO and Config.MODES_GK_OBRIGATORIO[modeId]) then
+		table.insert(opcoesGK, false)
+	end
 
-	local remaining, teamAGroups = removeIndices(pool, teamAIndices)
-	local teamBIndices = findPreferredSubsetAnyTarget(remaining, targetSums)
+	local teamAIndices, teamBIndices, remaining, teamAGroups
+	for _, precisaGK in ipairs(opcoesGK) do
+		local a = findPreferredSubsetAnyTarget(pool, targetSums, precisaGK, soMesmaRegiao)
+		if a then
+			local resto, grupoA = removeIndices(pool, a)
+			local b = findPreferredSubsetAnyTarget(resto, targetSums, precisaGK, soMesmaRegiao)
+			if b then
+				teamAIndices, teamBIndices, remaining, teamAGroups = a, b, resto, grupoA
+				break
+			end
+		end
+	end
 	if not teamBIndices then
 		-- Não achou uma divisão justa com o que tem agora — não força
 		-- partida desequilibrada nem quebra grupo. Espera o pool mudar
@@ -348,6 +410,7 @@ local function tryCloseMatch(modeId)
 					QueuedAt = os.time(),
 					Region = group.Region, -- ⚠️ v3.4: preserva a preferência ao devolver pra fila (senão o grupo "esquece" a região/nível dele)
 					AvgWins = group.AvgWins,
+						GK = group.GK, -- ⚠️ v104
 				}, Config.QUEUE_ITEM_EXPIRATION)
 			end)
 		end
@@ -366,6 +429,7 @@ local function tryCloseMatch(modeId)
 		AccessCode = accessCode,
 		Assignments = assignments,
 	}
+	payload.Regioes, payload.RegiaoMaioria = regioesDaPartida(assignments) -- ⚠️ v123
 
 	local publishOk, publishErr = pcall(function()
 		MessagingService:PublishAsync(Config.MATCH_FOUND_TOPIC, payload)
@@ -472,6 +536,7 @@ local function tryCloseLastResort(modeId)
 					QueuedAt = os.time(),
 					Region = group.Region,
 					AvgWins = group.AvgWins,
+						GK = group.GK, -- ⚠️ v104
 				}, Config.QUEUE_ITEM_EXPIRATION)
 			end)
 		end
@@ -485,6 +550,7 @@ local function tryCloseLastResort(modeId)
 		AccessCode = accessCode,
 		Assignments = assignments,
 	}
+	payload.Regioes, payload.RegiaoMaioria = regioesDaPartida(assignments) -- ⚠️ v123
 
 	local publishOk, publishErr = pcall(function()
 		MessagingService:PublishAsync(Config.MATCH_FOUND_TOPIC, payload)
@@ -613,6 +679,7 @@ local function tryCloseFreeRoom(modeId)
 					QueuedAt = os.time(),
 					Region = group.Region, -- ⚠️ v3.4: preserva a preferência ao devolver pra fila (senão o grupo "esquece" a região/nível dele)
 					AvgWins = group.AvgWins,
+						GK = group.GK, -- ⚠️ v104
 				}, Config.QUEUE_ITEM_EXPIRATION)
 			end)
 		end
@@ -626,6 +693,7 @@ local function tryCloseFreeRoom(modeId)
 		AccessCode = accessCode,
 		Assignments = assignments,
 	}
+	payload.Regioes, payload.RegiaoMaioria = regioesDaPartida(assignments) -- ⚠️ v123
 
 	local publishOk, publishErr = pcall(function()
 		MessagingService:PublishAsync(Config.MATCH_FOUND_TOPIC, payload)
@@ -703,6 +771,24 @@ local function onMatchFound(message)
 					snapshot.EquippedInstinct1 = char.EquippedInstinct1
 					snapshot.EquippedInstinct2 = char.EquippedInstinct2 -- ⚠️ v76: Arma também virou 2 slots + 1 Robux
 					snapshot.EquippedInstinct3 = char.EquippedInstinct3
+					-- ⚠️ v110 — PEDIDO: "implemente o nome personalizado que já tem
+					-- nos slots dentro do jogo" + cosméticos/Flow equipados na
+					-- partida. SlotName = nome que o jogador deu pro personagem;
+					-- Cosmeticos = { [Slot] = Id } (ver Cosmeticos.luau).
+					-- o nome JÁ filtrado (TextService) que a placa do Lobby usa
+					local nomeFiltrado = plr:GetAttribute("NomePersonagem")
+					snapshot.SlotName = typeof(nomeFiltrado) == "string" and nomeFiltrado or plr.DisplayName
+					local dadosJogador = _G.GetPlayerData and _G.GetPlayerData(plr)
+					if dadosJogador and typeof(dadosJogador.EquippedCosmetics) == "table" then
+						local cosm = {}
+						for slotCosm, idCosm in pairs(dadosJogador.EquippedCosmetics) do
+							if typeof(slotCosm) == "string" and typeof(idCosm) == "string" then
+								cosm[slotCosm] = idCosm
+							end
+						end
+						cosm.Flow = cosm.Flow or "Flow_Isagi"
+						snapshot.Cosmeticos = cosm
+					end
 
 					characters[tostring(plr.UserId)] = snapshot
 				else
@@ -722,14 +808,43 @@ local function onMatchFound(message)
 		TotalPlayers = payload.TotalPlayers,
 		Assignments = payload.Assignments,
 		Characters = characters,
+		Privada = payload.Privada == true, -- ⚠️ v104: sala personalizada (sem recompensa, GK bot sempre)
+		Tutorial = payload.Tutorial == true, -- ⚠️ v104: partida de tutorial (TutorialLobbyServer)
 	})
 
-	local ok, err = pcall(function()
-		TeleportService:TeleportAsync(Config.GAME_PLACE_ID, localPlayers, teleportOptions)
-	end)
-	if not ok then
-		warn("Matchmaker: falha ao teleportar jogadores locais pra partida: " .. tostring(err))
+	-- ⚠️ v123: quem é da região da MAIORIA vai primeiro (o servidor sobe perto dele);
+	-- os de outras regiões esperam ATRASO_OUTRA_REGIAO segundos.
+	local primeiros, depois = {}, {}
+	local maioria = payload.RegiaoMaioria
+	local regioes = typeof(payload.Regioes) == "table" and payload.Regioes or {}
+	for _, plr in ipairs(localPlayers) do
+		local r = regioes[tostring(plr.UserId)]
+		if maioria and r and r ~= "UNKNOWN" and r ~= maioria then
+			table.insert(depois, plr)
+		else
+			table.insert(primeiros, plr)
+		end
 	end
+	local function teleportar(lista)
+		if #lista == 0 then return end
+		local ok, err = pcall(function()
+			TeleportService:TeleportAsync(Config.GAME_PLACE_ID, lista, teleportOptions)
+		end)
+		if not ok then
+			warn("Matchmaker: falha ao teleportar jogadores locais pra partida: " .. tostring(err))
+		end
+	end
+	if #depois > 0 then
+		task.delay(3, function() teleportar(depois) end)
+		if #primeiros == 0 then return end
+	end
+	teleportar(primeiros)
+end
+
+-- ⚠️ v104: a sala personalizada (MatchmakingQueue) teleporta direto por
+-- aqui, sem passar pelo MessagingService — só tem gente deste server.
+_G.TeleportarPartidaLocal = function(payload)
+	onMatchFound({ Data = payload })
 end
 
 local subscribeOk, subscribeErr = pcall(function()

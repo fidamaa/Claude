@@ -584,6 +584,10 @@ _G.PositionPlayerAtFormation = function(player, character)
 	local cframe = getFormationCFrame(player)
 	if not cframe then return end -- time/role ainda não definido — fica onde o Roblox colocou
 
+	-- ⚠️ v120b: cancela carrinho/dive/ragdoll/deslocamento em andamento antes de
+	-- teleportar (senão o corpo era puxado de volta ou caía pelo chão — ver
+	-- _G.LimparAcoesDoJogador no BallController)
+	if _G.LimparAcoesDoJogador then pcall(_G.LimparAcoesDoJogador, player) end
 	root.CFrame = cframe
 	root.AssemblyLinearVelocity = Vector3.zero
 	root.AssemblyAngularVelocity = Vector3.zero
@@ -600,7 +604,20 @@ local function resetAllPlayersToFormation()
 	end
 end
 
-local rewardsDataStore = DataStoreService:GetDataStore("MatchRewards_V1")
+-- ⚠️ v111: em place NÃO publicado (ex.: aberto pelo AutoRecovery) o GetDataStore
+-- dá ERRO — e, solto aqui no topo, derrubava o MatchController inteiro: gol não
+-- contava (_G.RegisterGoal nunca existia), sem kickoff e sem bola parada. Agora
+-- falha quieto: só o salvamento das recompensas fica desligado (o SetAsync lá
+-- embaixo já está em pcall).
+local rewardsDataStore = nil
+do
+	local ok, ds = pcall(function() return DataStoreService:GetDataStore("MatchRewards_V1") end)
+	if ok then
+		rewardsDataStore = ds
+	else
+		warn("⚠️ MatchController: DataStore indisponível (place não publicado?) — recompensas não serão salvas. " .. tostring(ds))
+	end
+end
 
 local whistleSound = Instance.new("Sound")
 whistleSound.SoundId = Config.SOUNDS.Whistle
@@ -669,6 +686,10 @@ local matchEnded = false
 local matchPaused = false
 local timeRemaining = Config.HALF_DURATION -- sempre a duração de UM tempo (4 min)
 local currentHalf = 1
+-- ⚠️ v104 — GOLDEN GOAL: "overtime, marcou um gol, acabou". true entre o gol
+-- da prorrogação e o fim da partida (comemoração + replay) — impede que o
+-- fim do relógio chame endMatch por cima do replay.
+local golDeOuroPendente = false
 
 _G.SetMatchPaused = function(paused)
 	matchPaused = paused
@@ -691,6 +712,37 @@ end
 
 local playerRewards = {} -- [userId] = { MoneyEarned, XPEarned, Stats = {...} }
 
+-- ⚠️ v104 — SALA PERSONALIZADA. PEDIDO: "a sala personalizada é uma sala
+-- própria sua — só você ou as pessoas da sua party. Não faz sentido ganhar
+-- recompensas nela. Mesmo que puxe sozinho, o GK vai estar sempre spawnado."
+-- O Lobby manda TeleportData.Privada = true (ver MatchmakingQueue, place
+-- Lobby). Aqui: começa com 1 jogador, recompensas zeradas (nada vai pro
+-- Lobby) e o GKBotController põe bot nos dois gols mesmo com time vazio.
+local salaPersonalizada = false
+-- ⚠️ v104 — TUTORIAL: "coloque um tutorial opcional no início do jogo... ele
+-- já vai entrar dentro de uma partida... desative o restante da gameplay: o
+-- timer, as cutscenes de entrada". TeleportData.Tutorial = true (Lobby,
+-- TutorialLobbyServer). Sem relógio, sem cutscene de entrada, sem goleiro
+-- bot, sem recompensa; o roteiro dos passos é o TutorialServer.
+local modoTutorial = false
+local function lerSalaPersonalizada(player)
+	local ok, joinData = pcall(function() return player:GetJoinData() end)
+	local td = ok and joinData and joinData.TeleportData
+	if typeof(td) == "table" and td.Privada == true then
+		salaPersonalizada = true
+		_G.SalaPersonalizada = true
+	end
+	-- (teste no Studio: atributo DebugTutorial = true no Workspace força o modo)
+	if (typeof(td) == "table" and td.Tutorial == true) or workspace:GetAttribute("DebugTutorial") == true then
+		modoTutorial = true
+		salaPersonalizada = true
+		_G.SalaPersonalizada = true
+		_G.ModoTutorial = true
+	end
+end
+for _, p in ipairs(Players:GetPlayers()) do lerSalaPersonalizada(p) end
+Players.PlayerAdded:Connect(lerSalaPersonalizada)
+
 -- ===== RECOMPENSAS =====
 local function ensureRewardData(player)
 	if playerRewards[player.UserId] then return playerRewards[player.UserId] end
@@ -699,7 +751,9 @@ local function ensureRewardData(player)
 		PlayerName = player.Name,
 		MoneyEarned = Rewards.BASE_PARTICIPATION,
 		XPEarned = Rewards.BASE_XP,
-		Stats = { Goals = 0, Assists = 0, Tackles = 0, Dribbles = 0, Saves = 0, MVP = false, Won = false },
+		-- ⚠️ v123: mais informação da partida pras ESTATÍSTICAS do Lobby (chutes,
+		-- passes, Hissatsus usadas) — ver _G.RegistrarEstatistica
+		Stats = { Goals = 0, Assists = 0, Tackles = 0, Dribbles = 0, Saves = 0, Shots = 0, Passes = 0, Hissatsus = 0, MVP = false, Won = false },
 		MatchResult = "ongoing",
 	}
 	playerRewards[player.UserId] = data
@@ -736,6 +790,16 @@ _G.RegisterSave = function(player)
 	local data = ensureRewardData(player)
 	data.Stats.Saves += 1
 	addReward(player, Rewards.SAVE_MONEY, Rewards.SAVE_XP)
+end
+
+-- ⚠️ v123 — PEDIDO: "as estatísticas do Lobby ainda não estão armazenando direito: é só
+-- coletar as informações da partida na recompensa... leva mais algumas informações e
+-- coloca pra aumentar nas estatísticas pessoais". Contador genérico (sem dinheiro/XP):
+-- Shots (chute a gol, normal ou Hissatsu), Passes, Hissatsus (usadas com sucesso).
+_G.RegistrarEstatistica = function(player, chave, quanto)
+	if typeof(player) ~= "Instance" or not player:IsA("Player") then return end
+	local data = ensureRewardData(player)
+	data.Stats[chave] = (tonumber(data.Stats[chave]) or 0) + (quanto or 1)
 end
 
 
@@ -886,6 +950,21 @@ local lastGoalConfirmedAt = -math.huge
 local celebrationTracks = {} -- [player] = AnimationTrack (pra dar Stop no fim da janela)
 
 local function playGoalCelebration(scorer)
+	-- ⚠️ v96: com a animação por código ligada, a comemoração vem do
+	-- AnimadorProcedural (braços pra cima e socos no ar, em loop pela
+	-- duração da comemoração) — não precisa mais de asset publicado.
+	-- ⚠️ v110 — COSMÉTICOS: efeito de gol e comemoração equipados na Loja
+	-- (ver CosmeticosServer). Sem comemoração equipada, fica a de sempre.
+	if _G.EfeitoDeGolCosmetico then _G.EfeitoDeGolCosmetico(scorer) end
+	if _G.TocarComemoracaoCosmetica and _G.TocarComemoracaoCosmetica(scorer) then
+		return
+	end
+	if Config.ANIMACAO_PROCEDURAL then
+		if scorer.Character and _G.AnimarAcao then
+			_G.AnimarAcao(scorer.Character, "GoalCelebration", Config.GOAL_CELEBRATION_SECONDS)
+		end
+		return
+	end
 	local animationId = Config.NormalizeAnimationId(Config.ANIMATIONS.GoalCelebration)
 	if not animationId or animationId == "" then return end
 
@@ -929,6 +1008,10 @@ end
 
 local function onGoalScored(scoringTeamName)
 	if not matchActive or matchPaused then
+		-- ⚠️ v110: a bola parada dentro do gol disparava esse aviso dezenas de
+		-- vezes seguidas — um por segundo basta
+		if os.clock() - (_G.__UltimoAvisoGolIgnorado or 0) < 1 then return end
+		_G.__UltimoAvisoGolIgnorado = os.clock()
 		warn(("⚠️ Gol de %s IGNORADO: matchActive=%s, matchPaused=%s. Se matchActive nunca vira true, a partida provavelmente nunca começou — confira Config.MIN_PLAYERS_TO_START (%d) contra quantos jogadores estão de verdade no server."):format(
 			scoringTeamName, tostring(matchActive), tostring(matchPaused), Config.MIN_PLAYERS_TO_START))
 		return
@@ -996,6 +1079,12 @@ local function onGoalScored(scoringTeamName)
 
 	Remotes.GoalScored:FireAllClients(scoringTeamName, scorer, score)
 
+	-- ⚠️ v104: no tutorial o gol só conclui o passo (sem replay nem kickoff)
+	if modoTutorial then
+		if _G.TutorialNotificar then _G.TutorialNotificar(scorer, "Gol") end
+		return
+	end
+
 	-- ⚠️ NOVO: PEDIDO — "o timer não pode funcionar no replay (não pode
 	-- descontar tempo)!" — pausa o relógio (runHalf já respeita
 	-- `matchPaused`, ver "if not matchPaused then timeRemaining -= 1")
@@ -1004,7 +1093,43 @@ local function onGoalScored(scoringTeamName)
 	-- todo mesmo). Despausa sozinho um pouco depois do replay acabar na
 	-- tela de todo mundo (ver task.delay mais abaixo).
 	matchPaused = true
-	local replayTotalSeconds = Config.GOAL_CELEBRATION_SECONDS + (Config.GOAL_REPLAY_PLAYBACK_SECONDS or 6) + 1
+	-- ⚠️ v113: o efeito de gol equipado pode durar bem mais que a comemoração
+	-- (até 5x). playGoalCelebration (mais abaixo) preenche _G.UltimaDuracaoEfeitoGol
+	-- na hora; o replay espera o MAIOR dos dois. Aqui já uso a duração do efeito
+	-- que ESTE gol vai tocar (o efeito do autor equipado).
+	local efeitoGolSeg = 0
+	do
+		local autor = scorer
+		local item = autor and _G.DuracaoEfeitoGolDe and _G.DuracaoEfeitoGolDe(autor) or 0
+		efeitoGolSeg = item
+	end
+	local esperaAntesDoReplay = math.max(Config.GOAL_CELEBRATION_SECONDS, efeitoGolSeg + 0.5)
+	local replayTotalSeconds = esperaAntesDoReplay + (Config.GOAL_REPLAY_PLAYBACK_SECONDS or 6) + 1
+
+	-- ⚠️ v104 — GOLDEN GOAL: gol na prorrogação encerra a partida. Mantém a
+	-- comemoração e o replay (é o lance da vitória), mas em vez do kickoff
+	-- vem o fim da partida. O relógio fica pausado até lá.
+	if currentHalf == 3 then
+		golDeOuroPendente = true
+		if Remotes.GoldenGoal then Remotes.GoldenGoal:FireAllClients(scoringTeamName) end
+		local snapshotOuro = _G.GetReplaySnapshot and _G.GetReplaySnapshot()
+		local eventosOuro = _G.GetReplayEventos and _G.GetReplayEventos() or nil -- ⚠️ v112: na hora do gol
+		if scorer then
+			playGoalCelebration(scorer)
+			if _G.NotifyFlowGoal then _G.NotifyFlowGoal(scorer) end
+		end
+		if scorer then task.delay(Config.GOAL_CELEBRATION_SECONDS, function() stopGoalCelebration(scorer) end) end
+		task.delay(esperaAntesDoReplay, function()
+			if _G.SetDeadBallMode then _G.SetDeadBallMode(true) end
+			if snapshotOuro then
+				Remotes.GoalReplay:FireAllClients(scoringTeamName, snapshotOuro, eventosOuro)
+			end
+			task.delay((Config.GOAL_REPLAY_PLAYBACK_SECONDS or 6) + 0.5, function()
+				_G.EndMatchNow()
+			end)
+		end)
+		return
+	end
 	task.delay(replayTotalSeconds, function()
 		matchPaused = false
 	end)
@@ -1016,6 +1141,10 @@ local function onGoalScored(scoringTeamName)
 	-- si (FireAllClients) é o que fica pra depois da comemoração, ver
 	-- abaixo — o snapshot capturado aqui não muda com o tempo.
 	local replaySnapshot = _G.GetReplaySnapshot and _G.GetReplaySnapshot()
+	-- ⚠️ v112: os EVENTOS (Hissatsu, arma, animações) também são pegos AGORA. Antes
+	-- eram lidos só depois da comemoração (4s) — e nesse tempo o histórico já
+	-- tinha apagado o começo da jogada.
+	local replayEventos = _G.GetReplayEventos and _G.GetReplayEventos() or nil
 
 	-- ⚠️ NOVO: comemoração do jogador que fez o gol, ANTES do replay
 	-- (pedido do usuário — ver playGoalCelebration acima). Só o replay e o
@@ -1029,13 +1158,13 @@ local function onGoalScored(scoringTeamName)
 		if _G.NotifyFlowGoal then _G.NotifyFlowGoal(scorer) end
 	end
 
-	task.delay(Config.GOAL_CELEBRATION_SECONDS, function()
-		if scorer then
-			stopGoalCelebration(scorer)
-		end
-
+	-- (a comemoração para no tempo normal; o REPLAY espera o efeito de gol acabar)
+	if scorer then
+		task.delay(Config.GOAL_CELEBRATION_SECONDS, function() stopGoalCelebration(scorer) end)
+	end
+	task.delay(esperaAntesDoReplay, function()
 		if replaySnapshot then
-			Remotes.GoalReplay:FireAllClients(scoringTeamName, replaySnapshot)
+			Remotes.GoalReplay:FireAllClients(scoringTeamName, replaySnapshot, replayEventos) -- ⚠️ v103: + eventos · v112: capturados na hora do gol
 		end
 
 		-- depois de um gol, quem sofreu o gol é quem repõe a bola do centro
@@ -1195,9 +1324,14 @@ local function applyMatchResult()
 		local data = ensureRewardData(player)
 		local playerTeamName = player.Team and player.Team.Name
 
+		-- ⚠️ v104 — PEDIDO: "a tela precisa aparecer também empate, não está
+		-- aparecendo, tá dando derrota para os dois times que empataram".
+		data.Placar = { [Config.TEAM_NAMES[1]] = score[Config.TEAM_NAMES[1]] or 0, [Config.TEAM_NAMES[2]] = score[Config.TEAM_NAMES[2]] or 0 }
+		data.TimesOrdem = { Config.TEAM_NAMES[1], Config.TEAM_NAMES[2] }
+		data.MeuTime = playerTeamName
 		if tie or not winningTeam then
-			data.MatchResult = "lose"
-			addReward(player, Rewards.LOSE_MONEY, Rewards.LOSE_XP)
+			data.MatchResult = "draw"
+			addReward(player, Rewards.DRAW_MONEY or Rewards.LOSE_MONEY, Rewards.DRAW_XP or Rewards.LOSE_XP)
 		elseif playerTeamName == winningTeam then
 			data.MatchResult = "win"
 			data.Stats.Won = true
@@ -1211,6 +1345,13 @@ end
 
 -- ===== SALVAR / TELEPORTAR =====
 local function saveRewards(player)
+	if salaPersonalizada then return end -- ⚠️ v104: sala personalizada não dá recompensa
+	-- ⚠️ v123 — ACHADO (dados reais: 13 partidas na carreira com gols/dribles/desarmes
+	-- todos 0): todo teste no STUDIO, ao parar o Play, caía aqui pelo PlayerRemoving e
+	-- gravava uma recompensa "ongoing" de verdade no DataStore — o Lobby entregava
+	-- depois (+1 partida zerada, +100 de dinheiro). No Studio não grava mais (atributo
+	-- SalvarRecompensaNoStudio = true no Workspace pra testar o fluxo de propósito).
+	if RunService:IsStudio() and workspace:GetAttribute("SalvarRecompensaNoStudio") ~= true then return end
 	local data = playerRewards[player.UserId]
 	if not data then return end
 	-- ⚠️ CORRIGIDO: LobbyRewardsReceiver.legacy.luau (place Lobby) lê
@@ -1219,7 +1360,10 @@ local function saveRewards(player)
 	-- recompensa legítima calculava rewardsAge = os.time() - 0, um número
 	-- gigante, e era mis-flagada como antiga (só um warn cosmético hoje,
 	-- mas o campo devia existir de verdade).
-	data.SavedAt = os.time()
+	-- ⚠️ v123: carimbo FIXO da partida (antes era renovado a cada save — o save do
+	-- PlayerRemoving, depois do teleporte, ganhava um SavedAt mais novo e escapava do
+	-- "já reivindicada" do Lobby, podendo entregar a mesma partida de novo)
+	data.SavedAt = data.SavedAt or os.time()
 	local success, err = pcall(function()
 		rewardsDataStore:SetAsync("Rewards_" .. player.UserId, data)
 	end)
@@ -1264,7 +1408,7 @@ local function returnPlayersToLobby()
 	local rewardsPayload = {}
 	for _, player in ipairs(players) do
 		saveRewards(player)
-		if playerRewards[player.UserId] then
+		if playerRewards[player.UserId] and not salaPersonalizada then
 			rewardsPayload[tostring(player.UserId)] = playerRewards[player.UserId]
 		end
 	end
@@ -1273,26 +1417,57 @@ local function returnPlayersToLobby()
 	local teleportOptions = Instance.new("TeleportOptions")
 	teleportOptions:SetTeleportData({
 		MatchRewards = rewardsPayload,
+		TutorialConcluido = modoTutorial or nil, -- ⚠️ v104
 	})
 
-	local success, err = pcall(function()
-		TeleportService:TeleportAsync(Config.LOBBY_PLACE_ID, players, teleportOptions)
-	end)
-	if not success then
-		warn("Erro no teleporte para o Lobby: " .. tostring(err))
+	-- ⚠️ v104: tenta de novo se o teleporte falhar (antes, uma falha deixava
+	-- todo mundo preso no server da partida já encerrada)
+	for tentativa = 1, 4 do
+		local restantes = {}
+		for _, p in ipairs(players) do
+			if p.Parent == Players then table.insert(restantes, p) end
+		end
+		if #restantes == 0 then return end
+		local success, err = pcall(function()
+			TeleportService:TeleportAsync(Config.LOBBY_PLACE_ID, restantes, teleportOptions)
+		end)
+		if success then return end
+		warn(("Erro no teleporte para o Lobby (tentativa %d/4): %s"):format(tentativa, tostring(err)))
+		task.wait(3)
 	end
 end
 
 -- ===== FIM DE PARTIDA =====
+-- ⚠️ v104 — PEDIDO: "sempre que acaba a partida no overtime, ela não encerra
+-- definitivamente... faça o cara teleportar de volta pro lobby depois que
+-- acabar toda a partida, tanto no overtime quanto fora". Cada etapa roda
+-- protegida: um erro no MVP/resumo não pode mais impedir o teleporte.
 local function endMatch()
 	if matchEnded then return end
 	matchEnded = true
 	matchActive = false
-	playWhistle()
+	golDeOuroPendente = false
+	pcall(playWhistle)
 
-	calculateMVP()
-	applyMatchResult()
-	showSummaries()
+	local mvp
+	local okMvp, errMvp = pcall(function() mvp = calculateMVP() end)
+	if not okMvp then warn("⚠️ Fim de partida: erro no MVP: " .. tostring(errMvp)) end
+	local okRes, errRes = pcall(applyMatchResult)
+	if not okRes then warn("⚠️ Fim de partida: erro no resultado: " .. tostring(errRes)) end
+	for _, data in pairs(playerRewards) do
+		if modoTutorial then data.MatchResult = "tutorial" end
+		if salaPersonalizada then
+			data.SemRecompensa = true
+			data.MoneyEarned = 0
+			data.XPEarned = 0
+		end
+		-- ⚠️ v110: o nome do personagem (slot) quando veio do Lobby
+		data.MVPNome = mvp and (mvp:GetAttribute("NomePersonagem") or mvp.DisplayName) or nil
+		data.MVPUserId = mvp and mvp.UserId or nil
+		data.SegundosAteLobby = Config.SUMMARY_DELAY_BEFORE_TELEPORT
+	end
+	local okSum, errSum = pcall(showSummaries)
+	if not okSum then warn("⚠️ Fim de partida: erro no resumo: " .. tostring(errSum)) end
 	returnPlayersToLobby()
 end
 
@@ -1330,12 +1505,27 @@ local function runPeriod(mostrar, real)
 	local passo = real / math.max(mostrar, 1)
 	timeRemaining = mostrar
 	Remotes.UpdateMatchState:FireAllClients(timeRemaining, score)
+	-- ⚠️ v104: teto de tempo REAL — pausas (bola parada, replay de gol) não
+	-- podem mais segurar o período pra sempre se alguma coisa esquecer de
+	-- despausar. Folga generosa: o próprio tempo + 60% + 1 minuto.
+	local limiteReal = os.clock() + real * 1.6 + 60
 
 	while timeRemaining > 0 and matchActive do
+		if os.clock() > limiteReal then
+			warn(("⏱️ Período passou do teto de tempo real (%.0fs) — encerrando o período (pausado=%s)."):format(real * 1.6 + 60, tostring(matchPaused)))
+			break
+		end
 		task.wait(passo)
-		if not matchPaused then
+		-- ⚠️ v113: a cena do Flow (10-15s) não come o tempo da partida
+		-- ⚠️ v123 — PEDIDO: "o tempo vai parar durante as Hissatsus também". Qualquer
+		-- cutscene (chute, defesa do goleiro, Flow) segura o relógio — todo mundo está
+		-- congelado nela mesmo.
+		local emCutscene = _G.HissatsuCutsceneActive ~= nil
+		if not matchPaused and not emCutscene then
 			timeRemaining -= 1
 			Remotes.UpdateMatchState:FireAllClients(timeRemaining, score)
+		elseif emCutscene then
+			limiteReal += passo -- (o teto de segurança não conta o tempo parado na cutscene)
 		end
 	end
 end
@@ -1461,6 +1651,8 @@ end
 
 local function startMatchTimer()
 	setupGoalDetection()
+	-- ⚠️ v113: cada jogador tem 1 Flow por partida — libera de novo aqui
+	if _G.ResetarFlowsDaPartida then _G.ResetarFlowsDaPartida() end
 
 	-- ⚠️ v49: mede a duração da prorrogação agora, em paralelo — leva alguns
 	-- segundos pro áudio carregar, e só vai ser usada depois de dois tempos
@@ -1499,9 +1691,11 @@ local function startMatchTimer()
 		runOvertime(Config.TEAM_NAMES[1])
 	end
 
-	if matchActive then
-		endMatch()
-	end
+	-- ⚠️ v104: SEMPRE encerra (antes só se matchActive — se algo o desligasse
+	-- no meio, a partida "acabava" sem resumo nem teleporte). Se um golden
+	-- goal está no replay, quem encerra é ele.
+	while golDeOuroPendente and not matchEnded do task.wait(0.5) end
+	endMatch()
 end
 
 -- FIX: server que chegou via matchmaking (place Lobby) é um Reserved
@@ -1518,7 +1712,7 @@ local function getExpectedPlayerCount()
 			return teleportData.TotalPlayers
 		end
 	end
-	return Config.MIN_PLAYERS_TO_START
+	return salaPersonalizada and 1 or Config.MIN_PLAYERS_TO_START -- ⚠️ v104: sala personalizada/tutorial começa sozinho
 end
 
 -- FIX: "entramos 3 e o jogo não deu start" — acontecia quando o
@@ -1540,10 +1734,12 @@ local function waitForPlayersAndStart()
 
 	while true do
 		local currentCount = #Players:GetPlayers()
-		expectedCount = math.max(getExpectedPlayerCount(), Config.MIN_PLAYERS_TO_START)
+		-- ⚠️ v104: sala personalizada começa até com 1 jogador (você sozinho)
+		local minimo = salaPersonalizada and 1 or Config.MIN_PLAYERS_TO_START
+		expectedCount = math.max(getExpectedPlayerCount(), minimo)
 		if currentCount >= expectedCount then break end
 
-		if currentCount >= Config.MIN_PLAYERS_TO_START then
+		if currentCount >= minimo then
 			minReachedAt = minReachedAt or tick()
 			if tick() - minReachedAt >= FALLBACK_WAIT_TIMEOUT then
 				print(("⏱️ MatchController: %d/%d esperado, mas o mínimo (%d) já foi atingido há %ds — começando a partida assim mesmo."):format(
@@ -1561,8 +1757,28 @@ local function waitForPlayersAndStart()
 		task.wait(1)
 	end
 
-	print("✅ Jogadores suficientes — partida vai começar em 3 segundos.")
-	task.wait(3)
+	-- ⚠️ v104: tutorial — gols valendo, sem relógio, sem cutscene de entrada
+	if modoTutorial then
+		print("🎓 Modo tutorial — sem relógio nem cutscene de entrada.")
+		setupGoalDetection()
+		matchActive = true
+		matchPaused = false
+		if _G.SetDeadBallMode then _G.SetDeadBallMode(false) end
+		if _G.ResetPulseEnergy then _G.ResetPulseEnergy() end
+		local limite = os.clock() + 10
+		while not _G.TutorialComecar and os.clock() < limite do task.wait(0.2) end
+		if _G.TutorialComecar then
+			_G.TutorialComecar()
+		else
+			warn("🎓 TutorialServer não carregou — encerrando.")
+			endMatch()
+		end
+		return
+	end
+
+	-- ⚠️ v112: era 3s — PEDIDO: "pra não ter atraso, pra não ter enrolação"
+	print("✅ Jogadores suficientes — partida começando.")
+	task.wait(0.5)
 	startMatchTimer()
 end
 

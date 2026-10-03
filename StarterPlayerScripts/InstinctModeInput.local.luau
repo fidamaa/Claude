@@ -8,6 +8,8 @@
 	GK), G (cabeçada), F (dash de GK), LeftShift (sprint) e LeftControl
 	(shift lock) já estão todas ocupadas (ver PulseInput/GKInput/
 	DribbleInput.local.luau e FootballClient.local.luau).
+	⚠️ NOVO: o esquema mudou (Q drible, F dash, E/R Armas, T cabeçada, sem
+	sprint), mas V continua livre — nada muda aqui.
 
 	Só manda o FireServer — quem decide se o medidor está cheio de
 	verdade é sempre o servidor (InstinctController.lua); aqui só evita
@@ -31,6 +33,15 @@ InstinctModeFeedback.OnClientEvent:Connect(function(kind, extra)
 		meterFull = (tonumber(extra) or 0) >= 100
 	elseif kind == "ModeActivated" then
 		meterFull = false
+	elseif kind == "FlowOcupado" then
+		-- ⚠️ v120b: um Flow por vez no campo inteiro
+		pcall(function()
+			StarterGui:SetCore("SendNotification", {
+				Title = "Flow",
+				Text = ("Outro jogador está no Flow. Tente de novo em %ds."):format(tonumber(extra) or 0),
+				Duration = 2.5,
+			})
+		end)
 	end
 end)
 

@@ -31,7 +31,10 @@ Config.TEAM_NAMES = { "Azul", "Amarelo" }
 -- >= MinPlayers assim que o pool tiver gente (ver tryCloseFreeRoom no
 -- Matchmaker.lua), pra dar pra testar/jogar casual com poucos amigos.
 Config.MODES = {
-	["FREE"] = { Id = "FREE", DisplayName = "Sala Livre", IsFreeRoom = true, MinPlayers = 1 },
+	-- ⚠️ v104: "Sala Livre" virou SALA PERSONALIZADA (IsPrivate): só você e a
+	-- sua party, direto pra um server reservado, sem fila, sem recompensa e
+	-- com GK bot nos dois gols (ver MatchmakingQueue / MatchController).
+	["FREE"] = { Id = "FREE", DisplayName = "Sala Personalizada", IsFreeRoom = true, IsPrivate = true, MinPlayers = 1 },
 	["3v3"] = { Id = "3v3", DisplayName = "3 x 3", PerTeam = 3, TotalPlayers = 6 },
 	["5v5"] = { Id = "5v5", DisplayName = "5 x 5", PerTeam = 5, TotalPlayers = 10 },
 	["7v7"] = { Id = "7v7", DisplayName = "7 x 7", PerTeam = 7, TotalPlayers = 14 },
@@ -59,6 +62,19 @@ Config.MODE_ORDER = { "FREE", "3v3", "5v5", "7v7" } -- ordem de exibição na te
 --      (igual Sala Livre), mesmo desbalanceado (2v3), contanto que os dois
 --      lados batam pelo menos MATCH_LAST_RESORT_MIN_PER_TEAM.
 Config.MATCH_FULL_WAIT_SECONDS = 20
+-- ⚠️ v104 — PEDIDO: "a prioridade máxima é ping bom". Até esse tempo de
+-- espera, a partida só fecha com gente da MESMA região (proxy de ping, ver
+-- regionOf em MatchmakingQueue); depois disso, mistura regiões.
+Config.MATCH_REGION_STRICT_SECONDS = 40
+-- ⚠️ v104: GOLEIROS — nos modos abaixo, os dois times precisam ter goleiro
+-- humano (quem marcou "quero ser GK" ou tem as 2 Hissatsus de GK). Nos
+-- outros, a partida fecha com os dois times COM goleiro ou os dois SEM (o
+-- GK bot completa) — nunca 1 time com goleiro e o outro com 1 a mais na linha.
+Config.MODES_GK_OBRIGATORIO = { ["7v7"] = true }
+-- ⚠️ v104: contagem de quem está procurando (por modo e por região), somada
+-- entre todos os servers de Lobby via MemoryStore
+Config.CONTAGEM_FILA_MAPA = "ContagemFila_v104"
+Config.CONTAGEM_FILA_INTERVALO = 5
 Config.MATCH_LAST_RESORT_WAIT_SECONDS = 60 -- < GROUP_STUCK_REQUEUE_AFTER (90s), senão o grupo volta pra fila compartilhada antes de chegar aqui
 Config.MATCH_LAST_RESORT_MIN_PER_TEAM = 2 -- nunca fecha com time de 1 jogador só
 
@@ -155,6 +171,7 @@ Config.SHOP = {
 -- slot, etc.) — este catálogo aqui é pros itens NOVOS, todos com a MESMA
 -- lógica genérica de compra (ver ShopServer.legacy.luau: BuyCatalogItem).
 Config.SHOP.Categories = {
+	{ Id = "Flow", Name = "Flow" }, -- ⚠️ v110: os Flows do Blue Lock (buff + cutscene)
 	{ Id = "Cosmeticos", Name = "Cosméticos" },
 	{ Id = "Conveniencia", Name = "Conveniência" },
 	{ Id = "Boosts", Name = "Boosts" },
@@ -177,26 +194,7 @@ Config.SHOP.Categories = {
 --   "Boost"      — repetível, estende um timestamp de expiração em
 --                  playerData.Boosts (ver PlayerDataManager.legacy.luau).
 Config.SHOP.Items = {
-	-- ===== COSMÉTICOS =====
-	{ Id = "GoalEffect_Fireworks", Category = "Cosmeticos", Slot = "GoalEffect", Name = "Efeito de Gol: Fogos de Artifício", Cost = 800, Type = "Cosmetic" },
-	{ Id = "GoalEffect_Confetti", Category = "Cosmeticos", Slot = "GoalEffect", Name = "Efeito de Gol: Confete", Cost = 800, Type = "Cosmetic" },
-	{ Id = "GoalEffect_Flash", Category = "Cosmeticos", Slot = "GoalEffect", Name = "Efeito de Gol: Flash Colorido", Cost = 800, Type = "Cosmetic" },
-	{ Id = "Aura_Gold", Category = "Cosmeticos", Slot = "Aura", Name = "Aura Dourada", Cost = 1200, Type = "Cosmetic" },
-	{ Id = "Aura_Blue", Category = "Cosmeticos", Slot = "Aura", Name = "Aura Azul", Cost = 1000, Type = "Cosmetic" },
-	{ Id = "Aura_Red", Category = "Cosmeticos", Slot = "Aura", Name = "Aura Vermelha", Cost = 1000, Type = "Cosmetic" },
-	{ Id = "Emote_Dance", Category = "Cosmeticos", Slot = "Emote", Name = "Emote: Dança da Vitória", Cost = 400, Type = "Cosmetic" },
-	{ Id = "Emote_Jump", Category = "Cosmeticos", Slot = "Emote", Name = "Emote: Salto de Comemoração", Cost = 400, Type = "Cosmetic" },
-	{ Id = "Emote_Bow", Category = "Cosmeticos", Slot = "Emote", Name = "Emote: Reverência", Cost = 400, Type = "Cosmetic" },
-	{ Id = "NameColor_Gold", Category = "Cosmeticos", Slot = "NameColor", Name = "Cor de Nome: Dourado", Cost = 600, Type = "Cosmetic" },
-	{ Id = "NameColor_Red", Category = "Cosmeticos", Slot = "NameColor", Name = "Cor de Nome: Vermelho", Cost = 500, Type = "Cosmetic" },
-	{ Id = "NameColor_Cyan", Category = "Cosmeticos", Slot = "NameColor", Name = "Cor de Nome: Azul Neon", Cost = 500, Type = "Cosmetic" },
-	{ Id = "Tag_Artilheiro", Category = "Cosmeticos", Slot = "Tag", Name = "Tag Especial: Artilheiro", Cost = 900, Type = "Cosmetic" },
-	{ Id = "Tag_Muralha", Category = "Cosmeticos", Slot = "Tag", Name = "Tag Especial: Muralha", Cost = 900, Type = "Cosmetic" },
-	{ Id = "Tag_Lenda", Category = "Cosmeticos", Slot = "Tag", Name = "Tag Especial: Lenda", Cost = 1500, Type = "Cosmetic" },
-	{ Id = "Frame_Gold", Category = "Cosmeticos", Slot = "Frame", Name = "Moldura de Avatar: Ouro", Cost = 700, Type = "Cosmetic" },
-	{ Id = "Frame_Diamond", Category = "Cosmeticos", Slot = "Frame", Name = "Moldura de Avatar: Diamante", Cost = 1400, Type = "Cosmetic" },
-	{ Id = "Title_Capitao", Category = "Cosmeticos", Slot = "Title", Name = "Título: Capitão", Cost = 1000, Type = "Cosmetic" },
-	{ Id = "ChatColor_Custom", Category = "Cosmeticos", Slot = "ChatColor", Name = "Cor de Chat Customizada", Cost = 800, Type = "Cosmetic" },
+	-- ===== COSMÉTICOS: montados logo abaixo a partir do módulo Cosmeticos =====
 
 	-- ===== CONVENIÊNCIA (junto com "progressão/utilidade", que tinha
 	-- pouca coisa — pedido do usuário: "poe junto de conveniência, coloca
@@ -221,6 +219,29 @@ Config.SHOP.Items = {
 	{ Id = "Boost_Luck_5Rolls", Category = "Boosts", Name = "Boost de Sorte no Roll — próximas 5 rolagens", Cost = 500, Type = "Boost", Effect = "Luck", Amount = 5 },
 	{ Id = "Boost_ExtraQuest_24h", Category = "Boosts", Name = "Missão Extra — +1 ativa por 24 horas", Cost = 600, Type = "Boost", Effect = "ExtraQuest", DurationSeconds = 86400 },
 }
+
+-- ⚠️ v110 — COSMÉTICOS + FLOWS vêm do módulo Cosmeticos (ReplicatedStorage,
+-- igual no Game). PEDIDO: "inclua todos os cosméticos... pelo menos 15 de
+-- cada... e os flows na loja pra escolher o flow". Os Ids antigos da loja
+-- (Emote_Dance, Frame_Gold, Title_Capitao...) continuam os mesmos — quem já
+-- comprou não perde nada. Agora os cosméticos TÊM efeito de verdade (placa de
+-- nome, chat, emotes, comemoração, aura, efeito de gol, Flow na partida).
+do
+	local Cosmeticos = require(script.Parent:WaitForChild("Cosmeticos"))
+	local cosmeticosNaLoja = {}
+	for _, cat in ipairs(Cosmeticos.CATEGORIAS) do
+		for _, item in ipairs(Cosmeticos[cat]) do
+			table.insert(cosmeticosNaLoja, {
+				Id = item.Id, Category = cat == "Flow" and "Flow" or "Cosmeticos", Slot = cat,
+				Name = item.Nome, Cost = Cosmeticos.Preco(item), Type = "Cosmetic",
+				Rarity = item.Raridade, Description = item.Descricao, Free = Cosmeticos.GRATIS[item.Id] or nil,
+			})
+		end
+	end
+	for i, item in ipairs(cosmeticosNaLoja) do
+		table.insert(Config.SHOP.Items, i, item)
+	end
+end
 
 -- ===== LOJA — PRODUTOS DE ROBUX (v2) =====
 -- Cada um precisa de um Developer Product criado manualmente no Studio
@@ -303,6 +324,20 @@ Config.Remotes = {
 	ReceivePartyInvite = getOrCreateRemote(remotesFolder, "ReceivePartyInvite"),
 	RespondToPartyInvite = getOrCreateRemote(remotesFolder, "RespondToPartyInvite"),
 	LeaveParty = getOrCreateRemote(remotesFolder, "LeaveParty"),
+	-- ⚠️ v104: Servidor -> Cliente: aviso curto sobre o convite ("convite
+	-- enviado", "X recusou", "X entrou no grupo"...) — ver ConviteGrupoClient
+	PartyAviso = getOrCreateRemote(remotesFolder, "PartyAviso"),
+	-- ⚠️ v104: Servidor -> Cliente: quantos procuram cada modo (total e na sua região)
+	ContagemFila = getOrCreateRemote(remotesFolder, "ContagemFila"),
+	-- ⚠️ v104: "quero jogar de goleiro" direto na tela de partida.
+	-- Cliente -> Servidor: DefinirGoleiro(true/false) ou (nil) só pra pedir o estado.
+	-- Servidor -> Cliente: EstadoGoleiro(marcado, automatico) — automatico =
+	-- as 2 Hissatsus ativas são de goleiro (vira GK mesmo sem marcar).
+	DefinirGoleiro = getOrCreateRemote(remotesFolder, "DefinirGoleiro"),
+	EstadoGoleiro = getOrCreateRemote(remotesFolder, "EstadoGoleiro"),
+	-- ⚠️ v104: TUTORIAL opcional na primeira entrada (TutorialLobbyServer)
+	OferecerTutorial = getOrCreateRemote(remotesFolder, "OferecerTutorial"), -- servidor -> cliente
+	RespostaTutorial = getOrCreateRemote(remotesFolder, "RespostaTutorial"), -- cliente -> servidor (true = fazer)
 	-- Servidor -> Cliente: estado atual do grupo (membros, quem é líder)
 	UpdatePartyState = getOrCreateRemote(remotesFolder, "UpdatePartyState"),
 
