@@ -1151,6 +1151,7 @@ end
 
 local function startPulseStraightFlight(force)
 	pulseStraightFlightActive = true
+	_G.VooCurvaInicial = nil -- ⚠️ v122 (ver CurvaInicial; _G por causa do limite de 200 locals)
 	pulseFlightDirecao = nil
 	pulseFlightVelocidade = nil
 	pulseForceLabel.Text = tostring(math.floor(force))
@@ -1486,6 +1487,15 @@ RunService.Heartbeat:Connect(function()
 		local percorrido = math.max((ball.Position - origem):Dot(pulseFlightDirecao), 0)
 		local naReta = origem + pulseFlightDirecao * percorrido
 		local dir = pulseFlightDirecao
+		-- ⚠️ v122 — CURVA INICIAL (Fúria Glacial: "uma leve curva e depois 100% reto na
+		-- mira"): nos primeiros Comp studs a bola sai da reta numa barriga y = Amp·sen(πu)
+		-- e VOLTA pra ela; depois disso é a reta travada de sempre até o ponto mirado.
+		local ci = _G.VooCurvaInicial
+		if ci and percorrido < ci.Comp then
+			local u = percorrido / ci.Comp
+			naReta += ci.Lado * (ci.Amp * math.sin(math.pi * u))
+			dir = (pulseFlightDirecao + ci.Lado * (ci.Amp * math.pi / ci.Comp * math.cos(math.pi * u))).Unit
+		end
 		local raio = ball.Size.Y / 2
 		local params = RaycastParams.new()
 		params.FilterType = Enum.RaycastFilterType.Exclude
@@ -5590,6 +5600,19 @@ local function pulsePerformKick(player, targetPoint, force, curveMult, aimDeviat
 		-- ⚠️ v110: a RETA fica travada desde o chute (ver o Heartbeat do voo)
 		pulseFlightDirecao = direction
 		pulseFlightVelocidade = rapidez
+		if effect.CurvaInicial then
+			local ci = effect.CurvaInicial
+			local lado = direction:Cross(Vector3.yAxis)
+			lado = lado.Magnitude > 0.05 and lado.Unit or Vector3.xAxis
+			local comp = math.min(ci.Comp or 30, (targetPoint - ball.Position).Magnitude * 0.6)
+			if comp > 4 then
+				_G.VooCurvaInicial = {
+					Lado = lado * (math.random() < 0.5 and 1 or -1),
+					Comp = comp,
+					Amp = comp * math.tan(math.rad(ci.Graus or 10)) / math.pi, -- inclinação máxima = Graus
+				}
+			end
+		end
 	end
 	ball.AssemblyLinearVelocity = velocity
 	lastShotForce = force

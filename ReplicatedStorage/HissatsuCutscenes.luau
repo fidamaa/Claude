@@ -957,21 +957,24 @@ GL.Phases = {
 	Flip = { 1.92, 2.34 }, Windup = { 1.62, 2.45 },
 	Kick = { 2.45, GL.ImpactTime }, Impact = { GL.ImpactTime, GL.Duration },
 }
+-- ⚠️ v122 — PEDIDO: "a Fúria Glacial não pode cair no chão: dá um MORTAL e chuta".
+-- Antes ele mergulhava rente ao gelo e fazia parada de mão; agora corre, SALTA e
+-- dá o mortal pra frente no AR (grupado), cai agachado e chuta.
 local GL_ROOT = {
 	{ 0, V3(0, 0, 0) }, { 1.05, V3(0, 0, 0) }, { 1.3, V3(0, -0.1, -0.4) },
 	{ 1.62, V3(0, -0.08, -2.4) },  -- corre inclinado (medido: -0.35 furava o gelo)
-	{ 1.78, V3(0, -1.8, -3.6) },   -- mergulho rente ao gelo
-	{ 1.92, V3(0, -1.5, -4.4) },   -- as mãos tocam o gelo
-	{ 2.08, V3(0, -0.8, -5.2) },    -- parada de mão, pernas pro alto (medido no R6: a cabeça rente ao gelo)
-	{ 2.22, V3(0, -1.8, -5.9) },
-	{ 2.34, V3(0, 0.15, -6.3) },  -- cai agachado
+	{ 1.74, V3(0, 1.4, -3.3) },    -- salta
+	{ 1.92, V3(0, 3.3, -4.3) },
+	{ 2.08, V3(0, 3.6, -5.1) },    -- topo do mortal
+	{ 2.22, V3(0, 2.2, -5.8) },
+	{ 2.34, V3(0, 0.15, -6.3) },   -- cai agachado
 	{ 2.45, V3(0, 0, -6.4) },
 	{ GL.ImpactTime, V3(0, 0.04, -6.6) }, { 3.2, V3(0, 0.07, -6.9) },
 }
 -- mortal PRA FRENTE (ângulo negativo em X = a cabeça vai pra frente e pra baixo)
 local GL_PITCH = {
-	{ 0, 0 }, { 1.3, 0 }, { 1.62, -25 }, { 1.78, -80 }, { 1.92, -115 }, { 2.08, -185 },
-	{ 2.22, -275 }, { 2.34, -350 }, { 2.45, -360 }, { 3.2, -360 },
+	{ 0, 0 }, { 1.3, 0 }, { 1.62, -15 }, { 1.74, -45 }, { 1.92, -150 }, { 2.08, -245 },
+	{ 2.22, -320 }, { 2.34, -352 }, { 2.45, -360 }, { 3.2, -360 },
 }
 function GL.RootPosition(t) return sample(GL_ROOT, t) end
 function GL.RootCFrame(t)
@@ -1026,14 +1029,17 @@ local GL_POSE = {
 		LKnee = { -70, 0, 0 }, RShoulder = { 45, 0, 10 }, RElbow = { 80, 0, 0 }, LShoulder = { -40, 0, -10 }, LElbow = { 80, 0, 0 } } },
 	{ 1.62, { Root = { -8, 0, 0 }, Neck = { 25, 0, 0 }, RHip = { 45, 0, 0 }, RKnee = { -40, 0, 0 }, LHip = { -25, 0, 0 },
 		LKnee = { -50, 0, 0 }, RShoulder = { 120, 0, 15 }, RElbow = { 20, 0, 0 }, LShoulder = { 120, 0, -15 }, LElbow = { 20, 0, 0 } } },
-	-- mergulho: esticado, braços à frente, pernas atrás (5.6-6.0s)
-	{ 1.78, comBracos({ Neck = { 40, 0, 0 }, RHip = { -15, 0, 0 }, RKnee = { -25, 0, 0 }, LHip = { -5, 0, 0 }, LKnee = { -10, 0, 0 } }) },
-	{ 1.92, comBracos({ Neck = { 35, 0, 0 }, RHip = { 10, 0, 0 }, RKnee = { -20, 0, 0 }, LHip = { -20, 0, 0 }, LKnee = { -15, 0, 0 } }) },
-	-- parada de mão, pernas abertas por cima (6.2-6.4s)
-	{ 2.08, comBracos({ Neck = { 30, 0, 0 }, RHip = { 25, 0, 6 }, RKnee = { -35, 0, 0 }, LHip = { -35, 0, -6 }, LKnee = { -10, 0, 0 } }) },
-	-- as pernas passam por cima; ele se solta do gelo
-	{ 2.22, { Neck = { 10, 0, 0 }, RHip = { 70, 0, 5 }, RKnee = { -60, 0, 0 }, LHip = { 60, 0, -5 }, LKnee = { -50, 0, 0 },
-		RShoulder = { 120, 0, 40 }, LShoulder = { 120, 0, -40 } } },
+	-- salto: os braços sobem pra puxar o mortal
+	{ 1.74, { Neck = { 20, 0, 0 }, RHip = { -10, 0, 4 }, RKnee = { -20, 0, 0 }, LHip = { 25, 0, -4 }, LKnee = { -40, 0, 0 },
+		RShoulder = { 165, 0, 20 }, LShoulder = { 165, 0, -20 } } },
+	-- GRUPADO no ar: pernas no peito, braços abraçando (R6: perna reta = carpado)
+	{ 1.90, { Neck = { 30, 0, 0 }, RHip = { 115, 0, 10 }, RKnee = { -115, 0, 0 }, LHip = { 115, 0, -10 }, LKnee = { -115, 0, 0 },
+		RShoulder = { 80, 0, 30 }, LShoulder = { 80, 0, -30 }, RElbow = { 60, 0, 0 }, LElbow = { 60, 0, 0 } } },
+	{ 2.12, { Neck = { 30, 0, 0 }, RHip = { 118, 0, 10 }, RKnee = { -118, 0, 0 }, LHip = { 118, 0, -10 }, LKnee = { -118, 0, 0 },
+		RShoulder = { 85, 0, 30 }, LShoulder = { 85, 0, -30 }, RElbow = { 60, 0, 0 }, LElbow = { 60, 0, 0 } } },
+	-- abre pra cair: braços abrem, pernas descem
+	{ 2.25, { Neck = { 10, 0, 0 }, RHip = { 55, 0, 5 }, RKnee = { -60, 0, 0 }, LHip = { 65, 0, -5 }, LKnee = { -50, 0, 0 },
+		RShoulder = { 110, 0, 55 }, LShoulder = { 110, 0, -55 } } },
 	-- cai agachado já armando a direita pra trás (6.8s)
 	{ 2.34, { Root = { -10, 0, 0 }, Neck = { -10, 0, 0 }, RHip = { 20, 0, 5 }, RKnee = { -100, 0, 0 }, LHip = { 70, 0, 0 },
 		LKnee = { -95, 0, 0 }, RShoulder = { -20, 0, 70 }, LShoulder = { 50, 0, -70 } } },

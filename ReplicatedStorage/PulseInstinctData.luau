@@ -414,8 +414,12 @@ Data.Pulses = {
 		Cutscene = "FuriaGlacial",
 		-- ⚠️ v108: PrepTime de volta ao antigo ("saía rápido demais, sem chance de tomar carrinho")
 		QTE = { Kind = "Tap", PrepTime = 2.4, HitWindow = 2.2, HitCount = 5 },
-		Bom = { ForceMult = 1.65, AimDeviationMult = 0.5, CorridorFreeze = { Width = 14, Duration = 0.6 } },
-		Perfect = { ForceMult = 1.9, AimDeviationMult = 0.25, CorridorFreeze = { Width = 21, Duration = 1.0 } },
+		-- ⚠️ v122 — PEDIDO: "o chute faz uma LEVE curva e depois vai 100% reto na mira".
+		-- CurvaInicial: a bola sai até `Graus` pro lado e volta pra linha da mira nos
+		-- primeiros `Comp` studs; daí segue RETA até o ponto mirado (ver o voo travado
+		-- no BallController).
+		Bom = { ForceMult = 1.65, AimDeviationMult = 0.5, CorridorFreeze = { Width = 14, Duration = 0.6 }, CurvaInicial = { Graus = 11, Comp = 30 } },
+		Perfect = { ForceMult = 1.9, AimDeviationMult = 0.25, CorridorFreeze = { Width = 21, Duration = 1.0 }, CurvaInicial = { Graus = 11, Comp = 30 } },
 	},
 
 	-- Death Zone (デスゾーン): TRÊS jogadores giram no ar em formação
