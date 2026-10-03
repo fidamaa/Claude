@@ -445,8 +445,11 @@ C.Flow = {
 		Atributos = { Kick = 12, Technique = 18 },
 		Tema = { Cor = rgb(90, 160, 255), Cor2 = rgb(220, 240, 255), Motivo = "Pecas" },
 		-- ⚠️ v120b — PEDIDO: "uma soundtrack boa: a música do Flow de cada um (playlist do
-		-- Blue Lock); o Isagi usa a Puzzle". Trecho já cortado (39s: a batida cai na pisada
-		-- da cena, 9,55s) em _upload/Flow_Isagi_Puzzle.mp3 — falta subir e colar o ID.
+		-- Blue Lock); o Isagi usa a Puzzle" + "a fala do Sung Jin-Woo (Solo Leveling, 0:30) e os
+		-- efeitos sonoros". UM áudio só, já mixado e sincronizado com a cena (39s: Puzzle com a
+		-- batida na pisada 9,55s, o grito do Jin-Woo na levantada, efeitos em cada momento) em
+		-- _upload/Flow_Isagi_Cena.mp3 (gerado por .claude/skills/flow-cutscene/mixar_cena_isagi.py)
+		-- — falta subir e colar o ID.
 		Musica = { Id = "", Volume = 0.6 } },
 	{ Id = "Flow_Bachira", Nome = "Flow do Bachira", Raridade = "Rare", Personagem = "Bachira Meguru",
 		Descricao = "O monstro dentro dele: drible muito maior e mais velocidade com a bola.",

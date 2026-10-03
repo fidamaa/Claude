@@ -131,6 +131,13 @@ outras somem (fade in no começo, fade out no fim); no gol ela abaixa um pouco".
   pra batida cair no momento forte da cena (no Isagi: 14,3s da faixa = a pisada
   9,55s → começa em 4,75s). Duração = cena + Flow (25s) + folga (~39s), fade-out
   no fim. Salve em `_upload/` (fora do git).
+- **Um áudio só por cena, já mixado** (PEDIDO: "não esquece a música e os efeitos
+  sonoros"; no Isagi também a fala do Sung Jin-Woo, Solo Leveling 0:30): música +
+  voz (com a música abaixando por baixo dela) + efeitos SINTETIZADOS em numpy
+  (coração, baque, brilho, vento, cliques de peça, espiral, explosão — sem
+  direito autoral), cada um no instante da coreografia. Modelo pronto:
+  `mixar_cena_isagi.py` nesta pasta (troque a lista `eventos()` e os trechos).
+  Confira desenhando a onda com marcas nos tempos (não dá pra escutar daqui).
 - O MCP NÃO sobe áudio: o usuário sobe no Creator Hub e manda o ID; cole em
   `Musica = { Id = "rbxassetid://...", Volume = 0.6 }` no item do Flow em
   `C.Flow` (Cosmeticos, nas DUAS cópias).
