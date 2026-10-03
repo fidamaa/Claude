@@ -450,7 +450,7 @@ C.Flow = {
 		-- batida na pisada 9,55s, o grito do Jin-Woo na levantada, efeitos em cada momento) em
 		-- _upload/Flow_Isagi_Cena.mp3 (gerado por .claude/skills/flow-cutscene/mixar_cena_isagi.py)
 		-- — falta subir e colar o ID.
-		Musica = { Id = "rbxassetid://135634893277814", Volume = 0.6 } },
+		Musica = { Id = "rbxassetid://138043913660792", Volume = 0.6 } },
 	{ Id = "Flow_Bachira", Nome = "Flow do Bachira", Raridade = "Rare", Personagem = "Bachira Meguru",
 		Descricao = "O monstro dentro dele: drible muito maior e mais velocidade com a bola.",
 		Atributos = { DribbleSkill = 25 }, Velocidade = 1.08,
