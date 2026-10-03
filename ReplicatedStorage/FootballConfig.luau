@@ -1674,7 +1674,7 @@ Config.KICK_MIN_FORCE = 48 -- v110: era 28 ("a força mínima é inútil, a bola
 -- de força de chute base". 181 -> 163.
 -- Depois: "aumenta a força base do chute em 5%" — 163 -> 171.
 Config.KICK_MAX_FORCE = 171
-Config.KICK_CHARGE_RATE = 155     -- era 140 — carrega um pouquinho mais rápido
+Config.KICK_CHARGE_RATE = 217     -- ⚠️ v123: "40% mais rápido pra carregar o chute" (155 x 1.4) · era 140 antes de 155
 Config.KICK_STAMINA_COST = 10
 Config.KICK_UPWARD_BOOST = 0.18
 Config.CURVE_STRENGTH = 45
@@ -1742,6 +1742,11 @@ Config.VOLLEY_FRACO_FORCA = 55
 -- máxima (studs/s) da bola solta pra dar pra chutar/cabecear de primeira. A
 -- cabeçada aceita um pouco mais (cruzamento chega mais rápido que um passe).
 Config.PRIMEIRO_TOQUE_VEL_MAX = 80
+-- ⚠️ v123 — PEDIDO: "ficar um pouco mais fácil de pegar a bola, depender de menos força
+-- pra conseguir dominar só passando por cima". Velocidade máxima da bola solta que se
+-- domina SÓ encostando/passando nela (antes 30, fixo no BallController). Só o domínio
+-- passivo usa isto — goleiro, carrinho e defesa continuam com o valor antigo.
+Config.DOMINIO_VEL_MAX = 42
 Config.HEADER_VEL_MAX = 95
 
 -- ===== GRAVIDADE E JOGABILIDADE DA BOLA =====
@@ -1845,9 +1850,9 @@ Config.FLOW_CHARGE_ARMA = 5 -- efeito de Arma disparando numa ação / ativa usa
 Config.BALL_PHYSICAL_PROPERTIES = {
 	Density = 0.7,
 	Friction = 1.5,           -- era 1.15/0.95/0.85/0.7/0.55/0.35 — mais "grude" no chão, desliza menos
-	Elasticity = 0.65,        -- era 0.6/0.4 — quica mais
+	Elasticity = 0.78,        -- ⚠️ v123: "faça a bola quicar mais" · era 0.65/0.6/0.4
 	FrictionWeight = 4.2,     -- era 3.2/2.6/2.2/1.8/1.4/1 — domina de vez sobre o material do chão
-	ElasticityWeight = 1.6,   -- era 1.4/1
+	ElasticityWeight = 2.2,   -- ⚠️ v123: a elasticidade da bola manda mais no quique · era 1.6/1.4/1
 }
 
 -- ===== ⚠️ v20: SAÍDA LIMPA DO CHUTE ("a bola bate no corpo e para") =====
@@ -2112,7 +2117,7 @@ Config.TACKLE_VICTIM_STUN = 1.25
 -- PEDIDO: antes não tinha cooldown nenhum (só o custo de stamina
 -- segurava, igual o sprint) — dava pra spamar a tecla. Agora tem um
 -- cooldown FIXO de 4s por tentativa, acertando ou errando.
-Config.TACKLE_COOLDOWN = 4.2 -- ⚠️ v111: "coloca um pouco mais de cooldown pro carrinho, tipo 0.2 segundos a mais"
+Config.TACKLE_COOLDOWN = 3 -- ⚠️ v123: "diminua o cooldown do carrinho pra 3 segundos" · era 4.2 (v111)
 -- ⚠️ v17 — PEDIDO: "quem tá com a bola fica 10% mais lento". Multiplicador
 -- aplicado em cima da velocidade final de quem está conduzindo (ver
 -- getPossessionMultiplier em PlayerSystems.legacy.luau). 1 desliga.
@@ -2185,7 +2190,7 @@ Config.TACKLE_DASH_DURATION = 0.5
 -- então o jogador continua andando normalmente durante o arranque.
 Config.DASH_DISTANCE = 16      -- studs percorridos a mais pelo arranque
 Config.DASH_DURATION = 0.25    -- segundos que o arranque leva
-Config.DASH_COOLDOWN = 2.5
+Config.DASH_COOLDOWN = 1.5 -- ⚠️ v123: "o dash pra 1.5 segundos" · era 2.5
 Config.DASH_STAMINA_COST = 12
 
 -- Se o carrinho não rouba a posse nem chega na bola solta, o jogador

@@ -2778,7 +2778,8 @@ RunService.Heartbeat:Connect(function()
 	-- alta domina bola um pouco mais rápida). O corte global continua, só
 	-- que no teto MÁXIMO possível (Técnica 100) — acima disso ninguém pega.
 	local ballSpeed = ball.AssemblyLinearVelocity.Magnitude
-	if ballSpeed > LOOSE_BALL_PICKUP_MAX_SPEED * Config.TECHNIQUE_RECEIVE_SPEED_MULT_MAX then return end
+	-- ⚠️ v123: o domínio passivo usa Config.DOMINIO_VEL_MAX (mais fácil de pegar)
+	if ballSpeed > (Config.DOMINIO_VEL_MAX or LOOSE_BALL_PICKUP_MAX_SPEED) * Config.TECHNIQUE_RECEIVE_SPEED_MULT_MAX then return end
 
 	local bestPlayer, bestDistance = nil, math.huge
 	for _, plr in ipairs(Players:GetPlayers()) do
@@ -2794,7 +2795,7 @@ RunService.Heartbeat:Connect(function()
 		-- ⚠️ NOVO: Técnica escala domínio/primeiro toque (raio), recepção
 		-- (velocidade de bola aceitável) e bola aérea (altura) — 1.0x em 50.
 		local technique = getTechnique(plr)
-		if ballSpeed > LOOSE_BALL_PICKUP_MAX_SPEED * Config.AttributeCurve(technique, Config.TECHNIQUE_RECEIVE_SPEED_MULT_MIN, Config.TECHNIQUE_RECEIVE_SPEED_MULT_MAX) then continue end
+		if ballSpeed > (Config.DOMINIO_VEL_MAX or LOOSE_BALL_PICKUP_MAX_SPEED) * Config.AttributeCurve(technique, Config.TECHNIQUE_RECEIVE_SPEED_MULT_MIN, Config.TECHNIQUE_RECEIVE_SPEED_MULT_MAX) then continue end
 
 		local radius = Config.POSSESSION_PICKUP_RADIUS * Config.AttributeCurve(technique, Config.TECHNIQUE_PICKUP_RADIUS_MULT_MIN, Config.TECHNIQUE_PICKUP_RADIUS_MULT_MAX)
 		if _G.GetPulsePickupRadiusAdd then radius += _G.GetPulsePickupRadiusAdd(plr) end
