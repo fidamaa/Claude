@@ -3602,7 +3602,8 @@ Remotes.UpdateKickCharging.OnServerEvent:Connect(function(player, carregando)
 	end
 end)
 
-Remotes.KickBall.OnServerEvent:Connect(function(player, chargedForce, targetPoint, noAr)
+-- (⚠️ v120b: com nome em _G pra dar pra testar o chute pelo servidor; sem local novo no topo)
+_G.ProcessarChuteServidor = function(player, chargedForce, targetPoint, noAr)
 	if _G.HissatsuCutsceneActive then return end -- ⚠️ v87: ninguém age durante a cutscene de Hissatsu
 	if isStunned(player) then return end
 	-- ⚠️ v24: com uma Hissatsu de bola em andamento, a bola não sai do pé por
@@ -3896,8 +3897,12 @@ Remotes.KickBall.OnServerEvent:Connect(function(player, chargedForce, targetPoin
 	-- exatamente na distância do ponto mirado (banana que contorna quem está no
 	-- meio e chega onde você mirou). Lado: A/D segurando escolhe; sem segurar,
 	-- no chute a gol curva de FORA pra DENTRO (e no passe, pela direita).
-	if armaDoChute and armaDoChute.Curva and _G.ArmaAplicarCurva then
-		_G.ArmaAplicarCurva(player, targetPoint, armaDoChute.Curva, kickTrigger == "KickAtGoal")
+	-- ⚠️ v120b: a curva vem de QUALQUER arma equipada com Curva (não só da que
+	-- "ganhou" o CheckInstinct — ver _G.CurvaDaArmaEquipada)
+	local curvaDoChute = armaDoChute and armaDoChute.Curva
+		or (kickTrigger and _G.CurvaDaArmaEquipada and _G.CurvaDaArmaEquipada(player, kickTrigger))
+	if curvaDoChute and _G.ArmaAplicarCurva then
+		_G.ArmaAplicarCurva(player, targetPoint, curvaDoChute, kickTrigger == "KickAtGoal")
 	end
 	if armaDoChute and armaDoChute.CompanheiroForcaMult and kickTrigger == "KickAtTeammate" and _G.SetPulseTeammateBuff then
 		local maisPerto, menor = nil, 18
@@ -3911,7 +3916,8 @@ Remotes.KickBall.OnServerEvent:Connect(function(player, chargedForce, targetPoin
 		end
 		if maisPerto then _G.SetPulseTeammateBuff(maisPerto, armaDoChute.CompanheiroForcaMult, 6) end
 	end
-end)
+end
+Remotes.KickBall.OnServerEvent:Connect(function(...) return _G.ProcessarChuteServidor(...) end)
 
 -- ===== CABEÇADA =====
 Remotes.AttemptHeader.OnServerEvent:Connect(function(player, targetPoint)
@@ -6849,7 +6855,7 @@ end)()
 			-- RUMO da bola que gira: 0° até 35% do caminho, sobe suave até o máximo em
 			-- 70% e daí segue RETA no rumo novo (vale pra chute fraco ou forte — conta
 			-- pela distância andada até o ponto mirado).
-			local anguloMax = math.rad(math.clamp(8 * curva, 10, 30)) -- Rin (Curva 3) = 24°
+			local anguloMax = math.rad(math.clamp(10 * curva, 12, 34)) -- Rin (Curva 3) = 30° (⚠️ v120b: era 24°, "a curva não aparece")
 			curveGeneration += 1
 			local minhaCurvaGol = curveGeneration
 			local origem = ball.Position

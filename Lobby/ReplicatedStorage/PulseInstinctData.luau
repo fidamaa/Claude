@@ -1734,10 +1734,13 @@ Data.Instincts = {
 		-- vezes buga". Agora é AUTOMÁTICO: todo chute a gol de longe curva, e a
 		-- bola sai pelo lado livre e contorna quem está no caminho (ou vem de
 		-- fora pra dentro do canto). A/D só se estiver andando bem de lado.
-		Description = "Tiro Destruidor (Rin Itoshi): todo chute a gol a mais de 25 studs sai CURVO, sozinho — a bola abre pelo lado livre, contorna o defensor ou o goleiro que estiver no caminho e volta pro ponto que você mirou. Não precisa apertar nada.",
-		Passiva = "Chute a gol a mais de 25 studs do gol: a bola curva sozinha em volta de quem está no caminho até o ponto mirado, +10% de força e mira mais limpa. (Andando bem de lado com A/D, você força o lado da curva.)",
+		-- ⚠️ v120b — PEDIDO: "o chute do Rin não faz curva, vai reto". Só valia a mais de
+		-- 25 studs do gol (chute de perto saía reto): agora TODO chute a gol curva — sai
+		-- reto na mira e de 35% a 70% do caminho vira pro lado (A/D escolhe o lado).
+		Description = "Tiro Destruidor (Rin Itoshi): todo chute a gol sai reto na sua mira e, no meio do caminho, CURVA pro lado (de 35% a 70% da trajetória vai virando, depois segue reto) — pra esquerda ou pra direita conforme você anda (A/D); parado, ela sai pelo lado livre de quem está no caminho.",
+		Passiva = "Todo chute a gol: curva no meio do caminho (A/D escolhe o lado), +10% de força e mira mais limpa.",
 		Trigger = "KickAtGoal",
-		Condition = { MinDistanceToGoal = 25 },
+		Condition = {},
 		Effect = { Curva = 3, ForceMult = 1.1, AimDeviationMult = 0.25 }, -- ⚠️ v118: "curva 3x maior" (era 1)
 	},
 

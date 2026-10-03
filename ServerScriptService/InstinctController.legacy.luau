@@ -323,6 +323,20 @@ _G.GetEquippedInstincts = function(player)
 	return EquippedList[player] or {}
 end
 
+-- ⚠️ v120b — PEDIDO: "o chute do Rin não faz curva, vai reto". O _G.CheckInstinct
+-- devolve só a PRIMEIRA arma equipada cuja condição bate — com Ego do Rei/Zona de
+-- Ouro/Olho de Predador junto, o Tiro Destruidor era engolido. A curva agora é lida
+-- à parte: qualquer arma equipada com Effect.Curva e o mesmo Trigger do chute.
+_G.CurvaDaArmaEquipada = function(player, trigger)
+	for _, n in ipairs(EquippedList[player] or {}) do
+		local def = findInstinct(n)
+		if def and def.Effect and def.Effect.Curva and def.Trigger == trigger then
+			return def.Effect.Curva
+		end
+	end
+	return nil
+end
+
 -- ⚠️ v120b — COUNTERS AUTOMÁTICOS (Monstro do Drible, Última Barreira): a arma
 -- reage sozinha quando o lance acontece. Se `nome` está equipada e fora do
 -- cooldown, marca o cooldown (igual a ativa normal, com o HUD) e devolve o
