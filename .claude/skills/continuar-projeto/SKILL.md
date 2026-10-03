@@ -40,13 +40,25 @@ description: Passagem de bastão do jogo de futebol Roblox (Inazuma Eleven + Blu
   causa disso e "sumiu" — corrigido pra `.local.luau`.)
 - Pra conferir Studio x disco: some um hash por script dos dois lados (exemplo
   usado: `scratchpad/hash_disco.py` + um execute_luau com o mesmo hash).
-- `execute_luau` NÃO pode `require` módulo do jogo, disparar remote nem usar
-  HttpService; o `_G` dele é separado do jogo. Pra testar: um gancho temporário
-  `--TESTE_INICIO ... --TESTE_FIM` num script do servidor que escuta um atributo do
-  `workspace`; tire antes do commit. Cutscene: atributo `CutsceneDebugT` no
-  LocalPlayer congela o tempo.
-- O usuário pediu: NÃO testar no Play sem ele pedir ("deixa que eu testo"). Termine,
-  avise, e espere ele aprovar antes de partir pro próximo item.
+- `execute_luau` não dispara remote nem usa HttpService; o `_G` dele é separado do
+  jogo. No **Edit** dá pra `require` um módulo (use `require(modulo:Clone())` pra pegar a
+  versão nova) — foi assim que a MiraPrecisa foi testada com uma câmera falsa. Pra testar
+  no Play: gancho temporário `--TESTE_INICIO ... --TESTE_FIM` no FIM do
+  `PulseController` escutando um atributo do `workspace` (modelos usados na v122:
+  `TesteFlow` → `_G.TocarCenaFlow(p)`; `TesteCena` = nome da cutscene →
+  `_G.SetBallOwnerForced(p)` + `playHissatsuCutscene(p, {Cutscene = nome}, onDone)`, e no
+  onDone um chute de verdade: `_G.ProcessarChuteServidor` ou `_G.PulseExecuteShot(p,
+  effect, raridade)` com `LastAimPoint[p]` setado). TIRE antes do commit.
+  - Mudou arquivo? PARE o Play (o sync só entra no Edit), confira a fonte no Edit e dê
+    Play de novo.
+  - `CutsceneDebugT` no LocalPlayer congela a cutscene no cliente — e ela NÃO termina
+    enquanto congelada: a próxima cutscene do teste fica esperando. Tire o atributo
+    (`nil`) antes de disparar outra.
+  - Câmera pra ver um efeito de lado: `task.spawn` no cliente que espera a peça aparecer
+    e põe a câmera em Scriptable por 2-3s (depois volta pra Custom).
+- Testes: quando o usuário deixa o Studio aberto e pede ("trabalha a noite toda"),
+  teste no Play com screenshots e só mande quando estiver bom. Sem esse pedido: termine,
+  avise e deixe ele testar ("deixa que eu testo").
 - Imagens: gere com PIL (skill `particulas-roblox`), sirva com
   `python -m http.server 8766 --bind 127.0.0.1` na pasta das imagens e suba com
   `upload_image`. ÁUDIO o MCP não sobe: gere o mp3 em `_upload/` (fora do git), o
@@ -117,40 +129,57 @@ description: Passagem de bastão do jogo de futebol Roblox (Inazuma Eleven + Blu
    o vídeo transforma).
 5. Testes que só o usuário faz (com 2+ jogadores): armas/counters, portal da Queda
    Celestial em voo, Rin com companheiro real.
-6. **Lista da noite de 03/10 (v122)** — o usuário deixou o Studio aberto. Ordem: FLOW
-   primeiro (testar com screenshots e só mandar quando estiver MUITO bom), depois o resto.
-   Ver a seção "Lista da noite" abaixo; marcar ✅ conforme fizer.
+6. ✅ **Lista da noite de 03/10 (v122)** — toda feita (ver abaixo). Próximo: o que o
+   usuário disser depois de testar; conferir as poses de chute das outras hissatsus (G7).
 
-## Lista da noite (v122) — palavras do usuário resumidas
-FLOW do Isagi:
-- F1 Rever o vídeo `E:\O Gênio da Adaptabilidade rBlueLock.mp4` coisa por coisa (quadros a
-  0,1s em `scratchpad/flow_isagi/q`) e conferir se falta algo; melhorar o que der e
-  anotar na skill `flow-cutscene`.
-- F2 Braços da cena final: "estão muito pra cima e muito pra frente; o OMBRO, o braço
-  inteiro com o ombro, tem que estar mais pra TRÁS".
-- F3 Espiral: "ainda está cortando; é pra começar a aparecer na tela e ir aumentando e
-  diminuindo o campo de visão, AINDA no cara — você ainda vendo o jogador correndo".
-- F4 Corrida do Rin (e corrida em geral) mais FLUIDA — pesquisar ciclo de corrida.
-- F5 Mais efeitos quando ele levanta.
-- F6 Brilho BRANCO do olho mais forte; a íris girar mais rápido ainda.
-- F7 O jogador se ARREPIAR.
-DEPOIS:
-- G1 Chute que vai pra esquerda/direita sozinho (colega). Curva do Rin: "vou pro lado
-  segurando o botão, solto, e é pra curvar" — só com A/D; voltar pra 24° mas virar de verdade.
-- G2 GK: dash pra frente e dive pro lado levantam mais DEVAGAR; punição por errar o dive;
-  dive pode ir um pouco mais longe.
-- G3 Tornado de Fogo (e Dragão / quem usa): na subida abrir as pernas devagar; no chute só a
-  perna do chute mexe, a outra vai pra trás (pose de bicicleta). (Pedido explícito —
-  pode mexer no Tornado nisso.)
-- G4 Queda Celestial: o rastro dura mais; é um CILINDRO (não cone) com um universo dentro
-  (planetas, estrelas saltando) sem sair do cilindro.
-- G5 Bug: chute lendário (Dragão) contra defesa lendária (Punho da Justiça) → força caiu
-  de 180 pra 0 na hora.
-- G6 Chutes em conjunto (menos a Zona Morta): companheiros mais LONGE do jogador.
-- G7 Chutes: só UM pé se move (conferir as poses/"estátuas" de chute).
-- G8 Fúria Glacial: não cair no chão — dar um MORTAL e chutar; a bola faz uma leve curva
-  e depois vai 100% reto na direção mirada.
-- G9 Hissatsus aéreas: de longe a mira sobe demais — baixar/alinhar a mira.
+## Lista da noite (v122) — ✅ TUDO FEITO E ENVIADO (03/10), falta o usuário testar em partida
+Flow do Isagi (commit 36c3d7d), testado no Studio com screenshots:
+- ✅ F1 vídeo revisto (ordem bate; o trecho dos braços em X foi tirado a pedido antes).
+- ✅ F2 braços do dash pra trás e um pouco abaixo da horizontal (`FI_DASH` −40/±18; final
+  −44/±20). De frente em 3/4 eles parecem abertos — é a câmera; de lado lê certo.
+- ✅ F3 espiral entra pelas BORDAS desde 7.6 (escala 1.9 → 1.2) e aperta em volta do Rin;
+  vinheta em `RelativeXY` 1.6 → 1.02; miolo só fecha 8.3-8.52; preto só depois.
+- ✅ F4 corrida do Rin (ciclo de 4 poses na Catmull-Rom), Rin mais longe e em silhueta
+  escura (`Clones.Cor` 16,28,44 / Fill 0.35); câmera POV mais aberta (58 → 50).
+- ✅ F5 levantada: pedrinhas, anéis, vapor; riscos do ar RETOS (Rotation 0).
+- ✅ F6 brilho branco (PointLight + miolo branco), íris 85°/s. ✅ F7 arrepio.
+Depois:
+- ✅ G1 (628d55a) curva do Rin SÓ com A/D segurado ao soltar: o cliente manda o movimento
+  (`FootballClient.movimentoDoChute`, 4º parâmetro do `KickBall`); sem A/D o chute a gol
+  sai reto (era o "vai pro lado sozinho"); 24°. O remote tem parâmetros explícitos.
+- ✅ G2 (13b348c) dive pro lado 54; levantar mais devagar (GKDive 1.6s, GKForwardDash
+  1.5s); errou dive/avanço = stun `GK_DIVE_ERRO_STUN` 1.0 / `GK_FORWARD_ERRO_STUN` 0.85.
+- ✅ G3 (334f6f9) Tornado/Dragão: pernas abrem 17° → 78° na subida; no chute a direita fica
+  parada ~45° pra trás e só a esquerda chicoteia (medido).
+- ✅ G4 (042d0c7) Queda Celestial: `tuboPortal` — CILINDRO 3D (peças Cylinder, cascas
+  ForceField ciano/magenta + espaço escuro) do ponto do chute até a bola, 5.5s; dentro:
+  estrelinhas piscando, estrelas de 4 pontas SALTANDO, nebulosas e planetas, tudo no raio.
+  O usuário viu e aprovou o formato; pediu mais cara de universo (feito).
+- ✅ G5 (ec74b71) duelo: o IMPACTO da defesa tira no máximo 55% da força do chute
+  (`DEFESA_IMPACTO_MAX_DO_CHUTE`, `duelo.Impacto`) — lendária x lendária zerava 180 na hora.
+- ✅ G6 (f6c40f0) parceiros mais longe: Raio Um, Galáxia, Dragão, Gaia (Zona Morta não).
+- ✅ G7 (d71989a) chute normal: perna de apoio plantada no R6. FALTA conferir as poses de
+  chute de CADA hissatsu (só o Tornado/Dragão e o chute normal foram revistos).
+- ✅ G8 (736d2fd) Fúria Glacial: mortal grupado no AR (sem tocar o gelo) e `CurvaInicial`
+  (11°, 30 studs: sai ~1,8 stud pro lado, volta pra linha e segue reta — medido).
+- ✅ G9 (0d18bb8) mira: ponto atrás do gol (arquibancada/céu) vira o cruzamento do raio do
+  cursor com a BOCA do gol (`MiraPrecisa`) — vale pra todo chute.
+
+## Lições da v122 (não repetir)
+- `emissor(...)` com `Taxa = 0` nasce com `Enabled = false`: quem controla `Rate` depois
+  tem que ligar `Enabled = true` (as estrelas do portal da Queda NUNCA apareceram por isso).
+- Textura de partícula inexistente (ex.: `TEX.Brilho`, que não existe) = partícula
+  invisível. Confira a chave na tabela `TEX` (Fogo, Faisca, Fumaca, Floco, Bolha, Estrela, Nuvem).
+- `Beam` com `FaceCamera` é sempre uma FAIXA chata — pra "cilindro/tubo" use peça
+  `Shape = Cylinder` (eixo X) com ForceField nas cascas.
+- Efeito de voo que começa no impacto da cutscene: a bola ainda está no ponto da CENA (lá
+  no alto); marque a origem quando ela ganhar velocidade de verdade.
+- Imagem quadrada na tela (`RelativeXX`) girando: o canto da tela fica a ~0,57·largura do
+  centro — abaixo disso os cantos abrem.
+- R6 sem joelho: "perna parada" = quadril compensando o `Root` (e o R6 encolhe quadril
+  pra frente ×0.7 no `adaptarR6`).
+- BallController continua no limite de 200 locals: estado novo vai em `_G` (ex.:
+  `_G.VooCurvaInicial`).
 
 ## Arquivos-chave
 - `ServerScriptService/BallController.legacy.luau` (bola, chute, posse, armas ativas;
