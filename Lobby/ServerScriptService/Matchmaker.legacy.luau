@@ -44,6 +44,25 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local MemoryStoreService = game:GetService("MemoryStoreService")
+-- ⚠️ v123 — PEDIDO: "puxamos uma partida e não puxou servidor BR (5 amigos no Brasil);
+-- tenha certeza que puxe servidor BR". O Roblox NÃO deixa escolher a região do servidor:
+-- o servidor reservado sobe perto de quem CHEGA PRIMEIRO no teleporte. Então a partida
+-- leva a região de cada jogador e a da MAIORIA; quem é da maioria teleporta na hora e os
+-- de outras regiões esperam um pouco (ver onMatchFound) — o servidor nasce perto da maioria.
+local regiaoPorUsuario = {} -- [tostring(userId)] = país (LocalizationService), vindo da fila
+local function regioesDaPartida(assignments)
+	local regioes, conta = {}, {}
+	for uid in pairs(assignments) do
+		local r = regiaoPorUsuario[tostring(uid)] or "UNKNOWN"
+		regioes[tostring(uid)] = r
+		if r ~= "UNKNOWN" then conta[r] = (conta[r] or 0) + 1 end
+	end
+	local maioria, max = nil, 0
+	for r, n in pairs(conta) do
+		if n > max then maioria, max = r, n end
+	end
+	return regioes, maioria
+end
 local MessagingService = game:GetService("MessagingService")
 local TeleportService = game:GetService("TeleportService")
 local HttpService = game:GetService("HttpService")
@@ -255,6 +274,9 @@ local function pullNewGroups(modeId)
 		pulled += 1
 
 		if typeof(item) == "table" and typeof(item.Members) == "table" then
+			for _, uid in ipairs(item.Members) do
+				regiaoPorUsuario[tostring(uid)] = typeof(item.Region) == "string" and item.Region or "UNKNOWN"
+			end
 			table.insert(pendingPool[modeId], {
 				LeaderUserId = item.LeaderUserId,
 				Members = item.Members,
@@ -407,6 +429,7 @@ local function tryCloseMatch(modeId)
 		AccessCode = accessCode,
 		Assignments = assignments,
 	}
+	payload.Regioes, payload.RegiaoMaioria = regioesDaPartida(assignments) -- ⚠️ v123
 
 	local publishOk, publishErr = pcall(function()
 		MessagingService:PublishAsync(Config.MATCH_FOUND_TOPIC, payload)
@@ -527,6 +550,7 @@ local function tryCloseLastResort(modeId)
 		AccessCode = accessCode,
 		Assignments = assignments,
 	}
+	payload.Regioes, payload.RegiaoMaioria = regioesDaPartida(assignments) -- ⚠️ v123
 
 	local publishOk, publishErr = pcall(function()
 		MessagingService:PublishAsync(Config.MATCH_FOUND_TOPIC, payload)
@@ -669,6 +693,7 @@ local function tryCloseFreeRoom(modeId)
 		AccessCode = accessCode,
 		Assignments = assignments,
 	}
+	payload.Regioes, payload.RegiaoMaioria = regioesDaPartida(assignments) -- ⚠️ v123
 
 	local publishOk, publishErr = pcall(function()
 		MessagingService:PublishAsync(Config.MATCH_FOUND_TOPIC, payload)
@@ -787,12 +812,33 @@ local function onMatchFound(message)
 		Tutorial = payload.Tutorial == true, -- ⚠️ v104: partida de tutorial (TutorialLobbyServer)
 	})
 
-	local ok, err = pcall(function()
-		TeleportService:TeleportAsync(Config.GAME_PLACE_ID, localPlayers, teleportOptions)
-	end)
-	if not ok then
-		warn("Matchmaker: falha ao teleportar jogadores locais pra partida: " .. tostring(err))
+	-- ⚠️ v123: quem é da região da MAIORIA vai primeiro (o servidor sobe perto dele);
+	-- os de outras regiões esperam ATRASO_OUTRA_REGIAO segundos.
+	local primeiros, depois = {}, {}
+	local maioria = payload.RegiaoMaioria
+	local regioes = typeof(payload.Regioes) == "table" and payload.Regioes or {}
+	for _, plr in ipairs(localPlayers) do
+		local r = regioes[tostring(plr.UserId)]
+		if maioria and r and r ~= "UNKNOWN" and r ~= maioria then
+			table.insert(depois, plr)
+		else
+			table.insert(primeiros, plr)
+		end
 	end
+	local function teleportar(lista)
+		if #lista == 0 then return end
+		local ok, err = pcall(function()
+			TeleportService:TeleportAsync(Config.GAME_PLACE_ID, lista, teleportOptions)
+		end)
+		if not ok then
+			warn("Matchmaker: falha ao teleportar jogadores locais pra partida: " .. tostring(err))
+		end
+	end
+	if #depois > 0 then
+		task.delay(3, function() teleportar(depois) end)
+		if #primeiros == 0 then return end
+	end
+	teleportar(primeiros)
 end
 
 -- ⚠️ v104: a sala personalizada (MatchmakingQueue) teleporta direto por
