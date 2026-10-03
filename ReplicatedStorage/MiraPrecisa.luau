@@ -133,11 +133,49 @@ function MiraPrecisa.Calcular(camera, x, y, opcoes)
 		end
 	end
 
+	local acertouGol = ponto ~= nil
 	if not ponto then ponto = pontoMundo end
 
 	-- 3) mirou no céu / no nada: longe, na direção exata do cursor
 	if not ponto then
 		ponto = raio.Origin + direcao * ALCANCE
+	end
+
+	-- ⚠️ v122 — PEDIDO: "nas Hissatsus aéreas, de longe a mira sobe demais — baixar /
+	-- alinhar". De longe o cursor quase nunca fica EXATAMENTE no gol: um pouco acima
+	-- dele o ponto virava a arquibancada lá atrás (ou o céu, a 2000 studs) e a reta
+	-- da bola — que nas aéreas sai lá do alto — passava por cima do travessão. Agora,
+	-- se o ponto ficou ATRÁS da boca de um gol, o alvo é onde o raio do cursor CRUZA o
+	-- plano da boca do gol: a bola passa exatamente onde o cursor mostrava, de
+	-- qualquer altura que ela saia.
+	if not acertouGol then
+		local distPonto = (ponto - raio.Origin).Magnitude
+		for _, g in ipairs(gols()) do
+			-- normal da boca = o eixo horizontal mais FINO da peça do gol
+			local n = (g.Size.X < g.Size.Z) and g.CFrame.RightVector or g.CFrame.LookVector
+			n = Vector3.new(n.X, 0, n.Z)
+			if n.Magnitude < 0.01 then continue end
+			n = n.Unit
+			local den = direcao:Dot(n)
+			if math.abs(den) < 1e-3 then continue end
+			-- (a peça do gol é uma caixa: o plano é a FACE do lado de quem mira, a boca)
+			local profundidade = math.min(g.Size.X, g.Size.Z)
+			local ladoCamera = (raio.Origin - g.Position):Dot(n) >= 0 and 1 or -1
+			local boca = g.Position + n * (profundidade / 2) * ladoCamera
+			local t = (boca - raio.Origin):Dot(n) / den
+			if t <= 0 or t >= distPonto then continue end -- o plano não está entre a câmera e o ponto
+			local cruza = raio.Origin + direcao * t
+			local largura = math.max(g.Size.X, g.Size.Z)
+			local lateral = math.abs((cruza - boca):Dot(Vector3.yAxis:Cross(n)))
+			-- só perto do gol (até 1,5 largura pro lado e 40 de altura)
+			if lateral <= largura * 1.5 and cruza.Y - g.Position.Y < 40 then
+				local chao = alturaDoChao(cruza, ignorar)
+				local raioBola = bola and bola.Size.Y / 2 or 0.85
+				if chao and cruza.Y < chao + raioBola then cruza = Vector3.new(cruza.X, chao + raioBola, cruza.Z) end
+				ponto = cruza
+				break
+			end
+		end
 	end
 
 	-- nunca pra trás de quem chuta (chute normal)
