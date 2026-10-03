@@ -3449,80 +3449,177 @@ end
 
 
 -- ============================================================
--- 💥 FLOW DO SHIDOU — cena de ativação (⚠️ v113)
+-- 💥 FLOW DO SHIDOU — "BIG BANG DRIVE" (⚠️ v124) — cena de ativação + CHUTE
 -- ============================================================
--- A melhor cena dele: o BIG BANG. Agachado, aponta pro alto com o sorriso de
--- demônio; salta dando um mortal; voleio no ar numa bola e tudo EXPLODE
--- (esfera rosa e amarela, anéis, estrelas); cai no clarão e fecha rindo de
--- braços abertos.
-local FS = {}
-Cutscenes.Flow_Shidou = FS
-FS.Motor = "V2"
-FS.Efeitos = "FlowShidou"
-FS.KickFoot = "Right"
-FS.Duration = 12
-FS.ImpactTime = 11.3
-FS.Explode = 6.6
-FS.ColarNoPe = false
-FS.TitleText = "FLOW · SHIDOU RYUSEI"
-FS.Tema = {
-	Titulo = { rgb(255, 250, 230), rgb(255, 110, 190), rgb(255, 230, 90) },
-	Contorno = rgb(40, 0, 25), Flash = rgb(255, 230, 245),
-	Tint = rgb(255, 245, 250), Saturation = 0.25, Contrast = 0.18, Brightness = 0,
-}
-FS.Phases = {
-	Aponta = { 0, 2 }, Rosto = { 2, 3.5 }, Salta = { 3.5, 6.1 }, Kick = { 6.1, FS.Explode }, Explode = { FS.Explode, 9 },
-	Final = { 9, 12 }, Impact = { FS.ImpactTime, FS.Duration },
-}
-local FS_ROOT = { { 0, V3(0, -0.8, 0) }, { 3.5, V3(0, -0.8, 0) }, { 3.9, V3(0, -1, 0) }, { 5.2, V3(0, 7, -2) }, { 6.6, V3(0, 8.5, -3.5) },
-	{ 8.6, V3(0, 0, -5) }, { 12, V3(0, 0, -5) } }
-local FS_PITCH = { { 0, 0 }, { 4.0, 0 }, { 5.4, 360 }, { 12, 360 } } -- mortal pra trás
-function FS.RootPosition(t) return sample(FS_ROOT, t) end
-function FS.RootCFrame(t) return CFrame.new(FS.RootPosition(t)) * CFrame.Angles(rad(sample(FS_PITCH, t)), 0, 0) end
-function FS.BallPosition(_t, s) return s or V3(0, -2.3, -1.8) end
-function FS.BallVisible(t) return t < 0.05 end
-function FS.BallSpin() return 0 end
-local FS_POSE = {
-	{ 0.00, { Root = { -20, 0, 0 }, Neck = { 30, 0, 0 }, RHip = { 60, 0, 12 }, LHip = { 60, 0, -12 },
-		RShoulder = { 170, 0, 10 }, LShoulder = { -10, 0, -30 } } }, -- agachado apontando pro alto
-	{ 2.00, { Root = { -20, 0, 0 }, Neck = { 30, 0, 0 }, RHip = { 60, 0, 12 }, LHip = { 60, 0, -12 },
-		RShoulder = { 175, 0, 8 }, LShoulder = { -10, 0, -30 } } },
-	{ 3.50, { Root = { -18, 0, 0 }, Neck = { 10, 0, 0 }, RHip = { 60, 0, 12 }, LHip = { 60, 0, -12 },
-		RShoulder = { -30, 0, 30 }, LShoulder = { -30, 0, -30 } } },
-	{ 4.20, { Root = { 0, 0, 0 }, Neck = { 20, 0, 0 }, RHip = { 80, 0, 0 }, LHip = { 80, 0, 0 },
-		RShoulder = { 60, 0, 40 }, LShoulder = { 60, 0, -40 } } }, -- grupado no mortal
-	{ 5.40, { Root = { 0, 0, 0 }, Neck = { 20, 0, 0 }, RHip = { 80, 0, 0 }, LHip = { 80, 0, 0 },
-		RShoulder = { 60, 0, 40 }, LShoulder = { 60, 0, -40 } } },
-	{ 6.10, { Root = { 20, 0, 0 }, Neck = { -10, 0, 0 }, RHip = { -50, 0, 0 }, LHip = { 60, 0, 0 },
-		RShoulder = { 20, 0, 90 }, LShoulder = { 20, 0, -90 } } }, -- arma o voleio
-	{ FS.Explode, { Root = { 25, 0, 0 }, Neck = { -15, 0, 0 }, RHip = { 115, 0, 0 }, LHip = { -20, 0, 0 },
-		RShoulder = { 20, 0, 95 }, LShoulder = { 20, 0, -95 } } }, -- BIG BANG
-	{ 8.60, { Root = { -12, 0, 0 }, Neck = { 10, 0, 0 }, RHip = { 40, 0, 10 }, LHip = { 40, 0, -10 },
-		RShoulder = { 60, 0, 70 }, LShoulder = { 60, 0, -70 } } },
-	-- rindo, braços abertos, corpo pra trás
-	{ 9.40, { Root = { 18, 0, 0 }, Neck = { 30, 0, 0 }, RHip = { -5, 0, 12 }, LHip = { -5, 0, -12 },
-		RShoulder = { 40, 0, 120 }, LShoulder = { 40, 0, -120 } } },
-	{ 12.00, { Root = { 20, 0, 0 }, Neck = { 34, 0, 0 }, RHip = { -5, 0, 12 }, LHip = { -5, 0, -12 },
-		RShoulder = { 45, 0, 125 }, LShoulder = { 45, 0, -125 } } },
-}
-function FS.Pose(t) return samplePose(FS_POSE, t) end
-function FS.Camera(t, rootPos)
-	local cabeca = rootPos + V3(0, 1.5, 0)
-	if t < 2 then
-		local u = smooth(phase(t, 0, 2))
-		return V3(2.2, -1.4, -6.5):Lerp(V3(1.8, -1.2, -5.5), u), V3(0, 0.8, 0), 55
-	elseif t < 3.5 then
-		local u = smooth(phase(t, 2, 3.5))
-		return cabeca + V3(0.35, -0.3, -4):Lerp(V3(0.25, -0.25, -3.1), u), cabeca, 38
-	elseif t < FS.Explode then
-		return V3(10, 3.5, -2), rootPos + V3(0, 0, -1), 58
-	elseif t < 9 then
-		-- aberta: a explosão inteira
-		local u = smooth(phase(t, FS.Explode, 9))
-		return V3(0, 5, -26):Lerp(V3(0, 4, -22), u), V3(0, 6, -4), 60
+-- PEDIDO: refazer o Flow do Shidou igual ao do Isagi (baseado no vídeo, quadro a
+-- quadro) — "Shidou's Big Bang Drive Goal · BLUE LOCK 2nd Season", 0-1:08 — SEM os
+-- trechos de óvulo/espermatozoide ("tira as partes de espermatozoide, é um jogo no
+-- roblox"). E: "o flow dele vem com a ação de chute dele: pra onde a pessoa mirar o
+-- jogador vai usar o flow e dar a cutscene pra chutar e ativar o flow ao mesmo tempo".
+--
+-- TABELA DE PLANOS (tempo no vídeo → cena de 12s; ✂️ = cortado do vídeo):
+--   Chega    0-1.4   0-4.6s     a bola cai do alto na frente dele, câmera baixa (campo, dia)
+--   Aura     1.4-3.0 6.0-10.5s  a aura rosa EXPLODE no corpo; fundo escuro de estrelas;
+--                               ele inclinado pra trás, braço aberto (contorno rosa)
+--   Rosto    3.0-4.4 13-17.9s   close no rosto, olhos arregalados (câmera segue a cabeça)
+--   Olho     4.4-5.4 18-23.2s   extremo close nos olhos: o BRANCO acende e brilha
+--   Tunel    5.4-6.3 23.5-27.5s tela preta → o branco do olho cresce no centro e toma a tela
+--                               (✂️ 4.7-5.9s e 27.6-27.9s: óvulo/espermatozoide)
+--   Peito    6.3-7.5 27.9-30.1s de frente na altura do peito, braços abertos: risco rosa
+--                               atravessa o peito e a aura ESTOURA  (✂️ 30.2-30.6s)
+--   Chamas   7.5-8.8 30.7-34.9s ele no ar inclinado pra trás, câmera de baixo; chamas rosa
+--                               escorrendo das pernas e raios de luz atrás (✂️ 34.2s,
+--                               35.9-37.1s, 39.2-42.1s)
+--   BigBang  8.8-9.5 42.2-47s   estádio ESCURO com brilhos, o gol ao fundo ("Big Bang
+--                               Drive!"); a bola sobe na frente dele
+--   Kick     9.5-10.4 47-50s    salta de costas (mortal), bola acima: voleio de bicicleta;
+--                               a chuteira encontra a bola → ESTRELA rosa estoura
+--   Impact   10.4-12 50.1-56.9s a bola sai em linha reta pra onde ele mirou, rastro rosa;
+--                               ele termina o mortal e cai de pé (✂️ 64.3-65s)
+-- No último quadro o servidor solta a bola e o chute SAI (PulseController
+-- _G.TocarCenaFlow → ChuteNoFlow) e o Flow começa ao mesmo tempo (InstinctController).
+-- A câmera dos closes vem dos efeitos (FlowShidou.CameraMundo): segue a cabeça de verdade.
+do
+	local FS = {}
+	Cutscenes.Flow_Shidou = FS
+	FS.Motor = "V2"
+	FS.Efeitos = "FlowShidou"
+	FS.KickFoot = "Right"
+	FS.Duration = 12
+	FS.ImpactTime = 10.4 -- o voleio: a chuteira acerta a bola
+	FS.ColarNoPe = true
+	FS.KickContactDir = V3(0, 0.25, -1).Unit
+	FS.SemTremidaImpacto = false
+	FS.ChuteNoFlow = true -- ⚠️ v124: ativar o Flow = CHUTAR (a cena termina com a bola saindo pra mira)
+	FS.TitleText = "FLOW · SHIDOU RYUSEI"
+	FS.Tema = {
+		Titulo = { rgb(255, 250, 230), rgb(255, 90, 200), rgb(255, 230, 90) },
+		Contorno = rgb(40, 0, 25), Flash = rgb(255, 225, 245),
+		Tint = rgb(255, 245, 250), Saturation = 0.2, Contrast = 0.15, Brightness = 0,
+	}
+	FS.Phases = {
+		Chega = { 0, 1.4 }, Aura = { 1.4, 3.0 }, Rosto = { 3.0, 4.4 }, Olho = { 4.4, 5.4 }, Tunel = { 5.4, 6.3 },
+		Peito = { 6.3, 7.5 }, Chamas = { 7.5, 8.8 }, BigBang = { 8.8, 9.5 }, Kick = { 9.5, FS.ImpactTime },
+		Impact = { FS.ImpactTime, FS.Duration },
+	}
+
+	-- corpo: levita nas chamas, agacha, SALTA e faz o mortal (backflip) até o voleio
+	local FS_ALTURA = {
+		{ 0, 0 }, { 1.4, 0 }, { 1.8, 0.25 }, { 6.3, 0.25 }, { 7.6, 1.2 }, { 8.8, 1.2 },
+		{ 9.3, -0.35 }, { 10.15, 3.7 }, { FS.ImpactTime, 3.5 }, { 11.9, 0 }, { 12, 0 },
+	}
+	-- (andou um pouco pra frente no salto: a câmera recua junto)
+	local FS_Z = { { 0, 0 }, { 9.3, 0 }, { FS.ImpactTime, -2.2 }, { 12, -4.5 } }
+	local FS_PITCH = { { 0, 0 }, { 9.4, 0 }, { FS.ImpactTime, 115 }, { 11.9, 360 }, { 12, 360 } }
+	function FS.RootPosition(t)
+		local respira = (t < 9) and 0.04 * math.sin(t * 3) or 0
+		return V3(0, sample(FS_ALTURA, t) + respira, sample(FS_Z, t))
 	end
-	local u = smooth(phase(t, 9, 12))
-	return rootPos + V3(1.2, -1.6, -6):Lerp(V3(0.8, -1.3, -4.6), u), rootPos + V3(0, 1.3, 0), 55
+	function FS.RootCFrame(t) return CFrame.new(FS.RootPosition(t)) * CFrame.Angles(rad(sample(FS_PITCH, t)), 0, 0) end
+
+	-- bola: cai do alto, fica na frente dele; some nos closes (tampava o rosto/peito);
+	-- reaparece no estádio escuro, sobe pro voleio e sai pra frente (a mira)
+	local FS_BOLA_PARADA = V3(0.2, 0.1, -2.4)
+	local FS_BOLA_ALTO = V3(0.1, 4.4, -2.0)
+	local FS_BOLA_CONTATO = V3(0, 5.0, -2.4)
+	function FS.BallPosition(t, _s)
+		if t < 1.4 then
+			return V3(0.4, 9, -2.4):Lerp(FS_BOLA_PARADA, (t / 1.4) ^ 2)
+		elseif t < 8.8 then
+			return FS_BOLA_PARADA + V3(0, 0.08 * math.sin(t * 2.5), 0)
+		elseif t < 9.9 then
+			return FS_BOLA_PARADA:Lerp(FS_BOLA_ALTO, smooth(phase(t, 8.8, 9.9)))
+		elseif t < FS.ImpactTime then
+			return FS_BOLA_ALTO:Lerp(FS_BOLA_CONTATO, smooth(phase(t, 9.9, FS.ImpactTime)))
+		end
+		-- sai pra frente (-Z = pra onde ele mirou); o servidor continua dali
+		return FS_BOLA_CONTATO + V3(0, -1.0, -9) * easeOut(phase(t, FS.ImpactTime, FS.Duration))
+	end
+	function FS.BallVisible(t) return t < 3.0 or t >= 8.6 end
+	function FS.BallSpin(t) return (t >= FS.ImpactTime) and 14 or 3 end
+
+	-- R6: braço/perna RETOS. Braço pra fora com |rz| >= 40 em movimento (não entra no tronco).
+	-- Root rx+ inclina pra TRÁS; a perna fica reta compensando (Hip = -Root).
+	local FS_POSE = {
+		-- Chega: olha a bola cair, peso na frente
+		{ 0.00, { Root = { -3, 0, 0 }, Neck = { 25, 0, 0 }, RHip = { 3, 0, 8 }, LHip = { 3, 0, -8 },
+			RShoulder = { -10, 0, 22 }, LShoulder = { -10, 0, -22 } } },
+		{ 1.30, { Root = { -3, 0, 0 }, Neck = { 22, 0, 0 }, RHip = { 3, 0, 8 }, LHip = { 3, 0, -8 },
+			RShoulder = { -12, 0, 24 }, LShoulder = { -12, 0, -24 } } },
+		-- Aura: inclinado pra trás, um braço aberto, o outro caído (como no vídeo)
+		{ 1.70, { Root = { 16, 0, 0 }, Neck = { -6, 0, 0 }, RHip = { -18, 0, 12 }, LHip = { -8, 0, -12 },
+			RShoulder = { 20, 0, 52 }, LShoulder = { -25, 0, -62 } } },
+		{ 3.00, { Root = { 18, 0, 0 }, Neck = { -8, 0, 0 }, RHip = { -20, 0, 12 }, LHip = { -10, 0, -12 },
+			RShoulder = { 22, 0, 55 }, LShoulder = { -28, 0, -65 } } },
+		-- Rosto / Olho: cabeça erguida, braços caídos pra fora
+		{ 4.40, { Root = { 6, 0, 0 }, Neck = { 12, 0, 0 }, RHip = { -6, 0, 8 }, LHip = { -6, 0, -8 },
+			RShoulder = { 0, 0, 40 }, LShoulder = { 0, 0, -40 } } },
+		{ 5.40, { Root = { 4, 0, 0 }, Neck = { 14, 0, 0 }, RHip = { -4, 0, 8 }, LHip = { -4, 0, -8 },
+			RShoulder = { 0, 0, 48 }, LShoulder = { 0, 0, -48 } } },
+		-- Peito: braços ABERTOS (como no vídeo, de frente)
+		{ 6.30, { Root = { 0, 0, 0 }, Neck = { 20, 0, 0 }, RHip = { 0, 0, 8 }, LHip = { 0, 0, -8 },
+			RShoulder = { -10, 0, 100 }, LShoulder = { -10, 0, -100 } } },
+		{ 7.40, { Root = { 0, 0, 0 }, Neck = { 22, 0, 0 }, RHip = { 0, 0, 8 }, LHip = { 0, 0, -8 },
+			RShoulder = { -10, 0, 104 }, LShoulder = { -10, 0, -104 } } },
+		-- Chamas: no ar, inclinado pra trás, braços pra fora e atrás, pernas soltas
+		{ 7.90, { Root = { 32, 0, 0 }, Neck = { -18, 0, 0 }, RHip = { -45, 0, 14 }, LHip = { -25, 0, -14 },
+			RShoulder = { -38, 0, 72 }, LShoulder = { -38, 0, -72 } } },
+		{ 8.80, { Root = { 34, 0, 0 }, Neck = { -20, 0, 0 }, RHip = { -48, 0, 14 }, LHip = { -28, 0, -14 },
+			RShoulder = { -40, 0, 76 }, LShoulder = { -40, 0, -76 } } },
+		-- BigBang: agacha pra saltar (peso pra frente, braços atrás)
+		{ 9.30, { Root = { -14, 0, 0 }, Neck = { 18, 0, 0 }, RHip = { 62, 0, 8 }, LHip = { 62, 0, -8 },
+			RShoulder = { -50, 0, 42 }, LShoulder = { -50, 0, -42 } } },
+		-- decola: estica e abre
+		{ 9.80, { Root = { 6, 0, 0 }, Neck = { 28, 0, 0 }, RHip = { 20, 0, 10 }, LHip = { -10, 0, -10 },
+			RShoulder = { 110, 0, 55 }, LShoulder = { 110, 0, -55 } } },
+		-- Kick: corpo deitado no mortal, perna direita ERGUIDA acima da cabeça (voleio de bicicleta)
+		{ FS.ImpactTime, { Root = { 8, 0, 0 }, Neck = { 38, 0, 0 }, RHip = { 100, 0, 8 }, LHip = { -8, 0, -12 },
+			RShoulder = { 25, 0, 80 }, LShoulder = { 25, 0, -80 } } },
+		-- termina o mortal e cai de pé, braços abertos
+		{ 11.50, { Root = { 6, 0, 0 }, Neck = { 10, 0, 0 }, RHip = { 25, 0, 8 }, LHip = { 10, 0, -8 },
+			RShoulder = { 30, 0, 70 }, LShoulder = { 30, 0, -70 } } },
+		{ 12.00, { Root = { 0, 0, 0 }, Neck = { 6, 0, 0 }, RHip = { 12, 0, 8 }, LHip = { 12, 0, -8 },
+			RShoulder = { 20, 0, 60 }, LShoulder = { 20, 0, -60 } } },
+	}
+	function FS.Pose(t) return samplePoseFluida(FS_POSE, t) end
+
+	-- câmera BASE (planos abertos); os closes (Rosto/Olho) e o voleio vêm de
+	-- FlowShidou.CameraMundo, que segue a cabeça/pé de verdade
+	function FS.Camera(t, rootPos)
+		local cabeca = rootPos + V3(0, 1.5, 0)
+		if t < 1.4 then
+			-- baixa, de frente, olhando a bola descer
+			local u = smooth(phase(t, 0, 1.4))
+			return V3(1.8, -1.2, -6.2):Lerp(V3(1.4, -1.0, -5.4), u), V3(0, 3, -2):Lerp(V3(0, 0.5, -1.5), u), 55
+		elseif t < 3.0 then
+			local u = smooth(phase(t, 1.4, 3.0))
+			return V3(3.0, 0.4, -5.2):Lerp(V3(2.4, 0.3, -4.4), u), rootPos + V3(0, 0.3, 0), 50
+		elseif t < 4.4 then
+			local u = smooth(phase(t, 3.0, 4.4))
+			return cabeca + V3(0.3, -0.2, -3.4):Lerp(V3(0.2, -0.15, -2.6), u), cabeca, 38
+		elseif t < 6.3 then
+			return cabeca + V3(0.15, 0, -1.6), cabeca, 30
+		elseif t < 7.5 then
+			-- de frente, na altura do peito, os braços abertos
+			local u = smooth(phase(t, 6.3, 7.5))
+			return rootPos + V3(0, 0.6, -4.8):Lerp(V3(0, 0.5, -3.9), u), rootPos + V3(0, 0.3, 0), 52
+		elseif t < 8.8 then
+			-- de baixo e de lado: ele no ar, chamas escorrendo
+			local u = smooth(phase(t, 7.5, 8.8))
+			return rootPos + V3(2.6, -2.2, -3.8):Lerp(V3(2.1, -1.8, -3.0), u), rootPos + V3(0, 0.9, 0), 56
+		elseif t < 9.5 then
+			-- ATRÁS dele, olhando o gol no escuro (ele está de costas pra câmera)
+			local u = smooth(phase(t, 8.8, 9.5))
+			return rootPos + V3(0.8, 0.4, 5.8):Lerp(V3(0.6, 0.6, 5.0), u), rootPos + V3(0, 0.5, -22), 62
+		elseif t < FS.ImpactTime then
+			-- perfil do voleio
+			local u = smooth(phase(t, 9.5, FS.ImpactTime))
+			return rootPos + V3(7, 0.4, -0.5):Lerp(V3(5.6, 1.0, -1.4), u), rootPos + V3(0, 1.0, -1.6), 50
+		end
+		-- a bola sai: atrás e do lado, vendo ela ir
+		local u = smooth(phase(t, FS.ImpactTime, FS.Duration))
+		return rootPos + V3(5.5, 2.6, 4.2):Lerp(V3(6.5, 3.2, 3.2), u), rootPos + V3(0, 2.4, -11), 60
+	end
 end
 
 -- ============================================================
