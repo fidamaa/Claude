@@ -2012,54 +2012,91 @@ end
 -- ============================================================
 -- Pelo vídeo (ver a coreografia): nuvens + clarão amarelo na subida, o céu vira
 -- ESPAÇO lá no alto, voleio com anel roxo e ESPINHOS amarelos, e no voo o
--- PORTAL DE UNIVERSO atrás da bola: um cone largo (Beams, de frente pra
+-- PORTAL DE UNIVERSO atrás da bola (v122: virou um TUBO — ver tuboPortal): Beams de frente pra
 -- câmera) com borda MAGENTA e CIANO, o miolo escuro de espaço, planetas
 -- passando por dentro dele e riscos amarelos — "uma câmera pra outro universo".
 -- Nada de planetas girando em volta da bola (PEDIDO).
-local function conePortal(pastaAlvo, ball)
-	-- ponta na bola, boca aberta atrás; a parte da boca é reposicionada todo quadro
+-- ⚠️ v122 — PEDIDO: "o rastro da Queda Celestial dura mais, e é um CILINDRO, não um
+-- cone, com um UNIVERSO dentro dele (planetas, estrelas saltando) que não sai do
+-- cilindro". Antes: cone preso atrás da bola (ponta na bola, boca aberta 18-46 studs
+-- atrás) e os planetas se espalhavam pra fora. Agora é um TUBO do ponto do chute até
+-- a bola (cresce com ela e fica no caminho todo), largura constante; planetas,
+-- estrelas e riscos ficam DENTRO do raio interno. Dura TUBO_DURACAO (era 3s, o voo
+-- genérico) e some devagar no fim.
+local TUBO_DURACAO = 5.5
+local TUBO_RAIO = 5.5 -- raio do miolo de espaço (studs)
+local function tuboPortal(pastaAlvo, ball)
+	-- (a origem é marcada quando a bola SAI de verdade: no impacto da cutscene ela
+	-- ainda está no ponto da cena, lá no alto, e o chute real sai depois)
+	local origem = nil
+	-- âncora da cauda (no ponto do chute) e da ponta (na bola)
 	local cauda = parte(pastaAlvo, "PortalCauda")
 	local aBola = Instance.new("Attachment")
 	aBola.Name = "PortalPonta"
 	aBola.Parent = ball
 	local aCauda = Instance.new("Attachment")
 	aCauda.Parent = cauda
-	local function feixe(cor, w0, w1, transp0, transp1, brilho, z, textura)
-		local b = Instance.new("Beam")
-		b.Attachment0, b.Attachment1 = aBola, aCauda
-		b.Width0, b.Width1 = w0, w1
-		b.Color = typeof(cor) == "Color3" and ColorSequence.new(cor) or cor
-		b.Transparency = numeros({ { 0, transp0 }, { 1, transp1 } })
-		b.LightEmission = brilho
-		b.LightInfluence = 0
-		b.FaceCamera = true
-		b.Segments = 12
-		b.ZOffset = z
-		if textura then
-			b.Texture = textura
-			b.TextureMode = Enum.TextureMode.Stretch
-			b.TextureSpeed = 2
-		end
-		b.Parent = cauda
-		return b
+	-- ⚠️ v122 — PEDIDO: "o chute da Queda Celestial é uma LINHA, é pra ser um CILINDRO".
+	-- Beam sempre vira de frente pra câmera (fica uma faixa chata). Agora são PEÇAS
+	-- cilíndricas de verdade (3D): duas cascas ForceField (ciano por fora, magenta) que
+	-- brilham na borda e o espaço escuro meio transparente por dentro — os planetas e as
+	-- estrelas aparecem DENTRO dele.
+	local function casca(nome, cor, diametro, transp, material)
+		local c = parte(pastaAlvo, nome, { Shape = Enum.PartType.Cylinder, Color = cor, Material = material, Transparency = 1 })
+		return { B = c, Transp = transp, D = diametro }
 	end
-	-- ⚠️ v119 — PEDIDO: "o caminho dela precisa ficar um pouco maior e precisam aparecer
-	-- os planetas, definitivamente, atrás dele — dentro do feixe, como um portal pra
-	-- outra dimensão". Feixes ~60% mais largos; o miolo de espaço mais transparente
-	-- (antes ele cobria os planetas, que eram peças 3D atrás dele).
+	local D = TUBO_RAIO * 2
 	local feixes = {
-		feixe(cores({ { 0, rgb(170, 240, 255) }, { 1, rgb(40, 190, 255) } }), 2.2, 48, 0.35, 1, 1, -2),                  -- borda ciano (mais larga)
-		feixe(cores({ { 0, rgb(255, 150, 255) }, { 0.5, rgb(220, 60, 230) }, { 1, rgb(130, 40, 220) } }), 1.9, 42, 0.15, 0.95, 1, -1), -- borda magenta
-		feixe(cores({ { 0, rgb(60, 30, 110) }, { 1, rgb(10, 8, 35) } }), 1.4, 34, 0.3, 0.75, 0, 0),                        -- o ESPAÇO dentro
+		casca("TuboCiano", rgb(90, 220, 255), D + 1.4, 0.15, Enum.Material.ForceField),
+		casca("TuboMagenta", rgb(230, 70, 235), D + 0.6, 0.05, Enum.Material.ForceField),
+		casca("TuboEspaco", rgb(14, 8, 38), D, 0.22, Enum.Material.SmoothPlastic), -- (mais escuro: as estrelas aparecem)
 	}
-	-- riscos amarelos correndo dentro do portal
+	-- volume do tubo (estrelas saltando lá dentro)
+	local miolo = parte(pastaAlvo, "PortalMiolo")
+	-- ⚠️ v122 — PEDIDO: "faltam as ESTRELAS e o efeito de algumas SALTANDO; ainda não
+	-- parece exatamente um universo (o formato está legal)". Três camadas dentro do
+	-- tubo: um céu de estrelinhas DENSO piscando, estrelas grandes de 4 pontas que
+	-- SALTAM em arco (sobem e caem) e NEBULOSAS coloridas (roxo, rosa, azul) — tudo
+	-- num volume menor que o raio, pra nada sair do cilindro.
+	local estrelas = emissor(miolo, {
+		Textura = "rbxassetid://116102662517740", -- (brilho redondo; TEX não tem "Brilho" — textura vazia some)
+		Cor = cores({ { 0, rgb(255, 255, 255) }, { 0.5, rgb(210, 225, 255) }, { 1, rgb(255, 230, 250) } }),
+		Brilho = 1,
+		-- piscando: acende, apaga um pouco, acende de novo
+		Tamanho = numeros({ { 0, 0 }, { 0.15, 0.35 }, { 0.4, 0.15 }, { 0.65, 0.4 }, { 1, 0 } }),
+		Vida = { 1.2, 2.2 }, Vel = { 0, 0.3 },
+		Forma = Enum.ParticleEmitterShape.Box, Estilo = Enum.ParticleEmitterShapeStyle.Volume, Taxa = 0,
+	})
+	estrelas.ZOffset = 1
+	local saltando = emissor(miolo, {
+		Textura = TEX.Estrela,
+		Cor = cores({ { 0, rgb(255, 255, 240) }, { 1, rgb(255, 220, 140) } }),
+		Brilho = 1,
+		Tamanho = numeros({ { 0, 0 }, { 0.2, 1.1 }, { 0.6, 0.8 }, { 1, 0 } }),
+		Vida = { 0.55, 0.85 }, Vel = { 5, 8 }, Spread = 60, Direcao = Enum.NormalId.Top,
+		Acel = V3(0, -26, 0), RotVel = 300,
+		Forma = Enum.ParticleEmitterShape.Box, Estilo = Enum.ParticleEmitterShapeStyle.Volume, Taxa = 0,
+	})
+	saltando.ZOffset = 1.2
+	local nebulosa = emissor(miolo, {
+		Textura = TEX.Nuvem,
+		Cor = cores({ { 0, rgb(170, 70, 255) }, { 0.4, rgb(255, 90, 200) }, { 0.75, rgb(70, 120, 255) }, { 1, rgb(120, 60, 220) } }),
+		Brilho = 1,
+		Tamanho = numeros({ { 0, 2.2 }, { 1, 3.6 } }), Transp = numeros({ { 0, 1 }, { 0.3, 0.38 }, { 0.7, 0.45 }, { 1, 1 } }),
+		Vida = { 1.6, 2.6 }, Vel = { 0, 0.4 }, RotVel = 25,
+		Forma = Enum.ParticleEmitterShape.Box, Estilo = Enum.ParticleEmitterShapeStyle.Volume, Taxa = 0,
+	})
+	nebulosa.ZOffset = 0.5
+	-- (o `emissor` com Taxa 0 nasce DESLIGADO — por isso as estrelas do tubo nunca apareciam)
+	estrelas.Enabled, saltando.Enabled, nebulosa.Enabled = true, true, true
+	-- riscos amarelos correndo DENTRO do tubo
 	local riscos = {}
 	for i = 1, 5 do
 		local a = Instance.new("Attachment")
 		a.Parent = cauda
 		local b = Instance.new("Beam")
 		b.Attachment0, b.Attachment1 = aBola, a
-		b.Width0, b.Width1 = 0.15, 0.9
+		b.Width0, b.Width1 = 0.2, 0.5
 		b.Color = cores({ { 0, rgb(255, 250, 200) }, { 1, rgb(255, 170, 60) } })
 		b.Transparency = numeros({ { 0, 0.1 }, { 1, 1 } })
 		b.LightEmission = 1
@@ -2070,14 +2107,14 @@ local function conePortal(pastaAlvo, ball)
 		b.TextureSpeed = 3
 		b.ZOffset = 1
 		b.Parent = cauda
-		riscos[i] = { A = a, Desvio = V3(math.random() * 2 - 1, math.random() * 2 - 1, 0) * 7, Fase = math.random() * 6 }
+		local ang = (i / 5) * math.pi * 2
+		riscos[i] = { A = a, B = b, Ang = ang, R = TUBO_RAIO * (0.35 + 0.4 * math.random()), Fase = math.random() * 6 }
 	end
-	-- planetas DESENHADOS passando por dentro do portal (da ponta pra boca, e
-	-- reaparecem): billboard com a esfera sombreada (um deles com anel) — sem
-	-- AlwaysOnTop (com ele o billboard some; ver memória)
+	-- planetas DESENHADOS passando por dentro do tubo (da bola pra trás e reaparecem):
+	-- billboard com a esfera sombreada (um deles com anel) — sem AlwaysOnTop (memória)
 	local ESFERA, ANEL, BRILHO = "rbxassetid://110065763545195", "rbxassetid://109697697529772", "rbxassetid://116102662517740"
 	local planetas = {}
-	local coresPl = { rgb(235, 165, 90), rgb(225, 205, 170), rgb(250, 225, 150), rgb(170, 150, 210), rgb(120, 190, 255), rgb(255, 130, 110) }
+	local coresPl = { rgb(235, 165, 90), rgb(225, 205, 170), rgb(250, 225, 150), rgb(170, 150, 210), rgb(120, 190, 255), rgb(255, 130, 110), rgb(140, 230, 190) }
 	for i = 1, #coresPl do
 		local anc = parte(pastaAlvo, "PlanetaPortal" .. i)
 		local bb = Instance.new("BillboardGui")
@@ -2101,49 +2138,82 @@ local function conePortal(pastaAlvo, ball)
 			g.Parent = bb
 			return g
 		end
-		local imgs = { img(BRILHO, coresPl[i], 1.7, 1.7, 0.45, 1) }
-		if i == 2 or i == 5 then table.insert(imgs, img(ANEL, rgb(255, 235, 200), 2.2, 0.55, 0.15, 2, -18)) end
+		local imgs = { img(BRILHO, coresPl[i], 1.6, 1.6, 0.45, 1) }
+		if i == 2 or i == 5 then table.insert(imgs, img(ANEL, rgb(255, 235, 200), 2.1, 0.5, 0.15, 2, -18)) end
 		table.insert(imgs, img(ESFERA, coresPl[i], 1, 1, 0, 3))
-		planetas[i] = { Anc = anc, BB = bb, Imgs = imgs, Fase = (i - 1) / #coresPl, Tam = 3 + math.random() * 4.5,
-			Desvio = V3(math.random() * 2 - 1, math.random() * 2 - 1, 0) }
+		local tam = 1.4 + math.random() * 2.2
+		-- posição no disco do tubo, sempre com o planeta inteiro DENTRO do raio
+		local ang = math.random() * math.pi * 2
+		local r = math.random() * math.max(TUBO_RAIO - tam * 0.8 - 0.4, 0.3)
+		planetas[i] = { Anc = anc, BB = bb, Imgs = imgs, Fase = (i - 1) / #coresPl, Tam = tam,
+			X = math.cos(ang) * r, Y = math.sin(ang) * r }
 	end
-	local estrelas = emissor(cauda, {
-		Textura = TEX.Estrela, -- ⚠️ v119: estrelinhas de 4 pontas dentro do portal
-		Cor = cores({ { 0, rgb(255, 255, 255) }, { 1, rgb(200, 220, 255) } }), Tamanho = numeros({ { 0, 0.7 }, { 1, 0 } }),
-		Vida = { 0.3, 0.6 }, Vel = { 0, 2 }, Forma = Enum.ParticleEmitterShape.Box, Estilo = Enum.ParticleEmitterShapeStyle.Volume, Taxa = 90,
-	})
 	local brilhoEstrela = emissor(aBola, {
-		Textura = TEX.Faisca, Cor = cores({ { 0, rgb(255, 255, 255) }, { 1, rgb(255, 200, 255) } }), Tamanho = numeros({ { 0, 3.5 }, { 1, 0 } }),
+		Textura = TEX.Faisca, Cor = cores({ { 0, rgb(255, 255, 255) }, { 1, rgb(255, 200, 255) } }), Tamanho = numeros({ { 0, 4.5 }, { 1, 0 } }),
 		Vida = { 0.15, 0.3 }, Vel = { 0, 0 }, Taxa = 40, RotVel = 360,
 	})
-	local obj = { Coisas = { cauda, aBola } }
-	for _, b in ipairs(feixes) do table.insert(obj.Coisas, b) end
+	local obj = { Coisas = { cauda, miolo, aBola } }
+	for _, f in ipairs(feixes) do table.insert(obj.Coisas, f.B) end
 	for _, r in ipairs(riscos) do table.insert(obj.Coisas, r.A) end
 	for _, pl in ipairs(planetas) do table.insert(obj.Coisas, pl.Anc) end
 	table.insert(obj.Coisas, brilhoEstrela)
 	function obj.Atualizar(tempo)
-		local v = ball.AssemblyLinearVelocity
-		local dir = v.Magnitude > 1 and v.Unit or V3(0, -0.3, -1).Unit
-		local comp = math.clamp(v.Magnitude * 0.24, 18, 46) -- ⚠️ v119: caminho maior (era 10-26)
-		local boca = ball.Position - dir * comp
+		if not origem then
+			local v0 = ball.AssemblyLinearVelocity
+			if v0.Magnitude < 15 then
+				for _, f in ipairs(feixes) do f.B.Transparency = 1 end
+				for _, r in ipairs(riscos) do r.B.Transparency = NumberSequence.new(1) end
+				for _, pl in ipairs(planetas) do for _, g in ipairs(pl.Imgs) do g.ImageTransparency = 1 end end
+				estrelas.Rate, saltando.Rate, nebulosa.Rate = 0, 0, 0
+				return
+			end
+			origem = ball.Position - v0.Unit * 1.5
+		end
+		local rel = ball.Position - origem
+		local comp = rel.Magnitude
+		local dir
+		if comp > 1 then
+			dir = rel / comp
+		else
+			local v = ball.AssemblyLinearVelocity
+			dir = v.Magnitude > 1 and v.Unit or V3(0, -0.3, -1).Unit
+			comp = 1
+		end
 		local lado = dir:Cross(Vector3.yAxis)
 		if lado.Magnitude < 0.05 then lado = Vector3.xAxis end
 		lado = lado.Unit
 		local cima = lado:Cross(dir).Unit
-		cauda.CFrame = CFrame.fromMatrix(boca, lado, cima)
-		cauda.Size = V3(comp * 0.6, comp * 0.6, 1)
+		-- some devagar no fim
+		local some = math.clamp((tempo - (TUBO_DURACAO - 1)) / 0.9, 0, 1)
+		cauda.CFrame = CFrame.fromMatrix(origem, lado, cima)
+		-- o cilindro (eixo X da peça) vai do ponto do chute até a bola
+		local meioTubo = origem + dir * (comp * 0.5)
+		local eixo = CFrame.fromMatrix(meioTubo, dir, cima)
+		for _, f in ipairs(feixes) do
+			f.B.Size = V3(math.max(comp, 0.2), f.D, f.D)
+			f.B.CFrame = eixo
+			f.B.Transparency = f.Transp + (1 - f.Transp) * some
+		end
+		-- o volume das estrelas acompanha o tubo (dentro do raio)
+		local meio = origem + dir * (comp * 0.5)
+		miolo.CFrame = CFrame.fromMatrix(meio, lado, cima)
+		miolo.Size = V3(TUBO_RAIO * 1.1, TUBO_RAIO * 1.1, math.max(comp, 0.2))
+		estrelas.Rate = (1 - some) * math.clamp(comp * 9, 40, 600)
+		saltando.Rate = (1 - some) * math.clamp(comp * 1.2, 6, 70)
+		nebulosa.Rate = (1 - some) * math.clamp(comp * 0.7, 4, 45)
 		for _, r in ipairs(riscos) do
-			local oscila = math.sin(tempo * 7 + r.Fase)
-			r.A.WorldPosition = boca + lado * (r.Desvio.X * (0.8 + 0.2 * oscila)) + cima * r.Desvio.Y
+			local a = r.Ang + tempo * 1.4 + 0.3 * math.sin(tempo * 7 + r.Fase)
+			r.A.WorldPosition = origem + lado * (math.cos(a) * r.R) + cima * (math.sin(a) * r.R)
+			r.B.Transparency = numeros({ { 0, 0.1 + 0.9 * some }, { 1, 1 } })
 		end
 		for _, pl in ipairs(planetas) do
-			local u = (tempo * 0.7 + pl.Fase) % 1
-			local pos = ball.Position - dir * (comp * (0.15 + 0.85 * u)) + (lado * pl.Desvio.X + cima * pl.Desvio.Y) * (11 * u)
-			local tam = pl.Tam * (0.35 + 0.65 * u)
-			pl.BB.Size = UDim2.fromScale(tam, tam)
+			local u = (tempo * 0.45 + pl.Fase) % 1
+			local pos = ball.Position - dir * (comp * u) + lado * pl.X + cima * pl.Y
+			pl.BB.Size = UDim2.fromScale(pl.Tam, pl.Tam)
 			pl.Anc.CFrame = CFrame.new(pos)
-			-- nasce (aparece) e some na boca do portal
-			local alfa = math.min(u / 0.12, 1) * (1 - math.max((u - 0.8) / 0.2, 0))
+			-- nasce perto da bola e some antes do fim do tubo (não sai pela ponta)
+			local alfa = math.min(u / 0.1, 1) * (1 - math.max((u - 0.85) / 0.15, 0)) * (1 - some)
+			if comp < 6 then alfa = 0 end
 			for k, g in ipairs(pl.Imgs) do g.ImageTransparency = 1 - alfa * (k == 1 and 0.55 or 1) end
 		end
 	end
@@ -2261,14 +2331,15 @@ function E.QuedaCelestial(ctx)
 	end
 	function efeitos.Voo(ball, duracao)
 		-- a bola desce como uma ESTRELA com o portal de universo atrás
-		efeitoDeVoo(ball, duracao, function(a, coisas)
+		-- (v122: o tubo dura mais que o voo genérico — ver TUBO_DURACAO)
+		efeitoDeVoo(ball, math.max(duracao, TUBO_DURACAO), function(a, coisas)
 			luz(a, MAGENTA, 26, 6)
 			table.insert(coisas, destaque(ball, rgb(240, 200, 255), rgb(255, 255, 255), 0.25))
 			local pastaVoo = Instance.new("Folder")
 			pastaVoo.Name = "PortalUniverso"
 			pastaVoo.Parent = workspace
 			table.insert(coisas, pastaVoo)
-			local portal = conePortal(pastaVoo, ball)
+			local portal = tuboPortal(pastaVoo, ball)
 			for _, x in ipairs(portal.Coisas) do table.insert(coisas, x) end
 			ctx._portal = portal
 		end, function(_a, _dt, tempo)
