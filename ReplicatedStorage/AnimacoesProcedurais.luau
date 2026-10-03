@@ -886,19 +886,27 @@ local MERGULHO_DIREITA = {
 		-- correção de chão do animador sobe o que passar do gramado.
 		RootPos = V(0, -2.3, 0),
 	} },
-	{ 0.80, { -- fica um instante no chão
+	-- ⚠️ v122 — PEDIDO: "o dive pro lado levanta mais devagar". Fica mais no chão,
+	-- apoia a mão, ajoelha e só então levanta (era 0.80 / 0.88 / 1.00).
+	{ 1.10, { -- fica no chão
 		Root = V(0, 0, -90), Neck = V(0, 0, -10),
 		RHip = V(45, 0, 5), LHip = V(35, 0, -5),
 		RShoulder = V(60, 0, 40), LShoulder = V(60, 0, -40),
 		RootPos = V(0, -2.3, 0),
 	} },
-	{ 0.88, { -- ajoelha e levanta
-		Root = V(-10, 0, -25),
+	{ 1.24, { -- apoia a mão e ergue o tronco
+		Root = V(0, 0, -55), Neck = V(0, 0, -15),
+		RHip = V(60, 0, 8), LHip = V(50, 0, -8), RKnee = V(-80, 0, 0), LKnee = V(-70, 0, 0),
+		RShoulder = V(20, 0, 50), LShoulder = V(40, 0, -30), RElbow = V(20, 0, 0), LElbow = V(60, 0, 0),
+		RootPos = V(0, -1.7, 0),
+	} },
+	{ 1.38, { -- ajoelha e levanta
+		Root = V(-10, 0, -20),
 		RHip = V(75, 0, 8), LHip = V(70, 0, -8), RKnee = V(-105, 0, 0), LKnee = V(-100, 0, 0),
 		RShoulder = V(25, 0, 20), LShoulder = V(25, 0, -20), RElbow = V(40, 0, 0), LElbow = V(40, 0, 0),
 		RootPos = V(0, -1.0, 0),
 	} },
-	{ 1.00, Anim.GoleiroPronto(0) },
+	{ 1.55, Anim.GoleiroPronto(0) },
 }
 -- Pra cima: pulo com os dois pés, esticado, braços por cima da cabeça.
 -- ⚠️ v103 — PEDIDO: "pra cima tá ótimo [a distância], só que a animação do
@@ -973,11 +981,11 @@ local MERGULHO_CIMA_DIREITA = {
 	} },
 	{ 1.00, Anim.GoleiroPronto(0) },
 }
-local function acaoMergulho(quadros)
-	return { Duracao = 1.1, EntradaSeg = 0.05, SaidaSeg = 0.2, Suave = true, Quadros = function() return quadros end }
+local function acaoMergulho(quadros, duracao)
+	return { Duracao = duracao or 1.1, EntradaSeg = 0.05, SaidaSeg = 0.2, Suave = true, Quadros = function() return quadros end }
 end
-Anim.Acoes["GKDive.Right"] = acaoMergulho(MERGULHO_DIREITA)
-Anim.Acoes["GKDive.Left"] = acaoMergulho(espelharQuadros(MERGULHO_DIREITA))
+Anim.Acoes["GKDive.Right"] = acaoMergulho(MERGULHO_DIREITA, 1.6)
+Anim.Acoes["GKDive.Left"] = acaoMergulho(espelharQuadros(MERGULHO_DIREITA), 1.6)
 Anim.Acoes["GKDive.Up"] = acaoMergulho(MERGULHO_CIMA)
 Anim.Acoes["GKDive.UpRight"] = acaoMergulho(MERGULHO_CIMA_DIREITA)
 Anim.Acoes["GKDive.UpLeft"] = acaoMergulho(espelharQuadros(MERGULHO_CIMA_DIREITA))
@@ -1146,7 +1154,8 @@ end
 -- impulso curto, VOA deitado reto (super-homem: corpo na horizontal, braços
 -- esticados pra frente, pernas retas) o voo inteiro, e só no fim cai e levanta.
 Anim.Acoes.GKForwardDash = {
-	Duracao = 1.0, FimDaMecanica = 0.6, EntradaSeg = 0.03, SaidaSeg = 0.2, Suave = true,
+	-- ⚠️ v122: "levanta mais devagar do dash pra frente" — Duracao 1.0 → 1.5
+	Duracao = 1.5, FimDaMecanica = 0.6, EntradaSeg = 0.03, SaidaSeg = 0.2, Suave = true,
 	Quadros = function()
 		local voo = {
 			Root = V(-86, 0, 0), Neck = V(62, 0, 0),
@@ -1174,18 +1183,24 @@ Anim.Acoes.GKForwardDash = {
 				RShoulder = V(140, 0, 28), LShoulder = V(140, 0, -28), RElbow = V(40, 0, 0), LElbow = V(40, 0, 0),
 				RootPos = V(0, -2.6, 0),
 			} },
-			{ 0.78, {
+			{ 1.02, { -- fica de bruços (era até 0.78)
 				Root = V(-88, 0, 0), Neck = V(40, 0, 0),
 				RShoulder = V(120, 0, 34), LShoulder = V(120, 0, -34),
 				RootPos = V(0, -2.6, 0),
 			} },
-			{ 0.90, {
+			{ 1.16, { -- empurra o chão com as mãos
+				Root = V(-60, 0, 0), Neck = V(30, 0, 0),
+				RHip = V(30, 0, 6), LHip = V(20, 0, -6), RKnee = V(-60, 0, 0), LKnee = V(-50, 0, 0),
+				RShoulder = V(70, 0, 20), LShoulder = V(70, 0, -20), RElbow = V(10, 0, 0), LElbow = V(10, 0, 0),
+				RootPos = V(0, -1.9, 0),
+			} },
+			{ 1.30, {
 				Root = V(-15, 0, 0),
 				RHip = V(75, 0, 8), LHip = V(70, 0, -8), RKnee = V(-105, 0, 0), LKnee = V(-100, 0, 0),
 				RShoulder = V(30, 0, 20), LShoulder = V(30, 0, -20),
 				RootPos = V(0, -1.0, 0),
 			} },
-			{ 1.00, Anim.GoleiroPronto(0) },
+			{ 1.45, Anim.GoleiroPronto(0) },
 		}
 	end,
 }

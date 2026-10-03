@@ -1947,7 +1947,8 @@ Config.AIM_DEVIATION_PRESSURE_DEGREES = 0  -- era 6
 -- ⚠️ v36: AUMENTADO de novo (os três) — pedido: "melhore o GK normal sem
 -- ser o bot, aumente a distância do dive".
 Config.GK_DIVE_DISTANCE = 19          -- era 15/10 — studs percorridos no mergulho de ALTURA (Up)
-Config.GK_DIVE_DISTANCE_SIDE = 48     -- ⚠️ v105: +50% ("ele precisa ir mais longe com o dive") — era 32 (v103), 26/21/14 antes
+-- ⚠️ v122 — PEDIDO: "o dive um pouco mais longe" (era 48)
+Config.GK_DIVE_DISTANCE_SIDE = 54     -- ⚠️ v105: +50% ("ele precisa ir mais longe com o dive") — era 32 (v103), 26/21/14 antes
 Config.GK_DIVE_DISTANCE_DIAGONAL = 29 -- ⚠️ v103: idem (era 24/19.5/13) — studs percorridos no mergulho na DIAGONAL (UpLeft/UpRight)
 -- ⚠️ v120b — PEDIDO: "coloca pra demorar um pouco mais pra cair o dive; só no final ele cai, rápido" (era 0.35)
 Config.GK_DIVE_DURATION = 0.5         -- segundos que o mergulho dura (também a janela de captura)
@@ -1984,6 +1985,12 @@ Config.GK_DIVE_CAPTURE_HEIGHT = 18    -- era 16.5/11/14
 -- goleiro). ⚠️ v5.7: REVERTIDO pro valor original — o pedido era sobre o
 -- GKBOT (ver Config.GKBOT_ACTION_COOLDOWN), não o Role="GK" humano.
 Config.GK_DIVE_COOLDOWN = 1.0         -- segundos antes de poder mergulhar de novo
+-- ⚠️ v122 — PEDIDO: "o GK levanta mais devagar do dive pro lado e do dash pra frente, e
+-- uma PUNIÇÃO pra quem erra o dive". Errou (não pegou a bola) = fica no chão e levanta
+-- devagar, preso (stun) por esse tempo depois que o mergulho/avanço termina — bate com o
+-- fim da animação de levantar (AnimacoesProcedurais: GKDive 1.6s, GKForwardDash 1.5s).
+Config.GK_DIVE_ERRO_STUN = 1.0
+Config.GK_FORWARD_ERRO_STUN = 0.85
 
 -- ===== GOLEIRO: DASH PRA FRENTE (tecla F) =====
 -- Avança em linha reta (LookVector). Se um ADVERSÁRIO com a bola estiver

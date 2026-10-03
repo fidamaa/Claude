@@ -3161,7 +3161,11 @@ Remotes.AttemptGKForward.OnServerEvent:Connect(function(player)
 		if not owner and (currentRoot.Position - ball.Position).Magnitude <= Config.GK_FORWARD_CAPTURE_RANGE then
 			ball.CanCollide = true
 			setOwner(player)
+			return
 		end
+		-- ⚠️ v122 — PEDIDO: "o dash pra frente levanta mais devagar": errou = fica no
+		-- chão o tempo da animação de levantar (GKForwardDash 0.6 → 1.45)
+		if owner ~= player then stunPlayer(player, Config.GK_FORWARD_ERRO_STUN or 0.85) end
 	end)
 end)
 
@@ -3174,6 +3178,9 @@ RunService.Heartbeat:Connect(function()
 		if tick() >= dive.ExpiresAt then
 			diving[player] = nil
 			setIframeGlow(player, false)
+			-- ⚠️ v122 — PEDIDO: "punição pra quem errar o dive": não pegou = fica no chão
+			-- e levanta devagar, sem poder andar nem agir (igual a animação)
+			if owner ~= player then stunPlayer(player, Config.GK_DIVE_ERRO_STUN or 1.0) end
 			continue
 		end
 		local _, root = getCharacterParts(player)
