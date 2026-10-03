@@ -431,6 +431,9 @@ local handlingDeadBall = false
 -- setPieceType: "ThrowIn" | "Corner" | "GoalKick"
 local function runSetPiece(takerTeam, worldSpot, setPieceType)
 	handlingDeadBall = true
+	-- ⚠️ v124: desliga o voo travado da Hissatsu/curvas antes de tudo (senão a bola
+	-- volta pra reta do chute e sai de novo em loop — ver _G.CancelarVooDaBola)
+	if _G.CancelarVooDaBola then _G.CancelarVooDaBola() end
 	-- ⚠️ v30: apito de bola fora (ver Config.SOUNDS.Whistle).
 	if _G.PlayWhistle then _G.PlayWhistle() end
 	_G.SetMatchPaused(true)

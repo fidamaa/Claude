@@ -2490,7 +2490,10 @@ Config.GOAL_CELEBRATION_SECONDS = 4
 -- rapidinho." Era 0.7. A música toca em 0.6, então 1.0 põe o apito
 -- claramente por cima sem precisar abaixar nada — o apito dura menos de
 -- um segundo, não compensa mexer no volume da música pra isso.
-Config.WHISTLE_VOLUME = 1
+Config.WHISTLE_VOLUME = 1.6 -- ⚠️ v124: "aumenta bastante o som do apito, 50-60% a mais" (era 1)
+-- ⚠️ v124 — PEDIDO: "aumente o som geral do jogo em 10%". Todo Sound do jogo vai pro
+-- SoundGroup "VolumeGeral" (StarterPlayerScripts/VolumeGeral) com este volume.
+Config.VOLUME_GERAL = 1.1
 Config.WHISTLE_PLAY_FRACTION = 0.5    -- toca só metade do arquivo
 Config.WHISTLE_FADE_SECONDS = 0.3     -- fade out no fim desse trecho
 Config.WHISTLE_FALLBACK_SECONDS = 1.6 -- usado só se o som não tiver carregado a tempo de informar a duração real

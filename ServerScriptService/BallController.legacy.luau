@@ -1486,6 +1486,16 @@ RunService.Heartbeat:Connect(function()
 		local rapidez = pulseFlightVelocidade or velocidade.Magnitude
 		local percorrido = math.max((ball.Position - origem):Dot(pulseFlightDirecao), 0)
 		local naReta = origem + pulseFlightDirecao * percorrido
+		-- ⚠️ v124: a bola foi TELEPORTADA pra longe da reta (bola parada, goleiro, reset)
+		-- = o voo acabou; nunca puxar ela de volta pra reta antiga
+		-- (só na horizontal: quando a reta entra no gramado a bola segue rente ao chão,
+		-- e a diferença de altura não é teleporte)
+		if Vector3.new(ball.Position.X - naReta.X, 0, ball.Position.Z - naReta.Z).Magnitude > 20 then
+			stopPulseStraightFlight()
+			_G.VooCurvaInicial = nil
+			pulseFlightDirAnterior = nil
+			return
+		end
 		local dir = pulseFlightDirecao
 		-- ⚠️ v122 — CURVA INICIAL (Fúria Glacial: "uma leve curva e depois 100% reto na
 		-- mira"): nos primeiros Comp studs a bola sai da reta numa barriga y = Amp·sen(πu)
@@ -4800,6 +4810,19 @@ _G.ReleaseBallOwner = releaseOwner
 _G.GetBallOwner = function() return owner end
 _G.SetDeadBallMode = function(active)
 	deadBallMode = active
+end
+
+-- ⚠️ v124 — BUG: "usei o Raio Um em direção ao gol e a bola fica indo pra fora e
+-- voltando, pi pi pi (o apito); e uma vez o GK jogando a bola pra cima e voltando pra
+-- mão". A bola saía pela linha de fundo e o tiro de meta do GOLEIRO BOT (ou qualquer bola
+-- parada) não desligava o voo travado da Hissatsu — o Heartbeat da mira travada
+-- recolocava a bola na reta do chute, ela saía de novo, apito, volta pro bot... Toda bola
+-- parada (OutOfBoundsController) agora chama isto antes de reposicionar a bola.
+_G.CancelarVooDaBola = function()
+	stopPulseStraightFlight()
+	curveGeneration += 1
+	_G.VooCurvaInicial = nil
+	endKickClearance()
 end
 
 _G.ResetBallState = function(centerPosition)
