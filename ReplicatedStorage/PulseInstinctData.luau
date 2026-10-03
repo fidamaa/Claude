@@ -669,7 +669,7 @@ Data.Pulses = {
 		Effect = {
 			DistanceMult = 1.4,
 			SelfIframe = 0.4,
-			FogRadius = 30,
+			FogRadius = 36, -- ⚠️ v123: "aumenta a névoa em 20%" (era 30)
 			FogDuration = 7,
 		},
 	},
