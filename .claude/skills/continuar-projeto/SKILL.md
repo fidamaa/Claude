@@ -35,6 +35,9 @@ description: Passagem de bastão do jogo de futebol Roblox (Inazuma Eleven + Blu
   espere aparecer no Studio, rode no Edit:
   `ScriptEditorService:UpdateSourceAsync(StarterPlayerScripts.X, function() return tmp.Source end)`,
   depois apague os `_TmpSync_*` do disco (e confira que sumiram do Studio).
+  ⚠️ v122b: numa dessas o `StarterPlayerScripts/HissatsuInput.local.luau` apareceu
+  VAZIO no disco logo depois. Sempre rode `git status` depois do `_TmpSync` e
+  restaure com `git checkout -- <arquivo>` se algum script zerou.
 - Nome do arquivo define a classe: `X.luau` = ModuleScript, `X.legacy.luau` =
   Script, `X.local.luau` = LocalScript. (O painel de debug virou ModuleScript por
   causa disso e "sumiu" — corrigido pra `.local.luau`.)
@@ -164,6 +167,19 @@ Depois:
   (11°, 30 studs: sai ~1,8 stud pro lado, volta pra linha e segue reta — medido).
 - ✅ G9 (0d18bb8) mira: ponto atrás do gol (arquibancada/céu) vira o cruzamento do raio do
   cursor com a BOCA do gol (`MiraPrecisa`) — vale pra todo chute.
+
+## Depois da v122 (v122b, mesma sessão)
+- Mira: o alinhamento na boca do gol (`opcoes.AlinharNaBocaDoGol` na `MiraPrecisa`) é SÓ
+  das Hissatsus (HissatsuInput); o chute normal usa a mira antiga (o usuário: "no chute
+  normal ela sai muito pra cima").
+- "Chute normal vai pro lado": medido no Studio, parado / com giro / andando de lado a
+  16 studs/s = 0,00 stud de desvio. A causa era a curva da arma valendo correndo na
+  DIAGONAL; agora só A ou D puro (`FootballClient.movimentoDoChute`). A hitbox do
+  jogador não desvia: a bola não colide com "Players" e fica sem colisão até sair do
+  corpo (`startKickClearance`). Se voltar a acontecer, pergunte quais armas a pessoa
+  tinha e se estava andando.
+- Painel de debug em ABAS (Armas primeiro, Hissatsu, Testes, Flow/Gol), altura pela tela,
+  busca por nome — pedido de um amigo do usuário com tela menor.
 
 ## Lições da v122 (não repetir)
 - `emissor(...)` com `Taxa = 0` nasce com `Enabled = false`: quem controla `Rate` depois
