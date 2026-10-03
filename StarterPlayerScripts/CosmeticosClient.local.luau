@@ -506,6 +506,18 @@ local function ligarFlowNoCorpo(player, item, duracao)
 			end
 		end
 	end
+	-- ⚠️ v124 — Flow do Shidou: a mesma íris rosa da cena (borda serrilhada, pupila
+	-- oval) nos dois olhos, no rosto, durante o Flow inteiro
+	if item.Id == "Flow_Shidou" then
+		local okEf, Ef = pcall(function() return require(ReplicatedStorage:WaitForChild("HissatsuEfeitos")) end)
+		if okEf and Ef and Ef.OlhosFlow and Ef.OLHO_SHIDOU then
+			local olhosSh = Ef.OlhosFlow(character, Ef.OLHO_SHIDOU)
+			if olhosSh then
+				olhosSh.Definir(1)
+				table.insert(coisas, olhosSh.Parte)
+			end
+		end
+	end
 	-- ⚠️ v120b — PEDIDO: "às vezes o Flow tá acabando e o cara continua com as
 	-- partículas". Desliga no tempo E na hora em que o servidor encerra o Flow
 	-- (atributo FlowAtivo some) — o que vier primeiro, uma vez só.

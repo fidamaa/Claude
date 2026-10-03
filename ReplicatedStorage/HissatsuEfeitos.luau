@@ -3582,9 +3582,18 @@ function E.Preparo(estilo, character, duracao)
 end
 
 -- posição dos olhos no espaço da cabeça (R6 e R15)
+-- ⚠️ v124 (conferido no Studio no close do Shidou): os olhos acesos ficavam nas
+-- BOCHECHAS, abaixo dos olhos do rosto — subiram (y 0.08 → 0.25)
+-- e chegaram pro centro (x 0.10 → 0.055), em cima dos olhos desenhados. Vale pra todo
+-- Flow que usa esta posição.
+-- A cabeça R6 clássica é desenhada por uma SpecialMesh 1.25x maior que a peça: com o
+-- z na face da PEÇA os olhos ficavam enterrados dentro da cabeça (medido no Studio).
 local function FlowCenaOlhos(head)
 	local s = head.Size
-	return { V3(-s.X * 0.1, s.Y * 0.08, -s.Z * 0.5 - 0.04), V3(s.X * 0.1, s.Y * 0.08, -s.Z * 0.5 - 0.04) }
+	local malha = head:FindFirstChildOfClass("SpecialMesh")
+	local escalaZ = (malha and malha.MeshType == Enum.MeshType.Head) and malha.Scale.Z or 1
+	local z = -s.Z * 0.5 * escalaZ - 0.05
+	return { V3(-s.X * 0.055, s.Y * 0.25, z), V3(s.X * 0.055, s.Y * 0.25, z) }
 end
 
 local function lerp(a, b, k) return a + (b - a) * k end
@@ -3609,6 +3618,9 @@ local function lerp(a, b, k) return a + (b - a) * k end
 -- PlayerGui entra em `prender` e some junto com a cena.
 -- ============================================================
 local TEX_FLOW = {
+	-- ⚠️ v124 — PEDIDO: o olho do Flow do Shidou como no anime (vídeo 66s): íris rosa
+	-- com borda serrilhada, riscos radiais e pupila oval vertical clara (desenho próprio)
+	IrisShidou = "rbxassetid://103276172566054",
 	Brilho = "rbxassetid://116102662517740",
 	Estrela = "rbxassetid://124076223617744",
 	Nuvem = "rbxassetid://127024223594157",
@@ -3741,7 +3753,10 @@ end
 -- passa na frente dela como passaria do olho de verdade.
 -- Devolve { Parte, Locais = {esq, dir} (espaço da cabeça), Diametro,
 -- Mundo(i) = posição do olho i no mundo, Definir(nivel 0-1) } ou nil.
-function E.OlhosFlow(character)
+-- (v124) opcoes (todas opcionais): Imagem (íris), CorBrilho, Girar (false = parada),
+-- X / Y (fração do tamanho da cabeça — padrão do Isagi: 0.1 / 0.08)
+function E.OlhosFlow(character, opcoes)
+	opcoes = opcoes or {}
 	local head = character and character:FindFirstChild("Head")
 	if not head or not head:IsA("BasePart") then return nil end
 	local s = head.Size
@@ -3751,7 +3766,7 @@ function E.OlhosFlow(character)
 	if malha and malha.MeshType == Enum.MeshType.Head then
 		frente = s.Z * 0.5 * malha.Scale.Z
 	end
-	local yOlho = s.Y * 0.08
+	local yOlho = s.Y * (opcoes.Y or 0.08)
 	local zPlaca = -(frente + 0.03)
 	local placa = Instance.new("Part")
 	placa.Name = "OlhosFlow"
@@ -3780,7 +3795,7 @@ function E.OlhosFlow(character)
 	local diam = math.clamp(s.X * 0.16, 0.22, 0.4) -- do tamanho do olho do rosto
 	local W, H = placa.Size.X, placa.Size.Y
 	local imagens = {}
-	local xs = { -s.X * 0.1, s.X * 0.1 } -- [1] = ESQUERDO do personagem (−X)
+	local xs = { -s.X * (opcoes.X or 0.1), s.X * (opcoes.X or 0.1) } -- [1] = ESQUERDO do personagem (−X)
 	local locais = {}
 	for i, x in ipairs(xs) do
 		-- (na face Front a direita da tela é o −X da peça)
@@ -3788,7 +3803,7 @@ function E.OlhosFlow(character)
 		local brilho = Instance.new("ImageLabel")
 		brilho.BackgroundTransparency = 1
 		brilho.Image = TEX_FLOW.Brilho
-		brilho.ImageColor3 = rgb(150, 220, 255)
+		brilho.ImageColor3 = opcoes.CorBrilho or rgb(150, 220, 255)
 		brilho.AnchorPoint = Vector2.new(0.5, 0.5)
 		brilho.Position = UDim2.fromScale(gx, 0.5)
 		brilho.Size = UDim2.fromScale(diam * 1.9 / W, diam * 1.9 / H)
@@ -3796,7 +3811,7 @@ function E.OlhosFlow(character)
 		brilho.Parent = sg
 		local iris = Instance.new("ImageLabel")
 		iris.BackgroundTransparency = 1
-		iris.Image = TEX_FLOW.OlhoQC
+		iris.Image = opcoes.Imagem or TEX_FLOW.OlhoQC
 		iris.AnchorPoint = Vector2.new(0.5, 0.5)
 		iris.Position = UDim2.fromScale(gx, 0.5)
 		iris.Size = UDim2.fromScale(diam / W, diam / H)
@@ -3817,7 +3832,9 @@ function E.OlhosFlow(character)
 		if not sg.Enabled then return end
 		local agora = os.clock()
 		for i, im in ipairs(imagens) do
-			im.Iris.Rotation = (im.Iris.Rotation + dt * 85 * (i == 1 and 1 or -1)) % 360 -- (v122: "mais rápido ainda"; v120f 48, antes 22)
+			if opcoes.Girar ~= false then
+				im.Iris.Rotation = (im.Iris.Rotation + dt * 85 * (i == 1 and 1 or -1)) % 360 -- (v122: "mais rápido ainda"; v120f 48, antes 22)
+			end
 			im.Brilho.Size = UDim2.fromScale(diam * (1.9 + 0.12 * math.sin(agora * 2.4 + i)) / W, diam * (1.9 + 0.12 * math.sin(agora * 2.4 + i)) / H)
 		end
 	end)
@@ -5779,6 +5796,9 @@ end
 --   Impact   a bola sai pra onde ele mirou, com rastro de fogo rosa
 -- TUDO que é criado no corpo (emissores), na câmera ou no PlayerGui entra em
 -- `prender` e some junto com a cena.
+-- (v124) o olho do Flow do Shidou — usado na cena e durante o Flow na partida
+E.OLHO_SHIDOU = { Imagem = TEX_FLOW.IrisShidou, CorBrilho = rgb(255, 120, 200), Girar = false, X = 0.055, Y = 0.25 }
+
 function E.FlowShidou(ctx)
 	local pasta, spec, inicio = ctx.Pasta, ctx.Spec, ctx.Inicio
 	local ph = spec.Phases
@@ -5868,7 +5888,14 @@ function E.FlowShidou(ctx)
 	local luzAnc = parte(pasta, "LuzShidou")
 	local luzRosa = luz(luzAnc, ROSA, 0, 3)
 
-	-- ===== OLHOS: brancos (Olho) → rosa (Flow) =====
+	-- ===== OLHOS: brancos (Olho) → ÍRIS DO FLOW (rosa, desenhada no rosto) =====
+	-- ⚠️ v124 — PEDIDO (vídeo 66s): o olho do Flow dele não é bola rosa: íris rosa
+	-- serrilhada com pupila oval (E.OLHO_SHIDOU), colada no rosto nos dois olhos
+	local irisFlow = E.OlhosFlow(character, E.OLHO_SHIDOU)
+	if irisFlow then
+		prender(irisFlow.Parte)
+		irisFlow.Definir(0)
+	end
 	local olhos = { esfera(pasta, "OlhoShidou1", BRANCO), esfera(pasta, "OlhoShidou2", BRANCO) }
 	local brilhosOlho = {}
 	for i, o in ipairs(olhos) do
@@ -5989,15 +6016,20 @@ function E.FlowShidou(ctx)
 		-- cor da cena
 		if t < ph.Aura[1] then
 			cc.TintColor, cc.Saturation, cc.Contrast, cc.Brightness = Color3.new(1, 1, 1), 0.05, 0.05, 0
+		elseif t >= ph.Rosto[1] and t < ph.Tunel[1] then
+			-- ⚠️ v124 (quadros do vídeo a cada 0,2s, 13-23s): nos closes do rosto e dos
+			-- olhos a imagem perde a cor — cinza-azulada, olhos brancos brilhando
+			cc.TintColor, cc.Saturation, cc.Contrast, cc.Brightness = rgb(200, 220, 240), -0.7, 0.25, 0.02
 		elseif t < 8.4 then
 			cc.TintColor, cc.Saturation, cc.Contrast, cc.Brightness = rgb(255, 238, 255), 0.25, 0.2, 0
 		else
 			-- estádio escuro (vídeo 42-47s): tudo azul-escuro e brilhos
 			local k = smooth(phase(t, 8.4, 8.8))
-			cc.TintColor = Color3.new(1, 1, 1):Lerp(rgb(165, 205, 225), k)
-			cc.Saturation = 0.25 - 0.5 * k
-			cc.Contrast = 0.2 + 0.1 * k
-			cc.Brightness = -0.28 * k
+			-- ⚠️ v124 (conferido com o vídeo): estava claro demais, parecia dia
+			cc.TintColor = Color3.new(1, 1, 1):Lerp(rgb(120, 150, 205), k)
+			cc.Saturation = 0.25 - 0.65 * k
+			cc.Contrast = 0.2 + 0.2 * k
+			cc.Brightness = -0.5 * k
 		end
 
 		-- palco de estrelas (Aura → antes do estádio escuro)
@@ -6030,7 +6062,12 @@ function E.FlowShidou(ctx)
 		end
 		if torso then
 			luzAnc.CFrame = CFrame.new(torso.Position + F * 2.2)
-			luzRosa.Range = (t >= ph.Aura[1] and t < 8.55) and 16 or ((t >= 9.3) and 12 or 0)
+			-- (v124: nos closes do rosto/olho a luz rosa forte lavava o rosto inteiro; sem luz
+			-- nenhuma o rosto sumia no palco escuro — fica uma luz fraca, quase branca)
+			local noClose = t >= ph.Rosto[1] and t < ph.Tunel[1]
+			luzRosa.Color = noClose and rgb(255, 230, 242) or ROSA
+			luzRosa.Brightness = noClose and 1.1 or 3
+			luzRosa.Range = noClose and 9 or ((t >= ph.Aura[1] and t < 8.55) and 16 or ((t >= 9.3) and 12 or 0))
 		end
 
 		-- olhos: brancos acendendo (4.0-6.3), depois ROSA (Flow) até o fim
@@ -6038,29 +6075,32 @@ function E.FlowShidou(ctx)
 			local o = FlowCenaOlhos(head)
 			local branco = smooth(phase(t, 4.0, 4.7)) * (1 - smooth(phase(t, 6.3, 6.9)))
 			local rosaN = smooth(phase(t, 6.6, 7.2))
-			local nivel = math.max(branco, rosaN)
+			-- (v124: as bolas brancas só no "olho branco"; o rosa é a íris desenhada)
+			local nivel = irisFlow and branco or math.max(branco, rosaN)
+			if irisFlow then irisFlow.Definir(rosaN) end
 			local tam = (t >= ph.Olho[1] and t < ph.Peito[1]) and 0.4 or 0.3
 			for i, e in ipairs(olhos) do
 				e.Size = V3(tam, tam * 0.55, 0.08)
 				e.CFrame = head.CFrame * CFrame.new(o[i])
-				e.Color = BRANCO:Lerp(ROSA, rosaN)
+				e.Color = irisFlow and BRANCO or BRANCO:Lerp(ROSA, rosaN)
 				e.Transparency = nivel > 0.02 and (1 - nivel) or 1
 				brilhosOlho[i].Enabled = nivel > 0.02
 				for _, g in ipairs(brilhosOlho[i]:GetChildren()) do
 					if g:IsA("ImageLabel") then
-						g.ImageColor3 = BRANCO:Lerp(ROSA, rosaN)
+						g.ImageColor3 = irisFlow and BRANCO or BRANCO:Lerp(ROSA, rosaN)
 						g.ImageTransparency = 1 - 0.9 * nivel
 					end
 				end
 			end
 		end
-		cabeloTransp(0.75 * smooth(phase(t, 4.2, 4.6)) * (1 - smooth(phase(t, 5.8, 6.3))))
+		-- (v124: desde o close do ROSTO — a franja cobria o rosto inteiro de frente)
+		cabeloTransp(0.8 * smooth(phase(t, 2.9, 3.2)) * (1 - smooth(phase(t, 5.8, 6.3))))
 
 		-- tela: preto → o branco do olho cresce → branco total
 		local preta = smooth(phase(t, ph.Tunel[1], ph.Tunel[1] + 0.12)) * (1 - smooth(phase(t, ph.Tunel[2], ph.Tunel[2] + 0.2)))
 		telaPreta.BackgroundTransparency = 1 - preta
 		local cresce = easeOut(phase(t, 5.55, 6.2))
-		local lado = 0.06 + 3.4 * cresce * cresce
+		local lado = 0.05 + 0.85 * cresce * cresce -- (v124: era 3.4 — a tela inteira ficava cinza; no vídeo o túnel é escuro com a luz no centro)
 		brilhoTela.Size = UDim2.fromScale(lado, lado)
 		brilhoTela.ImageTransparency = (t >= 5.5 and t < ph.Tunel[2] + 0.2) and 0 or 1
 		local branca = smooth(phase(t, 6.0, ph.Tunel[2])) * (1 - smooth(phase(t, ph.Tunel[2], ph.Tunel[2] + 0.28)))
@@ -6204,7 +6244,10 @@ function E.FlowShidou(ctx)
 		if not head or t < ph.Rosto[1] or t >= ph.Peito[1] then return nil end
 		local o = FlowCenaOlhos(head)
 		local meio = head.CFrame:PointToWorldSpace((o[1] + o[2]) / 2)
-		local Lh = head.CFrame.LookVector
+		-- ⚠️ v124 (conferido no Studio): pela inclinação da CABEÇA a câmera ia pra cima e
+		-- mostrava só o topo do cabelo. Agora é a frente do CORPO, na horizontal.
+		local frenteCorpo = Vector3.new(ctx.Root.CFrame.LookVector.X, 0, ctx.Root.CFrame.LookVector.Z)
+		local Lh = frenteCorpo.Magnitude > 0.01 and frenteCorpo.Unit or head.CFrame.LookVector
 		if t < ph.Olho[1] then
 			-- Rosto: de frente, um pouco de lado e abaixo
 			local u = smooth(phase(t, ph.Rosto[1], ph.Olho[1]))
