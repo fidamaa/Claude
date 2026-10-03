@@ -3746,7 +3746,7 @@ function E.OlhosFlow(character)
 		if not sg.Enabled then return end
 		local agora = os.clock()
 		for i, im in ipairs(imagens) do
-			im.Iris.Rotation = (im.Iris.Rotation + dt * 22 * (i == 1 and 1 or -1)) % 360
+			im.Iris.Rotation = (im.Iris.Rotation + dt * 48 * (i == 1 and 1 or -1)) % 360 -- (v120f: "um pouco mais rápido", era 22)
 			im.Brilho.Size = UDim2.fromScale(diam * (1.9 + 0.12 * math.sin(agora * 2.4 + i)) / W, diam * (1.9 + 0.12 * math.sin(agora * 2.4 + i)) / H)
 		end
 	end)

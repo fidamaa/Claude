@@ -2468,7 +2468,7 @@ end
 local FI_DASH = {
 	Root = { -36, 14, 0 }, Neck = { 30, -10, 0 },
 	RHip = { 70, 0, 8 }, LHip = { -40, 0, -8 },
-	RShoulder = { -80, 0, 55 }, LShoulder = { -80, 0, -55 },
+	RShoulder = { -78, 0, 74 }, LShoulder = { -78, 0, -74 }, -- (v120f: "afasta mais os braços", era 55)
 }
 local FI_POSE = {
 	{ 0.00, FI_QUATRO },
@@ -2510,7 +2510,7 @@ local FI_POSE = {
 		RShoulder = { -25, 0, 62 }, LShoulder = { -25, 0, -62 } } },
 	-- ...e DISPARA pra frente com os braços pra trás (bem abertos)
 	{ 10.70, FI_DASH },
-	{ 12.00, comMudanca(FI_DASH, { Root = { -32, 16, 0 }, RShoulder = { -86, 0, 58 }, LShoulder = { -86, 0, -58 } }) },
+	{ 12.00, comMudanca(FI_DASH, { Root = { -32, 16, 0 }, RShoulder = { -84, 0, 78 }, LShoulder = { -84, 0, -78 } }) },
 }
 function FI.Pose(t)
 	local pose = samplePoseFluida(FI_POSE, t)
