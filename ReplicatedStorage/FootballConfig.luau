@@ -183,8 +183,10 @@ Config.KICKOFF_TAKER_OFFSET = 4
 --
 -- HALF_DURATION continua existindo com o valor de DISPLAY porque é ele que
 -- a HUD usa; quem manda no tempo de verdade é HALF_REAL_SECONDS.
-Config.HALF_DURATION = 120          -- o que aparece no placar: 2:00
-Config.HALF_REAL_SECONDS = 150      -- o que dura de verdade: 2min30
+-- ⚠️ v123 — PEDIDO: "aumenta a duração da partida pra 3 minutos por rodada (continua 1
+-- no OT)". Mesmo "relógio esticado" de antes (1 segundo do placar = 1.25s de verdade).
+Config.HALF_DURATION = 180          -- o que aparece no placar: 3:00 (era 2:00)
+Config.HALF_REAL_SECONDS = 225      -- o que dura de verdade: 3min45 (era 2min30)
 
 -- ⚠️ v49 — PRORROGAÇÃO. PEDIDO: "quando der o overtime, o jogo estiver
 -- EMPATADO, os caras vão ter aquele 1 minuto, só que vai ser 1 minuto mais

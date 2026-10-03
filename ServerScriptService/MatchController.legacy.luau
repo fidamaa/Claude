@@ -1517,10 +1517,15 @@ local function runPeriod(mostrar, real)
 		end
 		task.wait(passo)
 		-- ⚠️ v113: a cena do Flow (10-15s) não come o tempo da partida
-		local cenaFlow = _G.HissatsuCutsceneActive and _G.HissatsuCutsceneActive.Flow
-		if not matchPaused and not cenaFlow then
+		-- ⚠️ v123 — PEDIDO: "o tempo vai parar durante as Hissatsus também". Qualquer
+		-- cutscene (chute, defesa do goleiro, Flow) segura o relógio — todo mundo está
+		-- congelado nela mesmo.
+		local emCutscene = _G.HissatsuCutsceneActive ~= nil
+		if not matchPaused and not emCutscene then
 			timeRemaining -= 1
 			Remotes.UpdateMatchState:FireAllClients(timeRemaining, score)
+		elseif emCutscene then
+			limiteReal += passo -- (o teto de segurança não conta o tempo parado na cutscene)
 		end
 	end
 end

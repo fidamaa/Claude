@@ -181,7 +181,23 @@ Depois:
 - Painel de debug em ABAS (Armas primeiro, Hissatsu, Testes, Flow/Gol), altura pela tela,
   busca por nome — pedido de um amigo do usuário com tela menor.
 
+## v123 (mesma sessão)
+- Estatísticas do Lobby (NPC Bentes): a recompensa da partida (TeleportData
+  `MatchRewards`, MatchController) leva `Stats` com Goals, Assists, Tackles, Dribbles,
+  Saves, **Shots, Passes, Hissatsus** (`_G.RegistrarEstatistica`) e `MatchResult`;
+  `_G.AddCareerStats(player, stats, resultado)` no PlayerDataManager soma tudo +
+  Draws/Losses/BestGoals; painel `EstatisticasClient` com 14 cartões em 3 colunas.
+- ACHADO: os dados reais do usuário tinham 13 partidas com tudo 0 — eram TESTES NO
+  STUDIO: o `saveRewards` do PlayerRemoving gravava recompensa "ongoing" de verdade e o
+  Lobby entregava. No Studio não grava mais (atributo `SalvarRecompensaNoStudio` liga).
+  O usuário ficou com +165 de dinheiro, +105 XP, +3 dribles e +2 desarmes de um teste meu
+  (perguntei se quer reverter).
+- Partida: 3:00 por tempo no placar (225s reais), OT continua 1:00 (tempo da música);
+  o relógio para em QUALQUER cutscene de Hissatsu (`_G.HissatsuCutsceneActive`).
+
 ## Lições da v122 (não repetir)
+- `UpdateAsync` com a função devolvendo `nil` CANCELA a escrita — NÃO apaga a chave. Pra
+  "consumir" algo, grave uma marca (`{ Reivindicada = true }`) ou use `RemoveAsync`.
 - `emissor(...)` com `Taxa = 0` nasce com `Enabled = false`: quem controla `Rate` depois
   tem que ligar `Enabled = true` (as estrelas do portal da Queda NUNCA apareceram por isso).
 - Textura de partícula inexistente (ex.: `TEX.Brilho`, que não existe) = partícula
