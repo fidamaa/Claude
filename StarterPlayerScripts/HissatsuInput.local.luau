@@ -122,7 +122,8 @@ end
 
 local function computeAimPoint()
 	local x, y = pontoDeMiraNaTela()
-	local ok, ponto = pcall(MiraPrecisa.Calcular, camera, x, y)
+	-- ⚠️ v122b: alinhamento na boca do gol só pras Hissatsus (o chute normal não usa)
+	local ok, ponto = pcall(MiraPrecisa.Calcular, camera, x, y, { AlinharNaBocaDoGol = true })
 	if ok and typeof(ponto) == "Vector3" then return ponto end
 	return computeAimPointV85()
 end

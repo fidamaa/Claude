@@ -79,6 +79,8 @@ end
 
 -- camera, x, y (ponto da tela, mesmo sistema do mouse.X/Y), opcoes:
 --   opcoes.NuncaPraTras = true  -> ver cabeçalho
+--   opcoes.AlinharNaBocaDoGol = true -> (só Hissatsu, v122) ponto atrás do gol vira o
+--     cruzamento do raio com a boca do gol
 function MiraPrecisa.Calcular(camera, x, y, opcoes)
 	opcoes = opcoes or {}
 	local raio = camera:ScreenPointToRay(x, y)
@@ -148,7 +150,10 @@ function MiraPrecisa.Calcular(camera, x, y, opcoes)
 	-- se o ponto ficou ATRÁS da boca de um gol, o alvo é onde o raio do cursor CRUZA o
 	-- plano da boca do gol: a bola passa exatamente onde o cursor mostrava, de
 	-- qualquer altura que ela saia.
-	if not acertouGol then
+	-- ⚠️ v122b — PEDIDO: "na Hissatsu ficou perfeito, mas no chute NORMAL ela sai muito
+	-- pra cima: esse sistema novo é só das Hissatsus, o antigo fica pro chute normal".
+	-- Só liga com opcoes.AlinharNaBocaDoGol (HissatsuInput); o chute normal não passa.
+	if not acertouGol and opcoes.AlinharNaBocaDoGol then
 		local distPonto = (ponto - raio.Origin).Magnitude
 		for _, g in ipairs(gols()) do
 			-- normal da boca = o eixo horizontal mais FINO da peça do gol

@@ -662,18 +662,28 @@ end
 -- servidor lia o MoveDirection dele e falhava; agora o cliente manda o movimento
 -- (MoveDirection; sem ele, as teclas A/D/setas pelo lado da câmera).
 local function movimentoDoChute()
+	-- ⚠️ v122b — PEDIDO: "corrige o bug de ir pro lado ou pro outro no chute normal".
+	-- Medido no Studio: o chute normal sai 0,00 stud da linha (parado, com giro e
+	-- andando de lado a 16 studs/s). O que entortava era a curva da arma valendo
+	-- também CORRENDO NA DIAGONAL (W+A conta 0,7 "de lado"). Agora só vale A OU D
+	-- puro (sem W/S) — no controle/celular, movimento quase todo pro lado da câmera.
+	local cam = workspace.CurrentCamera
+	local direitaCam = cam and Vector3.new(cam.CFrame.RightVector.X, 0, cam.CFrame.RightVector.Z) or Vector3.zero
+	if direitaCam.Magnitude < 0.01 then return Vector3.zero end
+	direitaCam = direitaCam.Unit
+	local K = Enum.KeyCode
+	local esq = UserInputService:IsKeyDown(K.A) or UserInputService:IsKeyDown(K.Left)
+	local dir = UserInputService:IsKeyDown(K.D) or UserInputService:IsKeyDown(K.Right)
+	local frenteTras = UserInputService:IsKeyDown(K.W) or UserInputService:IsKeyDown(K.S)
+		or UserInputService:IsKeyDown(K.Up) or UserInputService:IsKeyDown(K.Down)
+	if esq or dir or frenteTras then -- teclado
+		if esq ~= dir and not frenteTras then return direitaCam * (dir and 1 or -1) end
+		return Vector3.zero
+	end
 	local hum = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
 	local mov = hum and hum.MoveDirection or Vector3.zero
-	if mov.Magnitude < 0.2 then
-		local cam = workspace.CurrentCamera
-		local direitaCam = cam and Vector3.new(cam.CFrame.RightVector.X, 0, cam.CFrame.RightVector.Z) or Vector3.zero
-		if direitaCam.Magnitude > 0.01 then
-			local esq = UserInputService:IsKeyDown(Enum.KeyCode.A) or UserInputService:IsKeyDown(Enum.KeyCode.Left)
-			local dir = UserInputService:IsKeyDown(Enum.KeyCode.D) or UserInputService:IsKeyDown(Enum.KeyCode.Right)
-			if esq and not dir then mov = -direitaCam.Unit elseif dir and not esq then mov = direitaCam.Unit end
-		end
-	end
-	return mov
+	if mov.Magnitude > 0.2 and math.abs(mov.Unit:Dot(direitaCam)) > 0.85 then return mov.Unit end
+	return Vector3.zero
 end
 
 local function releaseKick()
