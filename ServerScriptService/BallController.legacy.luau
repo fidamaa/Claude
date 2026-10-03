@@ -269,7 +269,9 @@ local POSSESSION_TOUCH_RADIUS = 3.5
 -- "passe fraco"). v5.5: meio-termo em 34 — cobre o passe mais fraco
 -- possível (~30-35 studs/s) sem esticar pra chutes de força média pra
 -- cima, que devem continuar exigindo captura ativa (carrinho/goleiro).
-local LOOSE_BALL_PICKUP_MAX_SPEED = 22
+-- ⚠️ v120b — PEDIDO: "pegar a bola mais fácil (no ar, pro air dribble), se ela
+-- estiver lenta — bicuda continua sem dar". 22 → 30.
+local LOOSE_BALL_PICKUP_MAX_SPEED = 30
 
 -- ===== TOQUE ESPECIAL: rastro visual + sons =====
 local trail
@@ -3227,26 +3229,42 @@ end)
 -- própria área: bola sem dono encostando no corpo = dele. Não vale pra
 -- Hissatsu em voo (essa passa pela guarda/duelo), nem logo depois do próprio
 -- arremesso, nem com "ignora goleiro" recente.
-RunService.Heartbeat:Connect(function()
-	if ballFrozenForGuardQTE or owner or deadBallMode or pulseStraightFlightActive then return end
-	if tick() - lastIgnoreGKShot < 1 then return end
-	local caixa = Config.GK_CORPO_CAPTURA or { Raio = 2.8, Baixo = 3.4, Alto = 3.8 }
-	for _, plr in ipairs(Players:GetPlayers()) do
-		if not GKAreaUtil.IsEffectiveGK(plr) or isStunned(plr) then continue end
-		if recentKicker == plr and tick() - recentKickTime < 0.6 then continue end
-		local _, root = getCharacterParts(plr)
-		if not root then continue end
-		local rel = ball.Position - root.Position
-		if Vector3.new(rel.X, 0, rel.Z).Magnitude <= caixa.Raio and rel.Y >= -caixa.Baixo and rel.Y <= caixa.Alto then
-			local vinhaRapida = ball.AssemblyLinearVelocity.Magnitude > LOOSE_BALL_PICKUP_MAX_SPEED
-			ball.AssemblyLinearVelocity = Vector3.zero
-			ball.CanCollide = true
-			setOwner(plr)
-			if vinhaRapida and _G.RegisterSave then _G.RegisterSave(plr) end
-			return
+-- ⚠️ v120b — PEDIDO: "o GK player pega a bola simplesmente se ela passar dentro
+-- dele, independente da força, mesmo sem dive — numa hitbox em volta dele, um
+-- pouco maior que ele". Chute forte ATRAVESSAVA: a 150 studs/s a bola anda ~2,5
+-- studs por quadro e pulava a caixa. Agora testa o CAMINHO da bola entre um
+-- quadro e o outro (amostras a cada ~0,8 stud), não só a posição atual.
+do
+	local posAnterior = nil
+	RunService.Heartbeat:Connect(function()
+		local atual = ball.Position
+		local anterior = posAnterior or atual
+		posAnterior = atual
+		if ballFrozenForGuardQTE or owner or deadBallMode or pulseStraightFlightActive then return end
+		if tick() - lastIgnoreGKShot < 1 then return end
+		local caixa = Config.GK_CORPO_CAPTURA or { Raio = 3.3, Baixo = 3.6, Alto = 4.2 }
+		local passo = atual - anterior
+		if passo.Magnitude > 30 then anterior = atual passo = Vector3.zero end -- (teleporte/reset: não é caminho)
+		local amostras = math.clamp(math.ceil(passo.Magnitude / 0.8), 1, 40)
+		for _, plr in ipairs(Players:GetPlayers()) do
+			if not GKAreaUtil.IsEffectiveGK(plr) or isStunned(plr) then continue end
+			if recentKicker == plr and tick() - recentKickTime < 0.6 then continue end
+			local _, root = getCharacterParts(plr)
+			if not root then continue end
+			for i = 1, amostras do
+				local rel = (anterior + passo * (i / amostras)) - root.Position
+				if Vector3.new(rel.X, 0, rel.Z).Magnitude <= caixa.Raio and rel.Y >= -caixa.Baixo and rel.Y <= caixa.Alto then
+					local vinhaRapida = ball.AssemblyLinearVelocity.Magnitude > LOOSE_BALL_PICKUP_MAX_SPEED
+					ball.AssemblyLinearVelocity = Vector3.zero
+					ball.CanCollide = true
+					setOwner(plr)
+					if vinhaRapida and _G.RegisterSave then _G.RegisterSave(plr) end
+					return
+				end
+			end
 		end
-	end
-end)
+	end)
+end
 
 -- ===== FINTA DIRECIONAL (Z esquerda / X trás / C direita) =====
 -- ⚠️ NOVO — DRIBLE DIRECIONAL (tecla Q). PEDIDO: "A direção do drible deve
@@ -4028,6 +4046,12 @@ local function canCaptureLooseBallByTackle(player, root)
 	if vertical > Config.TACKLE_AERIAL_CAPTURE_HEIGHT then return false end
 
 	local ballSpeed = ball.AssemblyLinearVelocity.Magnitude
+	-- ⚠️ v120b — PEDIDO: "carrinho não intercepta chute acima de 40% da barra (na
+	-- força base): se o chute saiu a 100% e perdeu velocidade até chegar no que
+	-- seria 40%, aí dá pra pegar com carrinho; senão só o dive do goleiro".
+	local fracao = Config.TACKLE_INTERCEPT_BAR_FRACTION or 0.4
+	local limiteCarrinho = Config.KICK_MIN_FORCE + (Config.KICK_MAX_FORCE - Config.KICK_MIN_FORCE) * fracao
+	if ballSpeed > limiteCarrinho then return false end
 	local isFastOrAerial = ballSpeed > LOOSE_BALL_PICKUP_MAX_SPEED or vertical > Config.AERIAL_PICKUP_HEIGHT
 	if isFastOrAerial and getTechnique(player) < Config.TACKLE_FAST_BALL_MIN_TECHNIQUE then -- ⚠️ NOVO: bola difícil = Técnica (era DribbleSkill)
 		return false
@@ -6638,7 +6662,15 @@ end)()
 			if mov2.Magnitude > 0.2 and math.abs(mov2:Dot(direita)) > 0.25 then
 				lado = mov2:Dot(direita) >= 0 and 1 or -1
 			end
-			local desvioFinal = distancia * math.clamp(0.05 * curva, 0.03, 0.2)
+			-- ⚠️ v120b — PEDIDO: "o chute do Rin não tá fazendo curva nenhuma. A partir
+			-- de uns 35-45% da trajetória ela começa a virar o eixo pro lado (esquerda ou
+			-- direita, conforme você anda); passou mais um pouco, vira mais... até uns
+			-- 70%, e PARA — senão uma hora ela dá um 360 e volta pra você". Antes o
+			-- desvio crescia com u^2.4 e quase nada aparecia antes do gol. Agora é o
+			-- RUMO da bola que gira: 0° até 35% do caminho, sobe suave até o máximo em
+			-- 70% e daí segue RETA no rumo novo (vale pra chute fraco ou forte — conta
+			-- pela distância andada até o ponto mirado).
+			local anguloMax = math.rad(math.clamp(8 * curva, 10, 30)) -- Rin (Curva 3) = 24°
 			curveGeneration += 1
 			local minhaCurvaGol = curveGeneration
 			local origem = ball.Position
@@ -6654,15 +6686,16 @@ end)()
 				local v = ball.AssemblyLinearVelocity
 				local rel = Vector3.new(ball.Position.X - origem.X, 0, ball.Position.Z - origem.Z)
 				local x = math.max(rel:Dot(frente), 0)
-				local vx = math.max(Vector3.new(v.X, 0, v.Z):Dot(frente), 1)
 				local u = x / distancia
-				-- depois do alvo segue na mesma inclinação (a curva não "desfaz")
-				local uc = math.min(u, 1)
-				local y = rel:Dot(direita) * lado
-				local yDesejado = desvioFinal * (uc ^ 2.4) + (u > 1 and (u - 1) * desvioFinal * 2.4 or 0)
-				local inclinacao = (desvioFinal / distancia) * 2.4 * (uc ^ 1.4)
-				local vLateral = vx * inclinacao + (yDesejado - y) * 6
-				ball.AssemblyLinearVelocity = frente * vx + direita * (lado * vLateral) + Vector3.new(0, v.Y, 0)
+				local k = math.clamp((u - 0.35) / 0.35, 0, 1)
+				local ang = anguloMax * (k * k * (3 - 2 * k))
+				local horiz = Vector3.new(v.X, 0, v.Z).Magnitude
+				local rumo = frente * math.cos(ang) + direita * (lado * math.sin(ang))
+				ball.AssemblyLinearVelocity = rumo * horiz + Vector3.new(0, v.Y, 0)
+				if u >= 0.7 then
+					-- (o rumo novo já está aplicado: daqui pra frente a bola segue reta)
+					conexaoGol:Disconnect()
+				end
 			end)
 			return lado
 		end

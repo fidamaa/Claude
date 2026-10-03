@@ -3519,25 +3519,23 @@ end
 local function lerp(a, b, k) return a + (b - a) * k end
 
 -- ============================================================
--- 🧠 FLOW DO ISAGI — "O GÊNIO DA ADAPTABILIDADE" (⚠️ v119b) — ver a coreografia
+-- 🧠 FLOW DO ISAGI — "O GÊNIO DA ADAPTABILIDADE" (⚠️ v120) — ver a coreografia
 -- Flow_Isagi. Por fase:
---   A-D  gramado de verdade com NEBLINA baixa, poeira de luz, vapor da
---        respiração, suor pingando; um brilho no olho quando ele levanta a
---        cabeça e vê o Rin; poeira e riscos ao se levantar
---   E    palco BRANCO de riscos verticais; corpo vira silhueta escura de
---        contorno branco; OLHOS BRANCOS acesos (peça de luz no rosto + brilho)
---        que escorrem
---   F    a MANDALA de engrenagens nasce na pupila, cresce, gira e estoura
---   G    escuro com o REDEMOINHO girando no fundo; a pisada vira um chão de
---        QUEBRA-CABEÇA de luz e as peças voam EM VOLTA dele
---   H    aura escura e chamas azuis, olhos acesos entre os braços, flashes do
---        CÉREBRO
---   K    COR: fundo claro azulado, corpo azul com contorno branco, CÉREBRO
---        brilhando com raios, OLHOS DO GÊNIO girando, peças de quebra-cabeça
---        aparecendo EM VOLTA do corpo inteiro (presas a ele)
--- ⚠️ v119b: TUDO que é criado no corpo (emissores, anexos) entra em `prender` e
--- some junto com a cena — antes as partículas ficavam no corpo depois (era o
--- "quebra-cabeça saindo de um ponto e indo pra trás" na partida).
+--   A-C  gramado com NEBLINA BRANCA densa (Atmosphere), suor, vapor; frustrado
+--        (soca o chão); os OLHOS ACENDEM BRANCOS ainda de quatro; sobe com o
+--        joelho com RISCOS PRETOS grandes ATRÁS dele
+--   D    palco branco de riscos, silhueta escura, olhos brancos escorrendo
+--   E    close no olho ESQUERDO: ÍRIS DE QUEBRA-CABEÇA estática; a câmera entra
+--        no miolo branco
+--   F    o branco vira a neblina: o Rin passa correndo do lado dele
+--   G    REDEMOINHO NA TELA fechando a visão (ScreenGui), preto
+--   H    o mundo dele: fundo branco, chão escuro; o pé pisa DEVAGAR, o chão vira
+--        quebra-cabeça e as peças SURGEM do chão
+--   K    olhos brancos → DASH (braços pra trás) → pisca → MÁSCARA DE
+--        QUEBRA-CABEÇA nos olhos; a cabeça e os ombros se desfazem em peças
+--        escuras; o cérebro de peças em cima da cabeça; cor
+-- TUDO que é criado no corpo (emissores, anexos), na câmera, no Lighting ou no
+-- PlayerGui entra em `prender` e some junto com a cena.
 -- ============================================================
 local TEX_FLOW = {
 	Brilho = "rbxassetid://116102662517740",
@@ -3550,6 +3548,12 @@ local TEX_FLOW = {
 	QuebraCabeca = "rbxassetid://105934225794623",
 	Redemoinho = "rbxassetid://140668349355595",
 	Riscos = "rbxassetid://121453343893984",
+	-- ⚠️ v120 (vídeo quadro a quadro): a íris de quebra-cabeça do olho (8,8-9,9s;
+	-- nos dois olhos, no rosto — E.OlhosFlow), a vinheta da visão fechando, e peças SÓLIDAS (a cabeça se desfazendo, YouTube
+	-- mVkclcc3z-c 0-3s)
+	OlhoQC = "rbxassetid://100317620382409",
+	Vinheta = "rbxassetid://81167227589820",
+	PecasSolidas = { "rbxassetid://75123581494537", "rbxassetid://77996428576582", "rbxassetid://113216829601203" },
 	-- 6 peças diferentes (cada imagem uma peça) — também usadas no Flow da partida
 	Pecas = {
 		"rbxassetid://78118904101221", "rbxassetid://105525967568383", "rbxassetid://111438389261843",
@@ -3653,10 +3657,98 @@ function E.PecasEmVolta(character, cor, cor2, taxa, tamanho)
 	return lista
 end
 
+-- ⚠️ v120b — OS OLHOS DO FLOW DO ISAGI, NO ROSTO. PEDIDO: "o olho tem que estar na
+-- cara do personagem, no lugar do olho, nos DOIS lados (na frente do cabelo fica
+-- muito estranho); e o cara se mantém com esse olho durante o Flow também, fora
+-- da animação". Uma placa invisível COLADA na cabeça (Weld), rente ao rosto, com
+-- a íris de quebra-cabeça desenhada (SurfaceGui) em cima de cada olho: a franja
+-- passa na frente dela como passaria do olho de verdade.
+-- Devolve { Parte, Locais = {esq, dir} (espaço da cabeça), Diametro,
+-- Mundo(i) = posição do olho i no mundo, Definir(nivel 0-1) } ou nil.
+function E.OlhosFlow(character)
+	local head = character and character:FindFirstChild("Head")
+	if not head or not head:IsA("BasePart") then return nil end
+	local s = head.Size
+	-- onde fica o rosto: cabeça R6 clássica (SpecialMesh "Head") é maior que a peça
+	local frente = s.Z * 0.5
+	local malha = head:FindFirstChildOfClass("SpecialMesh")
+	if malha and malha.MeshType == Enum.MeshType.Head then
+		frente = s.Z * 0.5 * malha.Scale.Z
+	end
+	local yOlho = s.Y * 0.08
+	local zPlaca = -(frente + 0.03)
+	local placa = Instance.new("Part")
+	placa.Name = "OlhosFlow"
+	placa.Size = V3(s.X * 0.62, s.Y * 0.5, 0.05)
+	placa.Transparency = 1
+	placa.CanCollide = false
+	placa.CanQuery = false
+	placa.CanTouch = false
+	placa.CastShadow = false
+	placa.Massless = true
+	placa.Anchored = false
+	placa.CFrame = head.CFrame * CFrame.new(0, yOlho, zPlaca)
+	local solda = Instance.new("WeldConstraint")
+	solda.Part0 = head
+	solda.Part1 = placa
+	solda.Parent = placa
+	placa.Parent = character
+	local sg = Instance.new("SurfaceGui")
+	sg.Face = Enum.NormalId.Front
+	sg.LightInfluence = 0
+	sg.Brightness = 1.8
+	sg.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+	sg.PixelsPerStud = 400
+	sg.Adornee = placa
+	sg.Parent = placa
+	local diam = math.clamp(s.X * 0.16, 0.22, 0.4) -- do tamanho do olho do rosto
+	local W, H = placa.Size.X, placa.Size.Y
+	local imagens = {}
+	local xs = { -s.X * 0.1, s.X * 0.1 } -- [1] = ESQUERDO do personagem (−X)
+	local locais = {}
+	for i, x in ipairs(xs) do
+		-- (na face Front a direita da tela é o −X da peça)
+		local gx = 0.5 - x / W
+		local brilho = Instance.new("ImageLabel")
+		brilho.BackgroundTransparency = 1
+		brilho.Image = TEX_FLOW.Brilho
+		brilho.ImageColor3 = rgb(150, 220, 255)
+		brilho.AnchorPoint = Vector2.new(0.5, 0.5)
+		brilho.Position = UDim2.fromScale(gx, 0.5)
+		brilho.Size = UDim2.fromScale(diam * 1.9 / W, diam * 1.9 / H)
+		brilho.ZIndex = 1
+		brilho.Parent = sg
+		local iris = Instance.new("ImageLabel")
+		iris.BackgroundTransparency = 1
+		iris.Image = TEX_FLOW.OlhoQC
+		iris.AnchorPoint = Vector2.new(0.5, 0.5)
+		iris.Position = UDim2.fromScale(gx, 0.5)
+		iris.Size = UDim2.fromScale(diam / W, diam / H)
+		iris.ZIndex = 2
+		iris.Parent = sg
+		imagens[i] = { Iris = iris, Brilho = brilho }
+		locais[i] = V3(x, yOlho, zPlaca - 0.03)
+	end
+	local obj = { Parte = placa, Locais = locais, Diametro = diam }
+	function obj.Mundo(i)
+		return head.CFrame:PointToWorldSpace(locais[i] or locais[1])
+	end
+	function obj.Definir(nivel)
+		nivel = math.clamp(nivel or 0, 0, 1)
+		sg.Enabled = nivel > 0.01
+		for _, im in ipairs(imagens) do
+			im.Iris.ImageTransparency = 1 - nivel
+			im.Brilho.ImageTransparency = 1 - 0.55 * nivel
+		end
+	end
+	return obj
+end
+
 function E.FlowIsagi(ctx)
 	local pasta, spec, inicio = ctx.Pasta, ctx.Spec, ctx.Inicio
 	local AZUL, AZUL_CLARO, CIANO = rgb(90, 160, 255), rgb(220, 240, 255), rgb(130, 225, 255)
 	local BRANCO, ESCURO = rgb(255, 255, 255), rgb(10, 12, 20)
+	local PECA_ESCURA = rgb(24, 29, 46)
 	local character = ctx.Character
 	local head = character:FindFirstChild("Head")
 	local torso = character:FindFirstChild("UpperTorso") or character:FindFirstChild("Torso")
@@ -3665,8 +3757,9 @@ function E.FlowIsagi(ctx)
 	local bracoE = character:FindFirstChild("LeftUpperArm") or character:FindFirstChild("Left Arm")
 	local F, R, U = inicio.LookVector, inicio.RightVector, Vector3.yAxis
 	local function chaoMundo(p) return Vector3.new(p.X, ctx.Mundo(V3(0, ctx.ChaoY, 0)).Y, p.Z) end
+	local ph = spec.Phases
 
-	-- tudo que for preso no corpo some junto com a cena
+	-- tudo que for preso no corpo (ou fora da pasta) some junto com a cena
 	local noCorpo = {}
 	local function prender(x) table.insert(noCorpo, x) return x end
 	pasta.Destroying:Connect(function()
@@ -3678,10 +3771,54 @@ function E.FlowIsagi(ctx)
 	cc.Name = "FlowIsagiCor"
 	cc.Parent = workspace.CurrentCamera
 
-	-- palco (some nas fases do gramado)
+	-- ⚠️ v120 — PEDIDO: "aumenta a neblina do cenário, quase impossível de
+	-- reconhecer o fundo, branco mesmo". Atmosphere densa e branca durante a
+	-- cena (o personagem perto continua nítido); devolve os valores no fim.
+	local Lighting = game:GetService("Lighting")
+	local atm = Lighting:FindFirstChildOfClass("Atmosphere")
+	local atmCriada = false
+	if not atm then
+		atm = Instance.new("Atmosphere")
+		atm.Density = 0
+		atm.Parent = Lighting
+		atmCriada = true
+	end
+	local atmAntes = { Density = atm.Density, Offset = atm.Offset, Color = atm.Color, Decay = atm.Decay, Glare = atm.Glare, Haze = atm.Haze }
+	pasta.Destroying:Connect(function()
+		if atmCriada then
+			atm:Destroy()
+		elseif atm.Parent then
+			for k, v in pairs(atmAntes) do atm[k] = v end
+		end
+	end)
+	local function neblinaDensa(k)
+		if k <= 0 then
+			for chave, v in pairs(atmAntes) do atm[chave] = v end
+			return
+		end
+		atm.Density = atmAntes.Density + (0.86 - atmAntes.Density) * k
+		atm.Offset = 0.35 * k
+		atm.Color = rgb(246, 248, 252)
+		atm.Decay = rgb(246, 248, 252)
+		atm.Haze = 1.4 * k
+		atm.Glare = 0
+	end
+
+	-- palco (paredes e chão separados: no gramado só as paredes)
 	local sala = salaEscura(pasta, "SalaFlowIsagi", ESCURO, inicio * CFrame.new(0, 20, -12), 150, ctx.ChaoY + 0.2 - 20)
 	sala.Transparency = 1
-	local function corDaSala(c) for _, p in ipairs(sala.Placas) do p.Color = c end end
+	local piso = sala.Placas[2]
+	local function palco(corParede, transpParede, corPiso, transpPiso)
+		for i, p in ipairs(sala.Placas) do
+			if i == 2 then
+				p.Color = corPiso or corParede
+				p.Transparency = transpPiso or transpParede
+			else
+				p.Color = corParede
+				p.Transparency = transpParede
+			end
+		end
+	end
 
 	-- contorno/silhueta do corpo (muda por fase)
 	local hl = Instance.new("Highlight")
@@ -3691,16 +3828,66 @@ function E.FlowIsagi(ctx)
 	hl.OutlineTransparency = 1
 	hl.Parent = pasta
 
-	-- ===== A-D: neblina, poeira de luz, vapor, suor =====
-	local chaoNeblina = parte(pasta, "NeblinaChao", { Size = V3(54, 1, 70) })
-	chaoNeblina.CFrame = inicio * CFrame.new(0, ctx.ChaoY + 0.6, -18)
+	-- ===== TELA (redemoinho fechando a visão, brancos e pretos de transição) =====
+	-- ⚠️ v120 — PEDIDO: "o redemoinho ocupando a tela inteira, fechando, como se
+	-- fechasse a visão dele". É desenho na TELA (ScreenGui), não no mundo.
+	local playerGui = Players.LocalPlayer and Players.LocalPlayer:FindFirstChildOfClass("PlayerGui")
+	local tela = prender(Instance.new("ScreenGui"))
+	tela.Name = "FlowIsagiTela"
+	tela.IgnoreGuiInset = true
+	tela.ResetOnSpawn = false
+	tela.DisplayOrder = 40
+	tela:SetAttribute("VisivelNaCutscene", true) -- (o motor esconde toda GUI sem isso)
+	tela.Parent = playerGui
+	local function quadrado(img, cor, z)
+		local g = Instance.new("ImageLabel")
+		g.BackgroundTransparency = 1
+		g.Image = img
+		g.ImageColor3 = cor
+		g.ImageTransparency = 1
+		g.AnchorPoint = Vector2.new(0.5, 0.5)
+		g.Position = UDim2.fromScale(0.5, 0.5)
+		g.SizeConstraint = Enum.SizeConstraint.RelativeXX -- quadrado, pela largura
+		g.Size = UDim2.fromScale(1, 1)
+		g.ZIndex = z
+		g.Parent = tela
+		return g
+	end
+	-- ⚠️ v120b — PEDIDO: "a espiral tem que escurecer TOTALMENTE (ainda tem partes
+	-- brancas), aumentar e girar, fechando o olho" (vídeo 10,9-12,0s: preto com a
+	-- espiral cinza girando). Fundo escuro por baixo + espirais cinza por cima.
+	local function chapado(cor, z)
+		local f = Instance.new("Frame")
+		f.BorderSizePixel = 0
+		f.BackgroundColor3 = cor
+		f.BackgroundTransparency = 1
+		f.Size = UDim2.fromScale(1, 1)
+		f.ZIndex = z
+		f.Parent = tela
+		return f
+	end
+	-- ⚠️ v120: a íris na TELA pro mergulho final (billboard some com a câmera
+	-- muito perto — testado: a íris presa no olho desaparecia a ~0.7 stud)
+	local irisTela = quadrado(TEX_FLOW.OlhoQC, BRANCO, 1)
+	irisTela.SizeConstraint = Enum.SizeConstraint.RelativeXY
+	irisTela.Visible = false
+	local fundoEspiral = chapado(rgb(8, 10, 16), 2)
+	local redTela1 = quadrado(TEX_FLOW.Redemoinho, rgb(70, 80, 100), 3)
+	local redTela2 = quadrado(TEX_FLOW.Redemoinho, rgb(130, 140, 160), 4)
+	local vinheta = quadrado(TEX_FLOW.Vinheta, rgb(0, 0, 0), 5)
+	local telaPreta = chapado(rgb(0, 0, 0), 6)
+	local telaBranca = chapado(rgb(248, 250, 255), 7)
+
+	-- ===== A-C: neblina, poeira de luz, vapor, suor =====
+	local chaoNeblina = parte(pasta, "NeblinaChao", { Size = V3(60, 1, 76) })
+	chaoNeblina.CFrame = inicio * CFrame.new(0, ctx.ChaoY + 0.6, -14)
 	local neblina = emissor(chaoNeblina, {
-		Textura = TEX_FLOW.Nuvem, Cor = cores({ { 0, rgb(235, 240, 250) }, { 1, rgb(200, 212, 230) } }), Brilho = 0.15,
-		Tamanho = numeros({ { 0, 9 }, { 1, 16 } }), Transp = numeros({ { 0, 1 }, { 0.3, 0.7 }, { 0.7, 0.76 }, { 1, 1 } }),
+		Textura = TEX_FLOW.Nuvem, Cor = cores({ { 0, rgb(240, 244, 252) }, { 1, rgb(214, 224, 240) } }), Brilho = 0.2,
+		Tamanho = numeros({ { 0, 10 }, { 1, 18 } }), Transp = numeros({ { 0, 1 }, { 0.3, 0.55 }, { 0.7, 0.62 }, { 1, 1 } }),
 		Vida = { 3, 4.5 }, Vel = { 0.3, 1.2 }, Spread = 30, Direcao = Enum.NormalId.Top, RotVel = 12,
-		Forma = Enum.ParticleEmitterShape.Box, Estilo = Enum.ParticleEmitterShapeStyle.Volume, Taxa = 22,
+		Forma = Enum.ParticleEmitterShape.Box, Estilo = Enum.ParticleEmitterShapeStyle.Volume, Taxa = 34,
 	})
-	neblina:Emit(40)
+	neblina:Emit(70)
 	local poeiraLuz = emissor(chaoNeblina, {
 		Textura = TEX_FLOW.Brilho, Cor = rgb(230, 240, 255), Brilho = 0.6, Tamanho = numeros({ { 0, 0 }, { 0.5, 0.14 }, { 1, 0 } }),
 		Vida = { 2, 3 }, Vel = { 0.2, 0.6 }, Acel = V3(0, 0.3, 0),
@@ -3728,31 +3915,42 @@ function E.FlowIsagi(ctx)
 		Textura = TEX_FLOW.Nuvem, Cor = rgb(170, 160, 140), Brilho = 0.1, Tamanho = numeros({ { 0, 1 }, { 1, 3.5 } }),
 		Transp = numeros({ { 0, 0.45 }, { 1, 1 } }), Vida = { 0.5, 0.9 }, Vel = { 4, 9 }, Spread = 80, Direcao = Enum.NormalId.Top,
 	})
-	-- riscos de velocidade ao levantar (atrás dele)
-	local riscosAnc = parte(pasta, "RiscosAnc")
-	local bbRiscos, imRiscos = placaFlow(riscosAnc, 16, 22, {
-		{ Imagem = TEX_FLOW.Riscos, Cor = rgb(235, 242, 255), Transp = 0.35 },
-		{ Imagem = TEX_FLOW.Riscos, Cor = rgb(200, 215, 240), Transp = 0.5, Escala = 1.3 },
-	})
+	-- ⚠️ v120 — PEDIDO: "os traços do levantar têm que aparecer ATRÁS do personagem,
+	-- não na frente; listas PRETAS atrás dele, maiores ainda, como se ele estivesse
+	-- tentando se levantar". Painéis grandes de riscos pretos atrás dele (a câmera
+	-- está na frente), descendo enquanto ele sobe.
+	local riscosLev = {}
+	for i = 1, 4 do
+		local anc = parte(pasta, "RiscosLevanta" .. i)
+		local bb, cam = placaFlow(anc, 9, 26, { { Imagem = TEX_FLOW.Riscos, Cor = rgb(6, 7, 12), Transp = 1 } })
+		-- (perto das costas: longe, a neblina densa clareava o preto)
+		riscosLev[i] = { Anc = anc, BB = bb, Img = cam[1], X = (i - 2.5) * 4.6, Z = 2.6 + (i % 2) * 0.9, Vel = 1.4 + i * 0.35 }
+	end
 
-	-- ===== OLHOS: peça de luz NO ROSTO (sempre aparece) + brilho/desenho por cima =====
+	-- ===== OLHOS: NO ROSTO, no lugar dos olhos =====
+	-- ⚠️ v120b — PEDIDO: "o olho tem que estar na cara do personagem, no lugar do olho,
+	-- nos DOIS lados — na frente do cabelo fica muito estranho". A íris de
+	-- quebra-cabeça é desenhada numa placa COLADA no rosto (E.OlhosFlow, a mesma do
+	-- Flow na partida); o brilho branco fica no rosto também (billboard puxado só um
+	-- pouco pra câmera com StudsOffset, sem flutuar na frente do cabelo).
+	-- (olhos[1] = ESQUERDO do personagem: −X no espaço da cabeça)
+	local olhosFlow = E.OlhosFlow(character)
+	if olhosFlow then
+		prender(olhosFlow.Parte)
+		olhosFlow.Definir(0)
+	end
 	local olhos = {}
-	if head then
-		for i, p0 in ipairs(FlowCenaOlhos(head)) do
-			-- (R6: a malha da cabeça é maior que a peça; um pouco à frente do rosto)
-			local p = p0 + V3(0, 0, -0.3) -- na frente da franja (o billboard respeita profundidade)
+	if head and olhosFlow then
+		for i, p in ipairs(olhosFlow.Locais) do
 			local a = prender(Instance.new("Attachment"))
-			a.Position = p + V3(0, 0, -0.02)
+			a.Position = p
 			a.Parent = head
 			local luzOlho = parte(pasta, "OlhoLuz" .. i, { Shape = Enum.PartType.Ball, Color = BRANCO })
 			luzOlho.Size = V3(0.32, 0.17, 0.06)
-			local bb, cam = placaFlow(a, 1.4, 1.4, {
+			local bb, cam = placaFlow(a, 1.1, 1.1, {
 				{ Imagem = TEX_FLOW.Brilho, Cor = AZUL_CLARO, Transp = 0.15 },
 			}, true)
-			local bbG, camG = placaFlow(a, 0.42, 0.42, {
-				{ Imagem = TEX_FLOW.Brilho, Cor = CIANO, Transp = 0.1, Escala = 2.2 },
-				{ Imagem = TEX_FLOW.OlhoGenio, Cor = rgb(235, 250, 255), Transp = 0 },
-			}, true)
+			bb.StudsOffset = V3(0, 0, 0.25) -- (um pouco na direção da câmera: o brilho não some dentro da cabeça)
 			-- lágrima de luz: um feixe que escorre do olho
 			local fim = prender(Instance.new("Attachment"))
 			fim.Position = a.Position
@@ -3767,7 +3965,7 @@ function E.FlowIsagi(ctx)
 			bm.FaceCamera = true
 			bm.Enabled = false
 			bm.Parent = head
-			olhos[i] = { A = a, Luz = luzOlho, BB = bb, Camadas = cam, BBG = bbG, CamadasG = camG, Fim = fim, Lagrima = bm, Base = a.Position, Local = p }
+			olhos[i] = { A = a, Luz = luzOlho, BB = bb, Camadas = cam, Fim = fim, Lagrima = bm, Base = a.Position, Local = p }
 		end
 	end
 	local function acenderOlhos(nivel, cor, tam)
@@ -3782,34 +3980,21 @@ function E.FlowIsagi(ctx)
 			end
 		end
 	end
-	local mandalaBB, mandala, mandalaAnc
-	if olhos[2] then
-		-- (na FRENTE da franja: a câmera mergulha nela)
-		mandalaAnc = prender(Instance.new("Attachment"))
-		mandalaAnc.Position = olhos[2].Local + V3(0, 0, -0.9)
-		mandalaAnc.Parent = head
-		mandalaBB, mandala = placaFlow(mandalaAnc, 1, 1, {
-			{ Imagem = TEX_FLOW.Brilho, Cor = AZUL_CLARO, Transp = 0.1, Escala = 1.6 },
-			{ Imagem = TEX_FLOW.OlhoMandala, Cor = BRANCO, Transp = 0 },
-		}, true)
-	end
-	-- riscos verticais do palco branco (3 painéis atrás dele)
-	local paineis = {}
-	for i = 1, 3 do
-		local anc = parte(pasta, "PainelRiscos" .. i)
-		anc.CFrame = inicio * CFrame.new((i - 2) * 9, 2, 9 + i * 1.5)
-		local bb, cam = placaFlow(anc, 12, 30, { { Imagem = TEX_FLOW.Riscos, Cor = rgb(70, 82, 105), Transp = 0.25 } })
-		paineis[i] = { BB = bb, Img = cam[1], Fase = i * 1.7 }
-	end
+	-- a ÍRIS DE QUEBRA-CABEÇA (vídeo 8,8-9,9s) está nos dois olhos (olhosFlow); o
+	-- mergulho no olho ESQUERDO usa a mesma íris desenhada na TELA (irisTela).
+	local RAIO_IRIS = olhosFlow and olhosFlow.Diametro / 2 or 0.16
 
-	-- ===== G: o redemoinho no fundo, o chão de quebra-cabeça e as peças =====
-	local redAnc = parte(pasta, "Redemoinho")
-	redAnc.CFrame = inicio * CFrame.new(0, 7, 16)
-	local redBB, redCam = placaFlow(redAnc, 46, 46, {
-		{ Imagem = TEX_FLOW.Brilho, Cor = rgb(30, 40, 70), Transp = 0.3, Escala = 1.3 },
-		{ Imagem = TEX_FLOW.Redemoinho, Cor = rgb(60, 80, 130), Transp = 0.15 },
-		{ Imagem = TEX_FLOW.Redemoinho, Cor = rgb(150, 180, 240), Transp = 0.55, Escala = 0.75 },
+	-- ===== F: neblina branca do Rin =====
+	local nevoaRin = parte(pasta, "NevoaRin", { Size = V3(30, 8, 40) })
+	nevoaRin.CFrame = inicio * CFrame.new(2, ctx.ChaoY + 3, -4)
+	local nevoa = emissor(nevoaRin, {
+		Textura = TEX_FLOW.Nuvem, Cor = rgb(248, 250, 255), Brilho = 0.3,
+		Tamanho = numeros({ { 0, 6 }, { 1, 12 } }), Transp = numeros({ { 0, 1 }, { 0.3, 0.45 }, { 0.7, 0.5 }, { 1, 1 } }),
+		Vida = { 1.6, 2.4 }, Vel = { 0.5, 2 }, Spread = 180, RotVel = 20,
+		Forma = Enum.ParticleEmitterShape.Box, Estilo = Enum.ParticleEmitterShapeStyle.Volume, Taxa = 0,
 	})
+
+	-- ===== H: o chão de quebra-cabeça e as peças que surgem dele =====
 	local pisoQC = parte(pasta, "PisoQuebraCabeca", { Size = V3(1, 0.2, 1) })
 	local sgQC = Instance.new("SurfaceGui")
 	sgQC.Face = Enum.NormalId.Top
@@ -3827,49 +4012,71 @@ function E.FlowIsagi(ctx)
 	imQC.TileSize = UDim2.fromOffset(96, 96)
 	imQC.ImageColor3 = rgb(200, 225, 255)
 	imQC.Parent = sgQC
-	-- peças que voam EM VOLTA dele (billboards com as 6 peças diferentes)
+	-- peças que SURGEM do chão em volta do pé (sobem devagar girando e somem)
 	local pecas = {}
 	local rngP = Random.new(19)
-	for i = 1, 36 do
-		local anc = parte(pasta, "PecaVoa" .. i)
-		local tam = rngP:NextNumber(0.9, 1.8)
+	for i = 1, 40 do
+		local anc = parte(pasta, "PecaSurge" .. i)
+		local tam = rngP:NextNumber(0.8, 1.7)
 		local bb, cam = placaFlow(anc, tam, tam, { { Imagem = TEX_FLOW.Pecas[(i - 1) % 6 + 1], Cor = (i % 3 == 0) and AZUL or AZUL_CLARO, Transp = 0 } })
-		local ang, dist = (i / 36) * math.pi * 2 + rngP:NextNumber(-0.1, 0.1), rngP:NextNumber(1.5, 9)
+		local ang, dist = (i / 40) * math.pi * 2 + rngP:NextNumber(-0.1, 0.1), rngP:NextNumber(1.2, 10)
 		pecas[i] = {
-			Anc = anc, BB = bb, Img = cam[1], Ang = ang, Dist = dist, Giro = rngP:NextNumber(-260, 260),
-			Vel = V3(math.cos(ang) * rngP:NextNumber(2, 6), rngP:NextNumber(8, 15), math.sin(ang) * rngP:NextNumber(2, 6)),
-			Atraso = dist * 0.03,
+			Anc = anc, BB = bb, Img = cam[1], Ang = ang, Dist = dist, Giro = rngP:NextNumber(-120, 120),
+			Sobe = rngP:NextNumber(2.5, 6), Atraso = dist * 0.05 + rngP:NextNumber(0, 0.15),
 		}
 	end
 	local pousou, pontoPisada = false, nil
 
-	-- ===== H: aura escura, chamas azuis =====
-	local auraFumaca = torso and prender(emissor(torso, {
-		Textura = TEX_FLOW.Nuvem, Cor = rgb(18, 22, 36), Brilho = 0, Tamanho = numeros({ { 0, 2.5 }, { 1, 6 } }),
-		Transp = numeros({ { 0, 0.45 }, { 1, 1 } }), Vida = { 0.8, 1.3 }, Vel = { 2, 5 }, Spread = 40, Direcao = Enum.NormalId.Top,
-		Acel = V3(0, 3, 0), RotVel = 40, Forma = Enum.ParticleEmitterShape.Box, Estilo = Enum.ParticleEmitterShapeStyle.Volume,
-	}))
-	local chamas = {}
-	for _, p in ipairs({ torso, bracoD, bracoE, head }) do
-		if p then
-			table.insert(chamas, prender(emissor(p, {
-				Textura = TEX.Fogo, Cor = cores({ { 0, rgb(190, 225, 255) }, { 0.35, AZUL }, { 1, rgb(20, 40, 110) } }), Brilho = 0.75,
-				Tamanho = numeros({ { 0, p == head and 1.8 or 1.2 }, { 1, 0.2 } }), Transp = numeros({ { 0, 0.2 }, { 1, 1 } }),
-				Vida = { 0.35, 0.6 }, Vel = { 3, 6 }, Spread = 25, Direcao = Enum.NormalId.Top, Acel = V3(0, 6, 0),
-			})))
+	-- ===== K: a cabeça se desfazendo em peças, o cérebro de peças =====
+	-- ⚠️ v120 — PEDIDO: "na cabeça dele aparece o cérebro com quebra-cabeças —
+	-- coloca vários quebra-cabeças, igual a cena da cabeça do Isagi se desfazendo"
+	-- (YouTube mVkclcc3z-c, 0-3s: peças ESCURAS sólidas soltando do alto da cabeça
+	-- e dos ombros e voando pra trás). Emissores (um por formato de peça) no alto da
+	-- cabeça e nos ombros + um "cérebro" de peças montado em cima da cabeça.
+	local desfaz = {}
+	local function emissorPecas(pai, taxa, tam, vel)
+		for _, img in ipairs(TEX_FLOW.PecasSolidas) do
+			local e = prender(emissor(pai, {
+				Textura = img, Cor = PECA_ESCURA, Brilho = 0, Tamanho = numeros({ { 0, tam }, { 0.8, tam * 0.9 }, { 1, 0 } }),
+				Transp = numeros({ { 0, 0 }, { 0.75, 0 }, { 1, 1 } }), Vida = { 0.9, 1.5 }, Vel = vel, Spread = 55,
+				Direcao = Enum.NormalId.Top, RotVel = 220, Drag = 0.6,
+				Forma = Enum.ParticleEmitterShape.Box, Estilo = Enum.ParticleEmitterShapeStyle.Volume,
+			}))
+			e.Rate = taxa
+			e.Enabled = false
+			e.Acceleration = -F * 14 + U * 1.5 -- vão pra TRÁS (ele avança)
+			table.insert(desfaz, e)
 		end
 	end
-
-	-- ===== K: o CÉREBRO, raios, estrelas e as peças em volta do corpo =====
-	local cerebroBB, cerebro
+	local topoCabeca
 	if head then
-		local cerebroAnc = prender(Instance.new("Attachment"))
-		cerebroAnc.Position = V3(0, head.Size.Y * 0.95, -head.Size.Z * 0.55) -- em cima/na frente do cabelo
-		cerebroAnc.Parent = head
-		cerebroBB, cerebro = placaFlow(cerebroAnc, 2.1, 2.1, {
-			{ Imagem = TEX_FLOW.Brilho, Cor = rgb(60, 140, 255), Transp = 0, Escala = 2 },
-			{ Imagem = TEX_FLOW.Cerebro, Cor = CIANO, Transp = 0, EscalaY = 0.8 },
-		}, true)
+		topoCabeca = prender(Instance.new("Attachment"))
+		topoCabeca.Position = V3(0, head.Size.Y * 0.45, 0)
+		topoCabeca.Parent = head
+		emissorPecas(head, 14, 0.3, { 2, 5 })
+	end
+	if torso then emissorPecas(torso, 5, 0.38, { 1, 3 }) end
+	if bracoD then emissorPecas(bracoD, 3, 0.3, { 1, 3 }) end
+	if bracoE then emissorPecas(bracoE, 3, 0.3, { 1, 3 }) end
+	-- o "cérebro": peças em domo em cima da cabeça, encaixadas e tremendo
+	local cerebro = {}
+	if head then
+		local rngC = Random.new(7)
+		for i = 1, 16 do
+			local a = prender(Instance.new("Attachment"))
+			local ang = (i / 16) * math.pi * 2
+			local anel = (i % 2 == 0) and 0.55 or 0.3
+			local base = V3(math.cos(ang) * head.Size.X * anel, head.Size.Y * (0.62 + rngC:NextNumber(0, 0.25)), math.sin(ang) * head.Size.Z * anel - head.Size.Z * 0.1)
+			a.Position = base
+			a.Parent = head
+			local escura = i % 3 ~= 0
+			local tam = rngC:NextNumber(0.24, 0.42)
+			local bb, cam = placaFlow(a, tam, tam, {
+				{ Imagem = escura and TEX_FLOW.PecasSolidas[(i - 1) % 3 + 1] or TEX_FLOW.Pecas[(i - 1) % 6 + 1],
+					Cor = escura and PECA_ESCURA or CIANO, Transp = 0 },
+			}, true)
+			cerebro[i] = { A = a, BB = bb, Img = cam[1], Base = base, Giro = rngC:NextNumber(-40, 40), Fase = rngC:NextNumber(0, 6) }
+		end
 	end
 	local raios = {}
 	for i = 1, 3 do raios[i] = novoRaio(pasta, i == 2 and BRANCO or CIANO, 0.06) end
@@ -3883,16 +4090,15 @@ function E.FlowIsagi(ctx)
 		e.Enabled = false
 		prender(e)
 	end
+	-- riscos de velocidade do dash (atrás dele)
 	local fundoK = {}
 	for i = 1, 2 do
 		local anc = parte(pasta, "RiscosK" .. i)
-		anc.CFrame = inicio * CFrame.new((i == 1 and -1 or 1) * 6, 3, 8)
 		local bb, cam = placaFlow(anc, 16, 34, { { Imagem = TEX_FLOW.Riscos, Cor = AZUL, Transp = 0.35 } })
-		fundoK[i] = { BB = bb, Img = cam[1] }
+		fundoK[i] = { Anc = anc, BB = bb, Img = cam[1] }
 	end
 
-	-- cabelo/acessórios semitransparentes no zoom do olho e no gênio (como na
-	-- referência: o cérebro brilhando ATRAVÉS do cabelo)
+	-- cabelo/acessórios semitransparentes no close do olho e no gênio
 	local cabelo = {}
 	for _, d in ipairs(character:GetDescendants()) do
 		if d:IsA("BasePart") and d:FindFirstAncestorOfClass("Accessory") then table.insert(cabelo, d) end
@@ -3903,7 +4109,6 @@ function E.FlowIsagi(ctx)
 	pasta.Destroying:Connect(function() transparenciaCabelo(0) end)
 
 	-- ===== estado =====
-	local ph = spec.Phases
 	local disparos = {}
 	local function umaVez(nome, t, quando, fn)
 		if not disparos[nome] and t >= quando then
@@ -3918,22 +4123,25 @@ function E.FlowIsagi(ctx)
 		local root = ctx.Root
 		umaVez("abre", t, 0, function() ctx.Flash(rgb(0, 0, 0), 0, 1.3) end)
 
-		-- ---------- A-D: gramado + neblina ----------
-		local noGramado = t < ph.Vazio[1]
+		-- ---------- A-E: gramado + neblina BRANCA densa (até o mergulho no olho) ----------
+		local noGramado = t < ph.Rin[1]
 		neblina.Enabled = noGramado
 		poeiraLuz.Enabled = noGramado
+		neblinaDensa(noGramado and 1 or 0)
 		if noGramado then
-			cc.Saturation = -0.35
-			cc.Contrast = 0.18
-			cc.Brightness = -0.04
-			cc.TintColor = rgb(205, 218, 240)
+			-- paredes brancas meio transparentes atrás da neblina (fundo quase sumido)
+			palco(rgb(238, 242, 250), 0.35, rgb(238, 242, 250), 1)
+			cc.Saturation = -0.4
+			cc.Contrast = 0.16
+			cc.Brightness = 0.06
+			cc.TintColor = rgb(232, 238, 250)
 			-- sombra no rosto no close; no resto, normal
-			local close = t >= ph.Rosto[1] and t < ph.VeRin[1]
+			local close = t >= ph.Rosto[1] and t < ph.Levanta[1]
 			hl.FillColor = rgb(0, 0, 0)
 			hl.FillTransparency = close and 0.78 or 1
 			hl.OutlineTransparency = 1
 		end
-		if vapor and t < ph.Levanta[1] then
+		if vapor and t < ph.Olho[1] then
 			local ciclo = math.floor(t * 5.5 / (2 * math.pi))
 			if ciclo ~= ultimaRespiracao then
 				ultimaRespiracao = ciclo
@@ -3941,224 +4149,252 @@ function E.FlowIsagi(ctx)
 			end
 		end
 		if suor then
-			umaVez("suor1", t, 2.0, function() suor:Emit(1) end)
-			umaVez("suor2", t, 2.4, function() suor:Emit(1) end)
+			umaVez("suor1", t, 0.9, function() suor:Emit(1) end)
+			umaVez("suor2", t, 1.8, function() suor:Emit(1) end)
+			umaVez("suor3", t, 2.1, function() suor:Emit(2) end)
 		end
-		-- ele levanta a cabeça e VÊ: um brilho rápido nos olhos
-		local brilhoVe = (t >= 2.75 and t < 3.2) and (1 - math.abs(t - 2.95) / 0.25) or 0
-		-- levanta: poeira e riscos
-		umaVez("levanta", t, 4.55, function()
+		umaVez("soco", t, 2.32, function()
+			if bracoD then
+				poeiraPe.CFrame = CFrame.new(chaoMundo(bracoD.Position))
+				poeira:Emit(8)
+			end
+			ctx.Tremer(0.4, 0.15)
+		end)
+		-- levanta: poeira e os riscos PRETOS atrás dele
+		umaVez("levanta", t, 3.1, function()
 			poeiraPe.CFrame = CFrame.new(chaoMundo(root.Position))
 			poeira:Emit(16)
 		end)
-		local kr = (t >= 4.45 and t < 5.5) and smooth(phase(t, 4.45, 4.7)) * (1 - smooth(phase(t, 5.25, 5.5))) or 0
-		bbRiscos.Enabled = kr > 0.01
-		if kr > 0.01 then
-			riscosAnc.CFrame = CFrame.new(root.Position - F * 5 + U * 2)
-			imRiscos[1].ImageTransparency = 1 - 0.65 * kr
-			imRiscos[2].ImageTransparency = 1 - 0.5 * kr
-			imRiscos[1].Position = UDim2.fromScale(0.5, 0.5 - ((t * 1.6) % 1) * 0.15)
-			imRiscos[2].Position = UDim2.fromScale(0.5, 0.5 - ((t * 2.3) % 1) * 0.2)
+		local kr = (t >= 2.8 and t < 4.9) and smooth(phase(t, 2.8, 3.1)) * (1 - smooth(phase(t, 4.5, 4.9))) or 0
+		for _, rl in ipairs(riscosLev) do
+			rl.BB.Enabled = kr > 0.01
+			if kr > 0.01 then
+				rl.Anc.CFrame = CFrame.new(root.Position + R * rl.X - F * rl.Z + U * 3)
+				rl.Img.ImageTransparency = 1 - 0.95 * kr
+				-- descem enquanto ele sobe
+				rl.Img.Position = UDim2.fromScale(0.5, 0.5 + ((t * rl.Vel) % 1) * 0.18)
+			end
 		end
 
-		-- ---------- E: palco branco, silhueta, olhos vazios ----------
-		local vazio = t >= ph.Vazio[1] and t < ph.Pisa[1]
-		if vazio then
-			sala.Transparency = 0
-			corDaSala(rgb(238, 242, 250))
-			hl.FillColor = rgb(12, 15, 26)
-			-- (o Highlight pinta o corpo POR CIMA dos billboards: no zoom do olho ele sai
-			-- pra mandala aparecer na frente)
-			local zoom = t >= ph.Olho[1]
-			hl.FillTransparency = zoom and 1 or 0.06
-			hl.OutlineColor = BRANCO
-			hl.OutlineTransparency = zoom and 1 or 0
-			cc.Saturation = -0.4
-			cc.Contrast = 0.3
-			cc.Brightness = 0.04
-			cc.TintColor = rgb(225, 235, 255)
-		end
-		for _, p in ipairs(paineis) do
-			p.BB.Enabled = vazio
-			if vazio then p.Img.Position = UDim2.fromScale(0.5, 0.5 + math.sin(t * 0.8 + p.Fase) * 0.04) end
-		end
-		local brilhoOlho = vazio and smooth(phase(t, ph.Vazio[1] + 0.1, ph.Vazio[1] + 0.4)) or 0
-		local escorre = vazio and smooth(phase(t, 5.8, 6.5)) or 0
+		-- ---------- olhos: BRANCOS (ainda no chão) → se TRANSFORMAM na íris ----------
+		-- ⚠️ v120 — PEDIDO: "o olho vai brilhar BRANCO antes de ver o Rin, ainda no
+		-- chão" (vídeo 5,9s). ⚠️ v120b: "do olho branco ele vai pro olho do Flow, vai
+		-- meio que se transformar, sem mudar a câmera" — o brilho branco incha e,
+		-- dentro dele, nasce a íris de quebra-cabeça nos dois olhos.
+		local brilhoOlho = (t >= 2.75 and t < 5.15) and smooth(phase(t, 2.75, 3.0)) * (1 - smooth(phase(t, 4.85, 5.15))) or 0
+		local incha = (t >= 4.45 and t < 5.1) and math.sin(math.pi * phase(t, 4.45, 5.1)) or 0
+		local escorre = (t >= 3.4 and t < 5.0) and smooth(phase(t, 3.4, 4.2)) * (1 - smooth(phase(t, 4.75, 5.0))) or 0
 		for _, o in ipairs(olhos) do
-			o.BB.Enabled = brilhoOlho > 0.01 or brilhoVe > 0.01
-			o.Camadas[1].ImageTransparency = 1 - math.max(0.85 * brilhoOlho * (0.85 + 0.15 * math.sin(t * 9)), 0.6 * brilhoVe)
+			local nivelBB = math.max(brilhoOlho, incha)
+			o.BB.Enabled = nivelBB > 0.01
+			o.BB.Size = UDim2.fromScale(1.1 + 0.9 * incha, 1.1 + 0.9 * incha)
+			o.Camadas[1].ImageTransparency = 1 - 0.85 * nivelBB * (0.85 + 0.15 * math.sin(t * 9))
 			o.Lagrima.Enabled = escorre > 0.02
 			o.Fim.Position = o.Base + V3(math.sin(t * 2 + o.Base.X * 10) * 0.02, -head.Size.Y * 0.95 * escorre, 0.02)
 		end
-
-		-- ---------- F: mandala no olho ----------
-		if mandalaBB then
-			local km = phase(t, ph.Olho[1], ph.Olho[2])
-			mandalaBB.Enabled = km > 0 and km < 1
-			if mandalaBB.Enabled then
-				-- (billboard some se a câmera entra no raio dele: tamanho máx 1.8 com a câmera a 1.3)
-				local tam = 0.12 + 1.7 * easeOut(km) ^ 1.6
-				mandalaBB.Size = UDim2.fromScale(tam, tam)
-				mandala[2].Rotation = t * 140
-				mandala[2].ImageTransparency = 1 - smooth(phase(km, 0, 0.15))
-				mandala[1].ImageTransparency = 0.1 + 0.9 * (1 - smooth(phase(km, 0, 0.2)))
-			end
+		umaVez("transforma", t, 4.75, function() ctx.Flash(rgb(235, 245, 255), 0.55, 0.3) end)
+		-- a íris (no rosto, nos dois olhos): nasce na transformação, fica até ele
+		-- carregar o dash (olhos brancos), pisca e volta
+		local nivelIris
+		if t < 4.6 then
+			nivelIris = 0
+		elseif t < ph.Dash[1] then
+			nivelIris = smooth(phase(t, 4.6, 4.95))
+		elseif t < 10.82 then
+			nivelIris = 0
+		else
+			nivelIris = smooth(phase(t, 10.82, 10.95))
 		end
-		umaVez("estouroOlho", t, ph.Olho[2] - 0.12, function() ctx.Flash(BRANCO, 0, 0.5) end)
+		if olhosFlow then olhosFlow.Definir(nivelIris) end
 
-		-- ---------- G: escuro, redemoinho, pisa ----------
-		local pisa = t >= ph.Pisa[1] and t < ph.Preto[2]
-		redBB.Enabled = pisa
-		if pisa then
-			sala.Transparency = 0
-			corDaSala(ESCURO)
-			cc.Saturation = -0.1
+		-- ---------- E: zoom no olho ESQUERDO → a íris vai pra TELA e o miolo branco toma tudo ----------
+		-- (billboard/superfície somem ou pixelam com a câmera colada: a câmera para
+		-- a ~0.9 stud e o mergulho final é a íris desenhada na tela, no mesmo lugar)
+		local mergulho = olhosFlow and t >= 5.95 and t < 6.7
+		irisTela.Visible = mergulho and true or false
+		if mergulho then
+			local camera = workspace.CurrentCamera
+			local centro = olhosFlow.Mundo(1)
+			local p0 = camera:WorldToViewportPoint(centro)
+			local p1 = camera:WorldToViewportPoint(centro + camera.CFrame.RightVector * RAIO_IRIS)
+			local raioPx = math.max((Vector2.new(p1.X, p1.Y) - Vector2.new(p0.X, p0.Y)).Magnitude, 4)
+			local zoom = 1 + 22 * smooth(phase(t, 6.02, 6.55)) ^ 2
+			local vp = camera.ViewportSize
+			local k = smooth(phase(t, 6.0, 6.35))
+			local cx, cy = p0.X + (vp.X / 2 - p0.X) * k, p0.Y + (vp.Y / 2 - p0.Y) * k
+			irisTela.Size = UDim2.fromOffset(raioPx * 2 * zoom, raioPx * 2 * zoom)
+			irisTela.Position = UDim2.fromOffset(cx, cy)
+			irisTela.ImageTransparency = 0
+		end
+		local branco = 0
+		if t >= 6.25 and t < 6.95 then
+			branco = smooth(phase(t, 6.25, 6.55)) * (1 - smooth(phase(t, 6.65, 6.95)))
+		end
+
+		-- ---------- F: da visão dele, o Rin correndo na frente (câmera lenta), no branco ----------
+		local rin = t >= ph.Rin[1] and t < 8.62
+		nevoa.Enabled = rin
+		if rin then
+			nevoa.Rate = 26
+			palco(rgb(246, 248, 252), 0)
+			hl.FillTransparency = 1
+			hl.OutlineTransparency = 1
+			cc.Saturation = -0.35
+			cc.Contrast = -0.05
+			cc.Brightness = 0.1
+			cc.TintColor = rgb(232, 240, 255)
+		end
+
+		-- ---------- G: a espiral escurece TUDO, cresce e gira, fechando a visão ----------
+		local naVisao = t >= ph.Visao[1] and t < 9.05
+		local fecha = smooth(phase(t, ph.Visao[1], 8.6)) -- 0 aberto → 1 fechado
+		local abre = smooth(phase(t, 8.78, 9.05)) -- reabre já no mundo dele
+		local kv = naVisao and (fecha * (1 - abre)) or 0
+		-- o fundo escurece por completo (sem sobrar branco) e some na reabertura
+		fundoEspiral.BackgroundTransparency = naVisao and (1 - smooth(phase(t, ph.Visao[1], 8.35)) * (1 - abre)) or 1
+		redTela1.ImageTransparency = naVisao and (1 - 0.9 * smooth(phase(t, ph.Visao[1], 8.25)) * (1 - abre)) or 1
+		redTela2.ImageTransparency = naVisao and (1 - 0.6 * smooth(phase(t, 8.1, 8.4)) * (1 - abre)) or 1
+		vinheta.ImageTransparency = naVisao and 0 or 1
+		if naVisao then
+			local giro = (t - ph.Visao[1])
+			-- gira cada vez mais rápido e CRESCE
+			redTela1.Rotation = -giro * (160 + 420 * giro)
+			redTela2.Rotation = giro * (90 + 300 * giro)
+			local esc = 1.4 + 1.8 * fecha + 1.2 * abre
+			redTela1.Size = UDim2.fromScale(esc, esc)
+			redTela2.Size = UDim2.fromScale(esc * 0.75, esc * 0.75)
+			-- a vinheta preta fecha até o centro (tamanho 3 = aberta, 0.15 = fechada)
+			local vt = 3.2 - 3.05 * kv
+			vinheta.Size = UDim2.fromScale(vt, vt)
+		end
+		local preto = (t >= 8.55 and t < 8.95) and (smooth(phase(t, 8.55, 8.66)) * (1 - smooth(phase(t, 8.78, 8.95)))) or 0
+		telaPreta.BackgroundTransparency = 1 - preto
+		telaBranca.BackgroundTransparency = 1 - branco
+
+		-- ---------- H: o mundo dele (fundo branco, chão escuro), o pé pisa ----------
+		local mundo = t >= 8.6
+		if mundo then
+			local kk = smooth(phase(t, ph.Dash[1] + 0.25, ph.Dash[1] + 0.6))
+			-- (no gênio o branco puxa pro azul-claro e entra a cor)
+			palco(rgb(244, 246, 252):Lerp(rgb(205, 225, 250), kk), 0, rgb(14, 16, 26), 0)
+			hl.FillColor = t < ph.Dash[1] and rgb(20, 24, 38) or AZUL
+			hl.FillTransparency = t < ph.Dash[1] and 0.55 or 0.72
+			hl.OutlineColor = BRANCO
+			hl.OutlineTransparency = t < ph.Dash[1] and 0.2 or 0
+			cc.Saturation = -0.25 + 0.65 * kk
 			cc.Contrast = 0.25
-			cc.Brightness = -0.02
-			cc.TintColor = rgb(215, 228, 255)
-			hl.FillColor = rgb(25, 30, 45)
-			hl.FillTransparency = 0.55
-			hl.OutlineColor = rgb(170, 200, 255)
-			hl.OutlineTransparency = 0.4
-			redCam[2].Rotation = -t * 120
-			redCam[3].Rotation = -t * 200
+			cc.Brightness = 0.02 - 0.05 * kk
+			cc.TintColor = rgb(225, 235, 255):Lerp(rgb(205, 228, 255), kk)
 		end
-		if not pousou and t >= 7.85 and peD then
+		if not pousou and t >= spec.Pisada and peD then
 			pousou = true
 			pontoPisada = chaoMundo(peD.Position)
 			pisoQC.CFrame = CFrame.new(pontoPisada + U * 0.32) -- (acima do piso do palco, que fica a +0.2)
 			sgQC.Enabled = true
-			ctx.Flash(rgb(220, 235, 255), 0.35, 0.25)
+			ctx.Flash(rgb(220, 235, 255), 0.4, 0.3)
 			ctx.Tremer(0.9, 0.4)
 			anelVazado(pasta, pontoPisada + U * 0.2, U, CIANO, 1, 30, 0.55, 0.3)
 			onda(pasta, pontoPisada + U * 0.15, U, rgb(200, 225, 255), 22, 0.45, 0.2)
-			poeiraPe.CFrame = CFrame.new(pontoPisada)
-			poeira:Emit(24)
 		end
 		if pousou then
-			local kp = phase(t, 7.85, 8.25)
+			local kp = phase(t, spec.Pisada, spec.Pisada + 0.5)
 			local tam = 1 + 33 * easeOut(kp)
 			pisoQC.Size = V3(tam, 0.2, tam)
-			imQC.ImageTransparency = (t < ph.Cruza[1]) and (0.05 + 0.5 * phase(t, 8.2, 8.5)) or (0.75 + 0.1 * math.sin(t * 3))
-			imQC.ImageColor3 = t < ph.Genio[1] and rgb(200, 225, 255) or CIANO
-			-- as peças estouram do chão EM VOLTA dele, sobem girando e caem
+			imQC.ImageTransparency = 0.1 + 0.45 * phase(t, 10.0, 10.6)
+			imQC.ImageColor3 = t < ph.Dash[1] and rgb(200, 225, 255) or CIANO
+			-- as peças SURGEM do chão em volta dele, sobem devagar girando e somem
 			for _, p in ipairs(pecas) do
-				local tt = t - 7.95 - p.Atraso
-				if tt > 0 and tt < 1.3 then
-					local base = pontoPisada + V3(math.cos(p.Ang) * p.Dist, 0.3, math.sin(p.Ang) * p.Dist)
-					p.Anc.CFrame = CFrame.new(base + p.Vel * tt + V3(0, -24, 0) * tt * tt / 2)
+				local tt = t - spec.Pisada - p.Atraso
+				if tt > 0 and tt < 1.6 then
+					local base = pontoPisada + V3(math.cos(p.Ang) * p.Dist, 0.25, math.sin(p.Ang) * p.Dist)
+					p.Anc.CFrame = CFrame.new(base + U * (p.Sobe * easeOut(phase(tt, 0, 1.6))))
 					p.BB.Enabled = true
 					p.Img.Rotation = p.Giro * tt
-					p.Img.ImageTransparency = 0.05 + 0.95 * phase(tt, 0.85, 1.3)
+					p.Img.ImageTransparency = 1 - smooth(phase(tt, 0, 0.2)) * (1 - phase(tt, 1.1, 1.6))
 				else
 					p.BB.Enabled = false
 				end
 			end
 		end
-		umaVez("preto", t, ph.Preto[1], function() ctx.Flash(rgb(0, 0, 0), 0, 0.4) end)
 
-		-- ---------- H: braços em X, aura escura, flashes do cérebro ----------
-		local cruza = t >= ph.Cruza[1] and t < ph.Genio[1]
-		if auraFumaca then
-			auraFumaca.Enabled = cruza
-			auraFumaca.Rate = 45
-		end
-		for _, c in ipairs(chamas) do
-			c.Enabled = cruza or t >= ph.Genio[1] + 0.3
-			c.Rate = cruza and 55 or 30
-		end
-		if cruza then
-			sala.Transparency = 0
-			corDaSala(rgb(14, 17, 28))
-			hl.FillColor = rgb(12, 16, 30)
-			hl.FillTransparency = 0.35
-			hl.OutlineColor = rgb(120, 175, 255)
-			hl.OutlineTransparency = 0.25
-			cc.Saturation = 0.05
-			cc.Contrast = 0.3
-			cc.Brightness = -0.03
-			cc.TintColor = rgb(210, 225, 255)
-		end
-		if cerebroBB then
-			local pisca = cruza and t >= 9.3 and ((t * 8) % 1 < 0.5)
-			cerebroBB.Enabled = pisca or t >= ph.Genio[1]
-			if pisca then
-				cerebro[2].ImageColor3 = BRANCO
-				cerebro[2].ImageTransparency = 0
-			end
-		end
-		umaVez("strobo1", t, 9.35, function() ctx.Flash(BRANCO, 0.55, 0.12) end)
-		umaVez("strobo2", t, 9.55, function() ctx.Flash(BRANCO, 0.4, 0.12) end)
-
-		-- ---------- K: o GÊNIO, em cor ----------
-		local genio = t >= ph.Genio[1]
-		for _, e in ipairs(pecasCorpo) do e.Enabled = genio end
-		if genio then
-			local kk = smooth(phase(t, ph.Genio[1], ph.Genio[1] + 0.35))
-			sala.Transparency = 0
-			corDaSala(rgb(14, 17, 28):Lerp(rgb(165, 195, 240), kk))
-			hl.FillColor = AZUL
-			hl.FillTransparency = 0.72
-			hl.OutlineColor = BRANCO
-			hl.OutlineTransparency = 0
-			cc.Saturation = 0.4
-			cc.Contrast = 0.25
-			cc.Brightness = -0.03
-			cc.TintColor = rgb(205, 228, 255)
-			for i, fk in ipairs(fundoK) do
-				fk.BB.Enabled = true
+		-- ---------- K: olhos brancos → DASH → pisca → olhos de quebra-cabeça ----------
+		local dash = t >= ph.Dash[1]
+		local olhoBrancoK = (t >= ph.Dash[1] and t < 10.72) and smooth(phase(t, ph.Dash[1], ph.Dash[1] + 0.12)) or 0
+		local piscou = t >= 10.82
+		for _, e in ipairs(desfaz) do e.Enabled = t >= ph.Kick[2] end
+		for _, e in ipairs(pecasCorpo) do e.Enabled = t >= ph.Kick[2] + 0.1 end
+		for i, fk in ipairs(fundoK) do
+			fk.BB.Enabled = t >= ph.Kick[2]
+			if fk.BB.Enabled then
+				fk.Anc.CFrame = CFrame.new(root.Position + R * ((i == 1 and -1 or 1) * 6) - F * 7 + U * 3)
 				fk.Img.Position = UDim2.fromScale(0.5, 0.5 - ((t * (1.2 + i * 0.3)) % 1) * 0.1)
 			end
-			if cerebro then
-				local pulso = 0.5 + 0.5 * math.sin(t * 10)
-				cerebro[2].ImageColor3 = CIANO:Lerp(BRANCO, 0.4 * pulso)
-				cerebro[2].ImageTransparency = 0.05 + 0.15 * (1 - pulso)
-				cerebro[1].ImageTransparency = 0.15 + 0.2 * (1 - pulso)
+		end
+		for i, c in ipairs(cerebro) do
+			local on = t >= ph.Kick[2] + 0.05
+			c.BB.Enabled = on
+			if on then
+				-- as peças tremem, giram um pouco e de vez em quando "soltam" pra trás
+				local ciclo = ((t - ph.Kick[2]) * 0.9 + c.Fase / 6) % 1
+				local solta = math.max(ciclo - 0.75, 0) / 0.25
+				c.A.Position = c.Base + V3(math.sin(t * 23 + i) * 0.03, solta * 0.8, solta * 1.6)
+				c.Img.Rotation = c.Giro * math.sin(t * 2 + c.Fase) + solta * 120
+				c.Img.ImageTransparency = solta
 			end
-			for i, o in ipairs(olhos) do
-				o.BB.Enabled = false
-				o.Lagrima.Enabled = false
-				o.BBG.Enabled = true
-				o.CamadasG[2].Rotation = t * (i == 1 and 70 or -70)
-				o.CamadasG[1].ImageTransparency = 0.1 + 0.15 * math.sin(t * 12 + i)
-			end
-			if head and t - ultimoRaio > 0.07 then
+		end
+		if dash then
+			if head and t >= ph.Kick[2] and t - ultimoRaio > 0.07 then
 				ultimoRaio = t
 				for i, r in ipairs(raios) do
-					local a = head.Position + U * head.Size.Y * 0.45
-					local dir = (U * 1.2 + R * math.sin(t * 13 + i * 2.1) + F * math.cos(t * 9 + i)).Unit
+					local a = head.Position + U * head.Size.Y * 0.5
+					local dir = (U * 1.2 + R * math.sin(t * 13 + i * 2.1) - F * (0.6 + 0.4 * math.cos(t * 9 + i))).Unit
 					r.Desenhar(a, a + dir * (1.4 + 0.6 * math.sin(t * 7 + i)), 6, 0.25, 0.05, 0.1)
 				end
 			end
 			if estrelasK then
-				estrelasK.Enabled = true
-				estrelasK.Rate = 60
+				estrelasK.Enabled = t >= ph.Kick[2]
+				estrelasK.Rate = 40
 			end
 			umaVez("fimPreto", t, spec.Duration - 0.14, function() ctx.Flash(rgb(0, 0, 0), 0, 0.5) end)
 		end
+		for _, o in ipairs(olhos) do
+			if dash then
+				-- brancos antes do dash; fechados no piscar; depois a íris de quebra-cabeça
+				-- (a MESMA do zoom, no rosto — olhosFlow, acima)
+				o.Lagrima.Enabled = false
+				o.BB.Enabled = olhoBrancoK > 0.01 or piscou
+				o.BB.Size = UDim2.fromScale(1.1, 1.1)
+				o.Camadas[1].ImageTransparency = piscou and (0.55 + 0.15 * math.sin(t * 12)) or (1 - 0.9 * olhoBrancoK)
+			end
+		end
 
-		transparenciaCabelo((t >= ph.Olho[1] and t < ph.Pisa[1]) and 0.75 or (t >= ph.Genio[1] and 0.55 or 0))
-		-- peça de luz dos olhos (vazios = branco grande; X = azul pequeno; gênio = ciano)
-		if vazio and t < ph.Olho[1] then
-			acenderOlhos(brilhoOlho, BRANCO, 1)
-		elseif vazio then
-			acenderOlhos(0, BRANCO, 1) -- (no zoom a mandala toma o lugar do olho)
-		elseif cruza then
-			acenderOlhos(0.9, rgb(200, 225, 255), 0.75)
-		elseif genio then
-			acenderOlhos(0, CIANO, 0.9) -- (no gênio fica só o desenho do olho, com brilho próprio)
+		-- cabelo: semitransparente no zoom do olho e no final; SOME na visão dele
+		-- (a câmera fica nos olhos dele, a franja ficaria na frente)
+		local cab = 0
+		if t >= ph.Olho[1] and t < ph.Rin[1] then
+			cab = 0.75
+		elseif t >= ph.Rin[1] and t < 8.9 then
+			cab = 1
+		elseif t >= ph.Kick[2] then
+			cab = 0.55
+		end
+		transparenciaCabelo(cab)
+		-- peça de luz dos olhos (o branco; a íris fica na placa do rosto)
+		if dash then
+			acenderOlhos(olhoBrancoK, BRANCO, 1.15)
 		else
-			acenderOlhos(brilhoVe, BRANCO, 0.8)
+			acenderOlhos(brilhoOlho, BRANCO, 0.95)
 		end
 	end
 
 	function efeitos.Impacto(_s)
-		ctx.Flash(rgb(220, 240, 255), 0, 0.55)
-		ctx.Tremer(0.35, 0.3)
+		ctx.Flash(rgb(220, 240, 255), 0, 0.5)
+		ctx.Tremer(0.4, 0.3)
 		local p = ctx.Root.Position
-		anelVazado(pasta, p, U, CIANO, 2, 40, 0.6, 0.35)
-		anelVazado(pasta, p + U, F, BRANCO, 1, 18, 0.45, 0.25)
-		if estrelasK then estrelasK:Emit(80) end
+		anelVazado(pasta, p - U * 2.5, U, CIANO, 2, 34, 0.6, 0.35)
+		anelVazado(pasta, p + U * 0.5, F, BRANCO, 1, 16, 0.45, 0.25)
+		for _, e in ipairs(desfaz) do e:Emit(3) end
+		if estrelasK then estrelasK:Emit(60) end
 	end
 
 	-- câmera dos closes (mundo): segue cabeça, olho e pé de verdade
@@ -4167,54 +4403,72 @@ function E.FlowIsagi(ctx)
 		if roll and roll ~= 0 then cf *= CFrame.Angles(0, 0, math.rad(roll)) end
 		return cf, fov
 	end
+	local pontoDash = nil
 	function efeitos.CameraMundo(t)
 		if not head then return nil end
 		local hp = head.Position
 		local Lh = head.CFrame.LookVector
-		local olhoD = olhos[2] and olhos[2].A.WorldPosition or hp
-		local olhoE = olhos[1] and olhos[1].A.WorldPosition or hp
+		local olhoE = olhosFlow and olhosFlow.Mundo(1) or hp
+		local olhoD = olhosFlow and olhosFlow.Mundo(2) or hp
 		local meio = (olhoD + olhoE) / 2
-		if t >= ph.Rosto[1] and t < ph.VeRin[1] then
-			-- close do rosto: a câmera fica NA FRENTE DO ROSTO (na direção em que a
-			-- cabeça olha — pro chão, depois pra frente quando ele levanta a cabeça),
-			-- sem descer abaixo da grama
-			-- (entre o rosto e a grama, olhando o rosto DE BAIXO; quando ele levanta a
-			-- cabeça a câmera sobe junto)
-			-- ⚠️ v119b: de baixo o cabelo (grande em muito avatar) tampava o rosto todo;
-			-- agora é um PERFIL perto da cabeça baixa (o suor pingando, o vapor da
-			-- respiração), a câmera chegando devagar; ele levanta a cabeça no fim
-			local u = smooth(phase(t, ph.Rosto[1], ph.VeRin[1]))
-			local pos = hp + R * lerp(3.6, 2.9, u) + F * lerp(1.3, 1.0, u) + U * lerp(0.7, 0.45, u)
-			return cam(pos, hp + F * 0.4 - U * lerp(0.75, 0.25, u), 40, -3)
-		elseif t >= ph.Vazio[1] and t < ph.Olho[1] then
-			local u = smooth(phase(t, ph.Vazio[1], ph.Olho[1]))
-			local d = lerp(6.8, 1.9, u ^ 1.25)
-			return cam(hp + F * d + U * lerp(-0.7, -0.08, u), hp + U * lerp(-0.35, 0, u), lerp(44, 36, u))
-		elseif t >= ph.Olho[1] and t < ph.Pisa[1] then
-			local u = smooth(phase(t, ph.Olho[1], ph.Pisa[1]))
-			local alvoM = mandalaAnc and mandalaAnc.WorldPosition or olhoD
-			return cam(alvoM + Lh * lerp(2.4, 1.3, u ^ 0.8), alvoM, lerp(34, 24, u))
-		elseif t >= ph.Pisa[1] and t < ph.Cruza[1] then
+		if t >= ph.Rosto[1] and t < ph.Levanta[1] then
+			-- B: perfil perto da cabeça baixa (suor, vapor, o soco no chão)
+			local u = smooth(phase(t, ph.Rosto[1], ph.Levanta[1]))
+			local pos = hp + R * lerp(4.4, 3.6, u) + F * lerp(1.6, 1.2, u) + U * lerp(0.8, 0.5, u)
+			return cam(pos, hp + F * 0.4 - U * lerp(0.9, 0.55, u), 46, -3)
+		elseif t >= ph.Transforma[1] and t < ph.Rin[1] then
+			-- ⚠️ v120b — PEDIDO: "a levantada tá perfeita; não corta pra cara: o olho
+			-- se transforma SEM MUDAR A CÂMERA e dali dá zoom direto no olho".
+			-- D: a câmera continua EXATAMENTE onde a levantada terminou (a câmera base
+			-- da coreografia no fim da fase C); E: zoom em linha reta até o olho esquerdo.
+			local pos0 = ctx.Mundo(V3(0.6, ctx.ChaoY + 2.4, -5.6))
+			local alvo0 = ctx.Root.Position + U * 0.9
+			if t < ph.Olho[1] then
+				local u = smooth(phase(t, ph.Transforma[1], ph.Olho[1]))
+				return cam(pos0:Lerp(hp + (pos0 - hp).Unit * 4.6, 0.12 * u), alvo0:Lerp(meio, 0.25 * u), 52)
+			end
+			local u = smooth(phase(t, ph.Olho[1], 6.1))
+			local alvoE = olhosFlow and olhosFlow.Mundo(1) or olhoE
+			local p1 = hp + (pos0 - hp).Unit * 4.6
+			local fim = alvoE + Lh * 0.9
+			return cam(p1:Lerp(fim, u ^ 1.15), alvo0:Lerp(meio, 0.25):Lerp(alvoE, u), lerp(52, 24, u))
+		elseif t >= ph.Rin[1] and t < ph.Pisa[1] - 0.3 then
+			-- ⚠️ v120b — F/G: a VISÃO DELE (câmera nos olhos): o Rin já na frente
+			-- correndo em câmera lenta; a espiral fecha enquanto ele olha o Rin
+			local rinP = spec.RinPos and ctx.Mundo(spec.RinPos(t) + V3(0, 0.8, 0)) or (hp + F * 9)
+			local u = smooth(phase(t, ph.Rin[1], ph.Pisa[1] - 0.3))
+			return cam(meio + Lh * 0.45 + U * 0.05, rinP, lerp(50, 44, u))
+		elseif t >= ph.Pisa[1] - 0.3 and t < ph.Dash[1] then
+			-- H: baixa, no pé — ele ergue, segura e pisa DEVAGAR; depois abre
 			local previsto = pontoPisada or chaoMundo(ctx.Mundo(V3(0.5, 0, -2.4)))
-			if t < 7.85 then
-				local alvo = peD and peD.Position or previsto + U
-				return cam(previsto + F * 2.7 + U * 0.25 + R * 0.25, alvo + U * 0.3, 58, -6)
+			if t < spec.Pisada + 0.15 then
+				-- colada no PÉ de verdade (vídeo 12,1-13,1s): baixa, de frente pro pé que
+				-- sobe, segura e desce devagar
+				local pe = peD and peD.Position or previsto + U
+				local u = smooth(phase(t, ph.Pisa[1] - 0.3, spec.Pisada))
+				local baseY = previsto.Y + 0.6 -- (acima do piso do palco, +0.2 do gramado: abaixo dele aparecia a grama)
+				-- (de lado e baixa: de frente a perna erguida tampava a tela inteira)
+				local pos = Vector3.new(pe.X, baseY, pe.Z) + R * lerp(5.2, 4.4, u) + F * lerp(2.6, 2.0, u)
+				return cam(pos, Vector3.new(pe.X, baseY - 0.1, pe.Z) + U * lerp(0.9, 0.5, u) - F * 0.6, 48, -5)
 			end
-			local u = smooth(phase(t, 7.85, ph.Cruza[1]))
-			return cam(previsto + R * lerp(5.4, 6.2, u) + F * lerp(4.4, 5, u) + U * lerp(3.4, 4.0, u), previsto + U * 1.9, 60, 3)
-		elseif t >= ph.Cruza[1] and t < ph.Genio[1] then
-			local u = smooth(phase(t, ph.Cruza[1], ph.Genio[1]))
-			return cam(hp + F * lerp(5.4, 3.9, u) + U * lerp(-0.1, 0.1, u), hp - U * 0.3, 44)
-		elseif t >= ph.Genio[1] then
-			if t < 10.4 then
-				local u = smooth(phase(t, ph.Genio[1], 10.4))
-				return cam(hp + F * lerp(8.2, 6.4, u) + U * -1.5, hp - U * 1.15, 56)
-			elseif t < 10.9 then
-				local u = smooth(phase(t, 10.4, 10.9))
-				return cam(hp + F * lerp(6.4, 2.3, u) + U * lerp(-1.5, -0.15, u), hp - U * lerp(1.15, 0, u), lerp(56, 40, u))
+			local u = smooth(phase(t, spec.Pisada + 0.15, ph.Dash[1]))
+			return cam(previsto + R * lerp(4.6, 5.8, u) + F * lerp(4.2, 5, u) + U * lerp(1.6, 3.4, u), previsto + U * 1.6, 60, 3)
+		elseif t >= ph.Dash[1] then
+			if t < ph.Kick[2] then
+				-- olhos brancos antes de disparar
+				local u = smooth(phase(t, ph.Dash[1], ph.Kick[2]))
+				return cam(hp + F * lerp(3.0, 2.5, u) + U * -0.2, hp, 42)
+			elseif t < 11.3 then
+				-- de frente e baixa: ele dispara NA DIREÇÃO da câmera
+				-- (quase de PERFIL: de frente os braços pra trás pareciam abertos pros lados — medido: o braço aponta 0.91 pra trás)
+				pontoDash = pontoDash or (hp + F * 3.6 + R * 5.6 - U * 0.9)
+				local u = smooth(phase(t, ph.Kick[2], 11.3))
+				return cam(pontoDash + F * u * 1.0, hp - U * lerp(0.5, 0.15, u), lerp(58, 50, u), -4 + 4 * u)
 			end
-			local u = smooth(phase(t, 10.9, spec.Duration))
-			return cam(meio + Lh * lerp(2.2, 1.6, u) + U * 0.05, meio, lerp(30, 24, u))
+			-- os olhos de quebra-cabeça, a cabeça se desfazendo
+			local u = smooth(phase(t, 11.3, spec.Duration))
+			-- (enquadra os olhos E o cérebro de peças em cima da cabeça)
+			return cam(meio + Lh * lerp(2.9, 2.1, u) + U * lerp(0.6, 0.45, u), meio + U * lerp(0.5, 0.35, u), lerp(40, 32, u))
 		end
 		return nil -- planos abertos: câmera da coreografia
 	end

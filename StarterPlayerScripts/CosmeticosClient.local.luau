@@ -496,15 +496,43 @@ local function ligarFlowNoCorpo(player, item, duracao)
 		if okEf and Ef and Ef.PecasEmVolta then
 			for _, e in ipairs(Ef.PecasEmVolta(character, tema.Cor, tema.Cor2, 1.4)) do table.insert(coisas, e) end
 		end
+		-- ⚠️ v120b — PEDIDO: "o cara se mantém com esse olho (o de quebra-cabeça)
+		-- durante o Flow também, fora da animação": a mesma íris da cena, no rosto
+		if okEf and Ef and Ef.OlhosFlow then
+			local olhosQC = Ef.OlhosFlow(character)
+			if olhosQC then
+				olhosQC.Definir(1)
+				table.insert(coisas, olhosQC.Parte)
+			end
+		end
 	end
-	task.delay(duracao, function()
+	-- ⚠️ v120b — PEDIDO: "às vezes o Flow tá acabando e o cara continua com as
+	-- partículas". Desliga no tempo E na hora em que o servidor encerra o Flow
+	-- (atributo FlowAtivo some) — o que vier primeiro, uma vez só.
+	local desligado = false
+	local conexaoFim
+	local function desligar()
+		if desligado then return end
+		desligado = true
+		if conexaoFim then conexaoFim:Disconnect() end
 		aura.Enabled = false
 		for _, c in ipairs(coisas) do
 			if c:IsA("ParticleEmitter") then c.Enabled = false end
+			if c:IsA("Trail") then c.Enabled = false end
 		end
-		task.wait(1)
-		for _, c in ipairs(coisas) do c:Destroy() end
+		task.delay(1, function()
+			for _, c in ipairs(coisas) do
+				if c.Parent then c:Destroy() end
+			end
+		end)
+	end
+	conexaoFim = player:GetAttributeChangedSignal("FlowAtivo"):Connect(function()
+		if not player:GetAttribute("FlowAtivo") then desligar() end
 	end)
+	character.AncestryChanged:Connect(function(_, pai)
+		if not pai then desligar() end
+	end)
+	task.delay(duracao, desligar)
 end
 
 -- ============================================================

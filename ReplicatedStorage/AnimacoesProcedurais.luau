@@ -853,20 +853,22 @@ local MERGULHO_DIREITA = {
 		Root = V(-5, 0, -60), Neck = V(10, 0, -14),
 		LHip = V(-12, 0, -10), LKnee = V(-8, 0, 0), LAnkle = V(-32, 0, 0), -- empurra
 		RHip = V(30, 0, 25), RKnee = V(-40, 0, 0),
-		RShoulder = V(10, 0, 165), LShoulder = V(10, 0, -160), RElbow = V(5, 0, 0), LElbow = V(5, 0, 0),
+		-- ⚠️ v120b — PEDIDO: "o dive precisa ter as mãos um pouco mais separadas,
+		-- tão muito juntas": um braço um pouco à frente e o outro um pouco atrás
+		RShoulder = V(28, 0, 160), LShoulder = V(-18, 0, -148), RElbow = V(5, 0, 0), LElbow = V(5, 0, 0),
 		RootPos = V(0, 0.4, 0),
 	} },
 	{ 0.28, {
 		Root = V(-4, 0, -88), Neck = V(4, 0, -15),
 		RHip = V(8, 0, 8), LHip = V(6, 0, -8), RKnee = V(-8, 0, 0), LKnee = V(-6, 0, 0),
 		RAnkle = V(-25, 0, 0), LAnkle = V(-25, 0, 0),
-		RShoulder = V(5, 0, 176), LShoulder = V(5, 0, -174), RElbow = V(0, 0, 0), LElbow = V(0, 0, 0),
+		RShoulder = V(30, 0, 162), LShoulder = V(-20, 0, -150), RElbow = V(0, 0, 0), LElbow = V(0, 0, 0),
 		RootPos = V(0, 0.9, 0),
 	} },
 	{ 0.42, {
 		Root = V(-4, 0, -90), Neck = V(2, 0, -15),
 		RHip = V(10, 0, 8), LHip = V(8, 0, -8), RKnee = V(-10, 0, 0), LKnee = V(-8, 0, 0),
-		RShoulder = V(8, 0, 175), LShoulder = V(8, 0, -174), RElbow = V(5, 0, 0), LElbow = V(5, 0, 0),
+		RShoulder = V(30, 0, 162), LShoulder = V(-18, 0, -150), RElbow = V(5, 0, 0), LElbow = V(5, 0, 0),
 		RootPos = V(0, 0.7, 0),
 	} },
 	{ 0.58, {
@@ -879,7 +881,16 @@ local MERGULHO_DIREITA = {
 		Root = V(0, 0, -90), Neck = V(0, 0, -10),
 		RHip = V(45, 0, 5), LHip = V(35, 0, -5), RKnee = V(-50, 0, 0), LKnee = V(-40, 0, 0),
 		RShoulder = V(60, 0, 40), LShoulder = V(60, 0, -40), RElbow = V(95, 0, 0), LElbow = V(95, 0, 0),
-		RootPos = V(0, -1.35, 0), -- (medido: -1.9 afundava 0.56 no gramado)
+		-- ⚠️ v120b — PEDIDO: "no final da animação cai no chão e levanta" (parecia
+		-- flutuar: o quadril do R6 fica mais alto que o do R15). Desce de vez; a
+		-- correção de chão do animador sobe o que passar do gramado.
+		RootPos = V(0, -2.3, 0),
+	} },
+	{ 0.80, { -- fica um instante no chão
+		Root = V(0, 0, -90), Neck = V(0, 0, -10),
+		RHip = V(45, 0, 5), LHip = V(35, 0, -5),
+		RShoulder = V(60, 0, 40), LShoulder = V(60, 0, -40),
+		RootPos = V(0, -2.3, 0),
 	} },
 	{ 0.88, { -- ajoelha e levanta
 		Root = V(-10, 0, -25),
@@ -1154,13 +1165,21 @@ Anim.Acoes.GKForwardDash = {
 			} },
 			{ 0.16, voo },
 			{ 0.60, voo }, -- voa DEITADO RETO o deslocamento inteiro
-			{ 0.72, { -- cai no chão, deslizando
+			-- ⚠️ v120b — PEDIDO: "o dive pra frente tem que cair no chão — tá flutuando e
+			-- não desce; no fim ele cai no chão e levanta". Desce até o gramado (a
+			-- correção de chão do animador ajusta o que passar) e fica um instante.
+			{ 0.70, { -- cai no chão, deslizando
 				Root = V(-88, 0, 0), Neck = V(50, 0, 0),
 				RHip = V(0, 0, 6), LHip = V(0, 0, -6), RKnee = V(-20, 0, 0), LKnee = V(-20, 0, 0),
-				RShoulder = V(140, 0, 20), LShoulder = V(140, 0, -20), RElbow = V(40, 0, 0), LElbow = V(40, 0, 0),
-				RootPos = V(0, -1.55, 0),
+				RShoulder = V(140, 0, 28), LShoulder = V(140, 0, -28), RElbow = V(40, 0, 0), LElbow = V(40, 0, 0),
+				RootPos = V(0, -2.6, 0),
 			} },
-			{ 0.88, {
+			{ 0.78, {
+				Root = V(-88, 0, 0), Neck = V(40, 0, 0),
+				RShoulder = V(120, 0, 34), LShoulder = V(120, 0, -34),
+				RootPos = V(0, -2.6, 0),
+			} },
+			{ 0.90, {
 				Root = V(-15, 0, 0),
 				RHip = V(75, 0, 8), LHip = V(70, 0, -8), RKnee = V(-105, 0, 0), LKnee = V(-100, 0, 0),
 				RShoulder = V(30, 0, 20), LShoulder = V(30, 0, -20),

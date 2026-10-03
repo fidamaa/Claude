@@ -363,7 +363,8 @@ local InstinctModeState = {} -- [player] = { ExpiresAt }
 -- instinc pro dobro das atuais". Era 20 (5 disparos enchiam o medidor) —
 -- metade disso dobra a quantidade de disparos necessários (10 agora).
 local INSTINCT_CHARGE_PER_TRIGGER = 10 -- flat por enquanto (ver comentário acima) — 10 disparos enchem o medidor
-local INSTINCT_MODE_DURATION = 9
+-- ⚠️ v120b — PEDIDO: "tem que durar o Flow uns 25 segundos" (era 9)
+local INSTINCT_MODE_DURATION = 25
 -- ⚠️ v5.6: era 1.75 (bônus ficava +75% maior), depois 1.12 (+12%).
 -- ⚠️ v5.7: PEDIDO — "instinct mode na real é 25% bonus": a PORÇÃO de
 -- bônus (delta acima da baseline) de cada chave do Effect/AtivaEffect
@@ -582,6 +583,15 @@ Remotes.ActivateInstinctMode.OnServerEvent:Connect(function(player)
 	if charge < 100 then return end -- medidor não cheio — cliente já trava o botão, isso é defesa em profundidade
 	if _G.IsInInstinctMode(player) then return end -- já ativo
 	if FlowsUsados[player] then return end -- ⚠️ v113: 1 Flow por partida
+	-- ⚠️ v120b — PEDIDO: "ninguém pode usar um Flow em cima do outro: quem tiver com
+	-- Flow ativo vai durar a duração do Flow". Com o Flow (ou a cena) de outro
+	-- jogador valendo, o medidor fica cheio e ele tenta de novo depois.
+	for outro, estado in pairs(InstinctModeState) do
+		if outro ~= player and estado and estado.ExpiresAt and tick() < estado.ExpiresAt then
+			Remotes.InstinctModeFeedback:FireClient(player, "FlowOcupado", math.ceil(estado.ExpiresAt - tick()))
+			return
+		end
+	end
 
 	FlowsUsados[player] = true
 	player:SetAttribute("FlowUsado", true)

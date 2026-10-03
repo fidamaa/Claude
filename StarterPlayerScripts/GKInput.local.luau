@@ -86,7 +86,9 @@ end)
 
 -- ===== pulo alto do goleiro na área =====
 local puloOriginal = nil -- { UsaPower, Altura, Power } do personagem fora do gol
-game:GetService("RunService").Heartbeat:Connect(function()
+local dtPulo = 1 / 60
+game:GetService("RunService").Heartbeat:Connect(function(dt)
+	dtPulo = math.min(dt, 0.1)
 	local character = player.Character
 	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
 	if not humanoid then return end
@@ -96,7 +98,17 @@ game:GetService("RunService").Heartbeat:Connect(function()
 			puloOriginal = { UsaPower = humanoid.UseJumpPower, Altura = humanoid.JumpHeight, Power = humanoid.JumpPower }
 		end
 		humanoid.UseJumpPower = false
-		humanoid.JumpHeight = Config.GK_PULO_ALTURA or 14
+		-- ⚠️ v120b — PEDIDO: "pula 20% mais alto e alcança o ápice MAIS RÁPIDO; cai
+		-- rápido". Sobe com a velocidade de um pulo mult× mais alto e, no ar, ganha
+		-- gravidade extra ((mult−1)·g): o topo fica em GK_PULO_ALTURA, só que
+		-- alcançado em 1/√mult do tempo — e a descida também é mais rápida.
+		local mult = Config.GK_PULO_GRAVIDADE_MULT or 1
+		humanoid.JumpHeight = (Config.GK_PULO_ALTURA or 14) * mult
+		local estado = humanoid:GetState()
+		local root = character:FindFirstChild("HumanoidRootPart")
+		if root and mult > 1 and (estado == Enum.HumanoidStateType.Freefall or estado == Enum.HumanoidStateType.Jumping) then
+			root.AssemblyLinearVelocity -= Vector3.new(0, (mult - 1) * workspace.Gravity * dtPulo, 0)
+		end
 	elseif puloOriginal then
 		humanoid.UseJumpPower = puloOriginal.UsaPower
 		humanoid.JumpHeight = puloOriginal.Altura

@@ -2014,6 +2014,23 @@ _G.TocarCenaFlow = function(player)
 				table.insert(mates, other)
 			end
 		end
+		-- ⚠️ v120b — PEDIDO: "o Rin (alguém aleatório) não tá aparecendo". Sem colega
+		-- de time aparecia uma sombra do PRÓPRIO jogador; agora: colega de time →
+		-- qualquer outro jogador → um goleiro bot (o cliente aceita Player ou Model)
+		if #mates == 0 then
+			for _, other in ipairs(Players:GetPlayers()) do
+				if other ~= player and other.Character and other.Character:FindFirstChild("HumanoidRootPart") then
+					table.insert(mates, other)
+				end
+			end
+		end
+		if #mates == 0 then
+			for _, m in ipairs(workspace:GetChildren()) do
+				if m:IsA("Model") and m.Name:sub(1, 6) == "GKBot_" and m:FindFirstChild("HumanoidRootPart") then
+					table.insert(mates, m)
+				end
+			end
+		end
 		if #mates > 0 then extras = { Companheiros = { mates[math.random(1, #mates)] } } end
 	end
 	Remotes.HissatsuCutscene:FireAllClients(item.Id, player, startCFrame, ballLocal, workspace:GetServerTimeNow(),

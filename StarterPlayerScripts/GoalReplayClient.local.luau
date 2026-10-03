@@ -275,7 +275,12 @@ local function cloneWholeCharacter(sourceModel, nameSuffix)
 	-- colisão. O Humanoid FICA (é ele que faz a animação e as roupas
 	-- aparecerem), só sem barra de vida/nome.
 	for _, inst in ipairs(modelClone:GetDescendants()) do
-		if inst:IsA("Script") or inst:IsA("LocalScript") or inst:IsA("Sound") then
+		-- ⚠️ v120b — PEDIDO: "o Flow acaba e o cara continua com as partículas": o
+		-- fantasma do replay clonava junto os emissores/rastros do Flow (e de
+		-- qualquer efeito) e ficava com eles o replay inteiro
+		if inst:IsA("Script") or inst:IsA("LocalScript") or inst:IsA("Sound")
+			or inst:IsA("ParticleEmitter") or inst:IsA("Trail") or inst:IsA("Beam")
+			or (inst:IsA("BasePart") and inst.Name == "OlhosFlow") then
 			inst:Destroy()
 		elseif inst:IsA("BasePart") then
 			inst.CanCollide = false

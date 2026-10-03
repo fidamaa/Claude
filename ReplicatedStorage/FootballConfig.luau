@@ -275,6 +275,9 @@ Config.AERIAL_PICKUP_MAX_PLAYER_SPEED = 20   -- studs/s: acima disso (sprintando
 Config.TACKLE_AERIAL_CAPTURE_HEIGHT = 10
 -- ⚠️ NOVO: "controle de bolas difíceis" é da TÉCNICA agora (era o
 -- DribbleSkill) — ver Config.TECHNIQUE_ATTRIBUTE. Mesmo número de corte.
+-- ⚠️ v120b: carrinho só corta bola até a velocidade de um chute de 40% da barra
+-- (força base: KICK_MIN + 40% de KICK_MAX-KICK_MIN ≈ 97 studs/s); acima, só o GK
+Config.TACKLE_INTERCEPT_BAR_FRACTION = 0.4
 Config.TACKLE_FAST_BALL_MIN_TECHNIQUE = 60 -- 0-100: nível mínimo de Técnica pra carrinhar bola rápida/no ar
 Config.DRIBBLE_OFFSET = 1
 Config.DRIBBLE_HEIGHT_OFFSET = -2.6
@@ -1702,8 +1705,11 @@ Config.HEADER_STAMINA_COST = 15
 --      a resposta principal a quem sobe com a bola — precisa poder
 --      tentar de novo.
 Config.HEADER_COOLDOWN = 1.2      -- era 3.0
-Config.HEADER_RANGE = 11          -- era 6 — agora é HORIZONTAL só
-Config.HEADER_MIN_BALL_HEIGHT = 1 -- era 3 (medido a partir do torso)
+-- ⚠️ v120b — PEDIDO: "o voleio tá difícil porque acerta a cabeçada: diminui a
+-- hitbox da cabeçada (o voleio fica como está)". 11 → 7 e a bola precisa estar
+-- um pouco mais alta.
+Config.HEADER_RANGE = 7           -- era 11 (v5.3), 6 antes — HORIZONTAL só
+Config.HEADER_MIN_BALL_HEIGHT = 2 -- era 1 (v5.3), 3 antes (medido a partir do torso)
 Config.HEADER_MAX_BALL_HEIGHT = 15 -- ⚠️ NOVO: teto da faixa cabeceável
 -- ⚠️ v105 — PEDIDO: "a cabeçada tá muito fraca... coloque a força dela pra ir
 -- mais longe". 65 -> 115, e sobe mais (HEADER_ELEVACAO) pra ganhar distância.
@@ -1881,15 +1887,16 @@ Config.BALL_ANGULAR_DAMPING_PER_SECOND = 0.10 -- ⚠️ v37 (era 0.20/0.35/0.55/
 -- "deslizar" também vinha do giro solto virando movimento no chão — isso foi
 -- resolvido na raiz (giro sempre coerente, ver BallController v97), então o
 -- aumento aqui é moderado.
-Config.BALL_ROLLING_DECELERATION = 50         -- era 42/30/20/13/8/3.2/1.6 — studs/s², abaixo de BALL_ROLLING_MAX_SPEED (ainda deslizando muito? sobe esse número de novo)
-Config.BALL_ROLLING_FAST_DECELERATION = 84    -- era 70/50/36/24/16/6.5 — studs/s², ACIMA de BALL_ROLLING_MAX_SPEED
+-- ⚠️ v120b — PEDIDO: "faça a bola perder MENOS velocidade ao deslizar no chão": −30% nos três.
+Config.BALL_ROLLING_DECELERATION = 36         -- era 42/30/20/13/8/3.2/1.6 — studs/s², abaixo de BALL_ROLLING_MAX_SPEED (ainda deslizando muito? sobe esse número de novo)
+Config.BALL_ROLLING_FAST_DECELERATION = 60    -- era 70/50/36/24/16/6.5 — studs/s², ACIMA de BALL_ROLLING_MAX_SPEED
 Config.BALL_ROLLING_MAX_SPEED = 8             -- era 10/14/18 — abaixa o limiar, entra na frenagem "rápida" mais cedo
 -- ⚠️ v103 — PEDIDO: "diminui mais ainda o deslize... se eu jogar muito longe a
 -- bola, ela desliza mais do que deveria". Frenagem EXTRA proporcional à
 -- velocidade (1/s): bola que cai de um lançamento longo chega rápida e agora
 -- freia muito mais; o rolinho devagar quase não muda. Medida de cabeça: caindo
 -- a 80 studs/s ela desliza ~24 studs (antes ~38). Mais = desliza menos.
-Config.BALL_ROLLING_ARRASTO = 1.0
+Config.BALL_ROLLING_ARRASTO = 0.7
 
 -- ⚠️ v103 — PEDIDO: "Não é pra existir desvio aleatório em nenhum chute."
 -- false = nenhum chute/passe/Hissatsu desvia da mira (ver applyAimDeviation).
@@ -1932,7 +1939,8 @@ Config.AIM_DEVIATION_PRESSURE_DEGREES = 0  -- era 6
 Config.GK_DIVE_DISTANCE = 19          -- era 15/10 — studs percorridos no mergulho de ALTURA (Up)
 Config.GK_DIVE_DISTANCE_SIDE = 48     -- ⚠️ v105: +50% ("ele precisa ir mais longe com o dive") — era 32 (v103), 26/21/14 antes
 Config.GK_DIVE_DISTANCE_DIAGONAL = 29 -- ⚠️ v103: idem (era 24/19.5/13) — studs percorridos no mergulho na DIAGONAL (UpLeft/UpRight)
-Config.GK_DIVE_DURATION = 0.35        -- segundos que o mergulho dura (também a janela de captura)
+-- ⚠️ v120b — PEDIDO: "coloca pra demorar um pouco mais pra cair o dive; só no final ele cai, rápido" (era 0.35)
+Config.GK_DIVE_DURATION = 0.5         -- segundos que o mergulho dura (também a janela de captura)
 -- FIX: antes a captura comparava a distância 3D cheia (inclui altura)
 -- contra GK_DIVE_CAPTURE_RADIUS — uma bola alta (cabeceio/cruzamento)
 -- "gastava" boa parte do raio só na diferença de altura, sobrando pouca
@@ -1990,11 +1998,15 @@ Config.GK_FORWARD_DASH_MAX_DISTANCE = 85 -- v110: era 70 · studs: teto de segur
 -- ⚠️ v105 — PULO ALTO DO GOLEIRO. PEDIDO: "tira o dive pra cima... o jogador vai
 -- pular alto quando estiver no gol, até a altura do travessão, e aí pula e dá o
 -- dive pro lado". JumpHeight (studs) do goleiro DENTRO da própria área.
-Config.GK_PULO_ALTURA = 14
+-- ⚠️ v120b — PEDIDO: "o GK player pula 20% mais alto e chega no ápice mais rápido" (era 14).
+-- A subida mais rápida vem de GK_PULO_GRAVIDADE_MULT (gravidade extra só no pulo dele, ver GKInput).
+Config.GK_PULO_ALTURA = 16.8
+Config.GK_PULO_GRAVIDADE_MULT = 1.7
 -- ⚠️ v105 — "a hitbox do goleiro vai pegar automaticamente: se a bola passar
 -- nele, no meio dele, ele pega na hora" (goleiro humano; o bot já tinha a caixa
 -- GKBOT_GUARANTEED_CATCH_BOX). Cilindro em volta do HumanoidRootPart.
-Config.GK_CORPO_CAPTURA = { Raio = 2.8, Baixo = 3.4, Alto = 3.8 }
+-- ⚠️ v120b: um pouco maior que o corpo ("hitbox em volta dele, um pouco maior que ele") — era 2.8/3.4/3.8
+Config.GK_CORPO_CAPTURA = { Raio = 3.3, Baixo = 3.6, Alto = 4.2 }
 Config.GK_FORWARD_DASH_SPEED = 45        -- studs/s: velocidade do dash quando perseguindo (define a duração — quanto mais longe, mais tempo demora)
 Config.GK_FORWARD_STEAL_RANGE = 8       -- ⚠️ v5.5: +2 (era 6) — alcance pra roubar de um adversário com a bola (o alvo pode ter se mexido durante o dash mais longo)
 Config.GK_FORWARD_CAPTURE_RANGE = 7     -- ⚠️ v5.5: +2 (era 5) — alcance pra capturar a bola solta/vindo

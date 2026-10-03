@@ -643,7 +643,15 @@ local function tocarCutsceneV2(spec, chutador, inicio, bolaLocal, horarioServido
 		for i = 1, spec.Clones.Quantidade or 0 do
 			-- ⚠️ v108: companheiro de verdade quando o servidor mandou (Zona Morta de três)
 			local mate = (not replay) and companheirosDaCutscene and companheirosDaCutscene[i]
-			local mateChar = typeof(mate) == "Instance" and mate:IsA("Player") and mate.Character or nil
+			-- ⚠️ v120b: pode vir um Model (goleiro bot) quando não há outro jogador
+			local mateChar = nil
+			if typeof(mate) == "Instance" then
+				if mate:IsA("Player") then
+					mateChar = mate.Character
+				elseif mate:IsA("Model") and mate:FindFirstChild("HumanoidRootPart") then
+					mateChar = mate
+				end
+			end
 			local real = false
 			local modelo
 			if mateChar then

@@ -443,7 +443,11 @@ C.Flow = {
 	{ Id = "Flow_Isagi", Nome = "Flow do Isagi", Raridade = "Common", Personagem = "Isagi Yoichi",
 		Descricao = "Metavisão: o campo vira um quebra-cabeça — Técnica e Chute sobem.",
 		Atributos = { Kick = 12, Technique = 18 },
-		Tema = { Cor = rgb(90, 160, 255), Cor2 = rgb(220, 240, 255), Motivo = "Pecas" } },
+		Tema = { Cor = rgb(90, 160, 255), Cor2 = rgb(220, 240, 255), Motivo = "Pecas" },
+		-- ⚠️ v120b — PEDIDO: "uma soundtrack boa: a música do Flow de cada um (playlist do
+		-- Blue Lock); o Isagi usa a Puzzle". Trecho já cortado (39s: a batida cai na pisada
+		-- da cena, 9,55s) em _upload/Flow_Isagi_Puzzle.mp3 — falta subir e colar o ID.
+		Musica = { Id = "", Volume = 0.6 } },
 	{ Id = "Flow_Bachira", Nome = "Flow do Bachira", Raridade = "Rare", Personagem = "Bachira Meguru",
 		Descricao = "O monstro dentro dele: drible muito maior e mais velocidade com a bola.",
 		Atributos = { DribbleSkill = 25 }, Velocidade = 1.08,

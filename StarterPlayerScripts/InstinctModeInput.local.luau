@@ -33,6 +33,15 @@ InstinctModeFeedback.OnClientEvent:Connect(function(kind, extra)
 		meterFull = (tonumber(extra) or 0) >= 100
 	elseif kind == "ModeActivated" then
 		meterFull = false
+	elseif kind == "FlowOcupado" then
+		-- ⚠️ v120b: um Flow por vez no campo inteiro
+		pcall(function()
+			StarterGui:SetCore("SendNotification", {
+				Title = "Flow",
+				Text = ("Outro jogador está no Flow. Tente de novo em %ds."):format(tonumber(extra) or 0),
+				Duration = 2.5,
+			})
+		end)
 	end
 end)
 
