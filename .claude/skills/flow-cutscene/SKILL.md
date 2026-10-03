@@ -100,6 +100,24 @@ Erros concretos (cada um virou regra):
     + `screen_capture` em cada fase; mudar o disco exige PARAR o Play (o sync
     só entra em Edit) e dar Play de novo. Remover o gancho antes do commit.
 
+15. **Conferir no Studio, não às cegas** (v124, Flow do Shidou feito na nuvem):
+    tire quadros do vídeo a cada 0,2s (PEDIDO do usuário) e screenshots da cena nos
+    mesmos planos. Erros que só apareceram assim:
+    - cabeça R6 = SpecialMesh 1.25x: olho na face da PEÇA fica ENTERRADO (some);
+      `FlowCenaOlhos` agora usa a escala da malha (olhos em x ±0.055, y 0.25);
+    - close de rosto com a câmera pela inclinação da CABEÇA mostra o topo do cabelo —
+      use a frente do CORPO (horizontal); franja do avatar tampa o rosto: cabelo
+      semitransparente desde o close do ROSTO;
+    - palco escuro + luz desligada = rosto preto; luz forte rosa = rosto rosa: nos
+      closes, luz fraca quase branca;
+    - brilho de tela (ImageLabel radial) muito grande vira tela CINZA.
+16. **Falas do personagem** (v124): baixe o vídeo da cena, separe a voz com `demucs`
+    (`python -m demucs --two-stems vocals`, já instalado), transcreva com
+    `faster-whisper` (`word_timestamps=True`) e confira quem fala pela legenda do
+    vídeo. Coloque cada fala no plano da cena (abaixe a música por baixo, 0.5x).
+    Modelo: `_upload/Flow_Shidou_Cena.mp3` (falas + trilha "Big Bang Drive Theme",
+    a explosão da trilha em 68,6s cai no chute da cena).
+
 ## A aura tem que ter SENTIDO, igual ao anime
 
 PEDIDO do usuário: "sempre que for fazer uma aura precisa ter sentido igual do
