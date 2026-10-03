@@ -3557,6 +3557,7 @@ local TEX_FLOW = {
 	-- pelas bordas fechando a visão; a cheia é o estado fechado
 	EspiralBorda = "rbxassetid://123809615543770",
 	EspiralCheia = "rbxassetid://85165185407714",
+	EspiralMiolo = "rbxassetid://121092858305419", -- (redonda: cresce do centro e tapa o buraco)
 	PecasSolidas = { "rbxassetid://75123581494537", "rbxassetid://77996428576582", "rbxassetid://113216829601203" },
 	-- 6 peças diferentes (cada imagem uma peça) — também usadas no Flow da partida
 	Pecas = {
@@ -3733,6 +3734,22 @@ function E.OlhosFlow(character)
 		imagens[i] = { Iris = iris, Brilho = brilho }
 		locais[i] = V3(x, yOlho, zPlaca - 0.03)
 	end
+	-- ⚠️ v120d — PEDIDO: "inclui o olho girando devagarinho, parecido com o Flow do
+	-- Blue Lock". A íris gira devagar (os dois olhos em sentidos opostos) e o brilho
+	-- respira; para sozinho quando a placa some.
+	local conexaoGiro
+	conexaoGiro = RunService.RenderStepped:Connect(function(dt)
+		if not placa.Parent then
+			conexaoGiro:Disconnect()
+			return
+		end
+		if not sg.Enabled then return end
+		local agora = os.clock()
+		for i, im in ipairs(imagens) do
+			im.Iris.Rotation = (im.Iris.Rotation + dt * 22 * (i == 1 and 1 or -1)) % 360
+			im.Brilho.Size = UDim2.fromScale(diam * (1.9 + 0.12 * math.sin(agora * 2.4 + i)) / W, diam * (1.9 + 0.12 * math.sin(agora * 2.4 + i)) / H)
+		end
+	end)
 	local obj = { Parte = placa, Locais = locais, Diametro = diam }
 	function obj.Mundo(i)
 		return head.CFrame:PointToWorldSpace(locais[i] or locais[1])
@@ -3879,6 +3896,7 @@ function E.FlowIsagi(ctx)
 	local espBorda = quadrado(TEX_FLOW.EspiralBorda, rgb(34, 40, 58), 3)
 	local espBorda2 = quadrado(TEX_FLOW.EspiralBorda, rgb(90, 100, 125), 3)
 	local espCheia = quadrado(TEX_FLOW.EspiralCheia, rgb(46, 54, 74), 4)
+	local espMiolo = quadrado(TEX_FLOW.EspiralMiolo, rgb(40, 47, 66), 3)
 	local redTela1 = quadrado(TEX_FLOW.Redemoinho, rgb(70, 80, 100), 3)
 	local redTela2 = quadrado(TEX_FLOW.Redemoinho, rgb(130, 140, 160), 4)
 	local vinheta = quadrado(TEX_FLOW.Vinheta, rgb(0, 0, 0), 5)
@@ -4322,6 +4340,11 @@ function E.FlowIsagi(ctx)
 		espBorda.ImageTransparency = naVisao and (1 - math.min(1, entra * 3) * (1 - abre)) or 1
 		espBorda2.ImageTransparency = naVisao and (1 - 0.55 * smooth(phase(t, 8.12, 8.4)) * (1 - abre)) or 1
 		espCheia.ImageTransparency = naVisao and (1 - cheia * (1 - abre)) or 1
+		-- ⚠️ v120d — PEDIDO: "a espiral tapa a tela mas fica um CÍRCULO BRANCO no meio
+		-- que não tapa — tem que tapar também". O miolo (espiral redonda) nasce no centro
+		-- e cresce girando até cobrir o buraco da borda, que ao mesmo tempo encolhe.
+		local cresce = smooth(phase(t, 8.08, 8.42))
+		espMiolo.ImageTransparency = naVisao and (1 - math.min(1, cresce * 2) * (1 - abre)) or 1
 		if naVisao then
 			local giro = t - ph.Visao[1]
 			-- (o miolo vazado tem raio 0.34 da imagem: de 3.6 a tela inteira está livre;
@@ -4331,6 +4354,10 @@ function E.FlowIsagi(ctx)
 			espBorda.Rotation = -giro * (120 + 380 * giro)
 			espBorda2.Size = UDim2.fromScale(escB * 1.12, escB * 1.12)
 			espBorda2.Rotation = giro * (80 + 260 * giro) + 40
+			-- (o buraco da borda tem diâmetro 0.68·escB; o miolo é opaco até 0.84 do raio)
+			local escM = math.max(0.02, 0.9 * escB * cresce)
+			espMiolo.Size = UDim2.fromScale(escM, escM)
+			espMiolo.Rotation = -giro * (260 + 520 * giro)
 			local escC = lerp(2.4, 1.7, cheia) + 2 * abre
 			espCheia.Size = UDim2.fromScale(escC, escC)
 			espCheia.Rotation = -giro * (200 + 500 * giro)

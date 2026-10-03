@@ -74,6 +74,10 @@ def salvar(rgb, alfa, nome):
     Image.fromarray(a, 'RGBA').save(OUT + nome)
 
 
+# MIOLO (⚠️ v120c): a espiral cheia com borda REDONDA e macia — nasce pequena no
+# centro e cresce até tapar o buraco da borda (fecha a visão inteira)
+alfa_m = np.clip(0.95 + riscos_c * 0.05, 0, 1) * np.clip((0.98 - dist) / 0.14, 0, 1)
+salvar(rgb_c, alfa_m, 'espiral_miolo.png')
 salvar(rgb_b, alfa_b, 'espiral_borda.png')
 salvar(rgb_c, alfa_c, 'espiral_cheia.png')
 
