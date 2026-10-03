@@ -640,6 +640,12 @@ Config.DEFESA_DANO_PERFEITO_MULT = 1.15
 -- metade é dividida pelos acertos. Mítica x mítica do meio (300): neutro e 5
 -- acertos = 350 (segura); fraqueza elemental (x0.8) e 2 acertos = 196 (sobra ~100).
 Config.DEFESA_IMPACTO_FRACAO = 0.5
+-- ⚠️ v122 — BUG relatado: "chute lendário (Tornado do Dragão) contra defesa lendária
+-- (Punho da Justiça): a força foi de 180 pra 0". O IMPACTO (metade da capacidade, ~145-200
+-- na lendária com atributo/elemento) zerava o chute sozinho, antes de qualquer QTE.
+-- Agora o impacto tira no máximo essa fração da força que a bola tinha na colisão —
+-- o resto TEM que sair nos acertos do QTE (sempre tem duelo).
+Config.DEFESA_IMPACTO_MAX_DO_CHUTE = 0.55
 -- Goleiro BOT (sem QTE de verdade): "aperta" a cada GKBOT_DUELO_INTERVALO
 -- segundos com essa chance de acertar, até o número de acertos da Hissatsu dele.
 Config.GKBOT_DUELO_CHANCE_ACERTO = 0.6

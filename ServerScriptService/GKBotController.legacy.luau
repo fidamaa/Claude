@@ -1899,7 +1899,7 @@ local function attemptCatch(teamName, bot)
 					if impacto > 0 then
 						task.wait(0.5)
 						if bot.Duelo ~= duelo or bot.GuardRolled ~= nil then return end
-						duelo.Dano(impacto)
+						if duelo.Impacto then duelo.Impacto(impacto) else duelo.Dano(impacto) end -- ⚠️ v122: impacto com teto
 					end
 					for _ = 1, tentativas do
 						if duelo.Atual() <= 0 then break end

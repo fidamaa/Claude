@@ -1357,6 +1357,12 @@ local function iniciarDueloDeDefesa(forcaInicial)
 		end
 		return atual
 	end
+	-- ⚠️ v122: o impacto da mão/soco nunca zera o chute sozinho (ver
+	-- Config.DEFESA_IMPACTO_MAX_DO_CHUTE)
+	function duelo.Impacto(valor)
+		local teto = math.max(forcaInicial or 0, 0) * (Config.DEFESA_IMPACTO_MAX_DO_CHUTE or 0.55)
+		return duelo.Dano(math.min(math.max(valor or 0, 0), teto))
+	end
 	function duelo.Encerrar(defendeu)
 		if guardDrainGeneration ~= geracao then return atual end
 		guardDrainGeneration += 1
@@ -5307,8 +5313,8 @@ RunService.Heartbeat:Connect(function()
 				task.delay(math.max(0, fimCutsceneDefesa - tick()), function()
 					finish(duelo.Atual() <= 0, effect and effect.Rebate)
 				end)
-			end, function(_hits, dano)
-				duelo.Dano(dano)
+			end, function(hits, dano)
+				if hits == 0 then duelo.Impacto(dano) else duelo.Dano(dano) end -- (hits 0 = o impacto)
 			end)
 			if not started then finish(false) end
 		else
