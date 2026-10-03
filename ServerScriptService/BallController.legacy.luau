@@ -2073,8 +2073,12 @@ local function checkLivePulseBlockInterception()
 		if plr == recentKicker or not areOpponents(recentKicker, plr) then continue end
 		local radius = _G.GetPulseBlock(plr)
 		if not radius then continue end
-		local _, blockerRoot = getCharacterParts(plr)
-		if blockerRoot and (blockerRoot.Position - ball.Position).Magnitude <= radius then
+		-- ⚠️ v120b: a Muralha conta pela CAIXA do muro (ver _G.DentroDaBarreira)
+		local dentro = _G.DentroDaBarreira and _G.DentroDaBarreira(plr, ball.Position, ball.Size.X / 2)
+		if dentro then
+			if _G.MuroDaBarreira and _G.MuroDaBarreira(plr) and Remotes.HissatsuVFX and plr.Character then
+				Config.DispararVFX("HissatsuVFX", plr.Character, "Muralha Infinita@impacto", "Natureza", { Posicao = ball.Position })
+			end
 			pulseFlightExternalMult = 0.15
 			pulseFlightBlockApplied = true
 			ball.AssemblyLinearVelocity = ball.AssemblyLinearVelocity * 0.15
@@ -3802,6 +3806,7 @@ Remotes.KickBall.OnServerEvent:Connect(function(player, chargedForce, targetPoin
 				if plr == player or not areOpponents(player, plr) then continue end
 				local radius = _G.GetPulseBlock(plr)
 				if not radius then continue end
+				if _G.MuroDaBarreira and _G.MuroDaBarreira(plr) then continue end -- ⚠️ v120b: o muro para a bola NO MURO, não no chute
 				local _, blockerRoot = getCharacterParts(plr)
 				if blockerRoot and (blockerRoot.Position - root.Position).Magnitude <= radius then
 					force *= 0.15
@@ -5109,6 +5114,8 @@ end
 RunService.Heartbeat:Connect(function()
 	for _, player in ipairs(Players:GetPlayers()) do
 		local radius = _G.GetPulseBlock and _G.GetPulseBlock(player)
+		-- ⚠️ v120b: com o muro, a barreira É o muro (desenhado no cliente) — sem a esfera
+		if radius and _G.MuroDaBarreira and _G.MuroDaBarreira(player) then radius = nil end
 		if not radius then
 			local existing = blockVisuals[player]
 			if existing then existing.Transparency = 1 end
@@ -5462,6 +5469,7 @@ local function pulsePerformKick(player, targetPoint, force, curveMult, aimDeviat
 			if plr == player or not areOpponents(player, plr) then continue end
 			local radius = _G.GetPulseBlock(plr)
 			if not radius then continue end
+			if _G.MuroDaBarreira and _G.MuroDaBarreira(plr) then continue end -- ⚠️ v120b: o muro para a bola NO MURO
 			local _, blockerRoot = getCharacterParts(plr)
 			if blockerRoot and (blockerRoot.Position - root.Position).Magnitude <= radius then
 				force *= 0.15
@@ -6050,8 +6058,10 @@ _G.PulseExecuteTackle = function(player, effect, def)
 					if not atingido and andado < alcanceTotal then return end
 					con:Disconnect()
 					local ponto = origem + direcao * andado
+					local corte = _G.RegistrarCorteAzul and _G.RegistrarCorteAzul(player, ponto, direcao, def.Element)
 					if Remotes.HissatsuVFX and player.Character then
-						Config.DispararVFX("HissatsuVFX", player.Character, def.Name .. "@muro", def.Element, { Posicao = ponto, Dir = direcao })
+						Config.DispararVFX("HissatsuVFX", player.Character, def.Name .. "@muro", def.Element,
+							{ Posicao = ponto, Dir = direcao, Duracao = corte and corte.Duracao, Largura = corte and corte.Largura, Altura = corte and corte.Altura })
 					end
 					local forca = effect.KnockbackForce or 55
 					for _, other in ipairs(Players:GetPlayers()) do
@@ -6458,8 +6468,11 @@ end
 				if plr == recentKicker or not areOpponents(recentKicker, plr) then continue end
 				local radius = _G.GetPulseBlock(plr)
 				if not radius then continue end
-				local _, blockerRoot = getCharacterParts(plr)
-				if blockerRoot and (blockerRoot.Position - ball.Position).Magnitude <= radius then
+				-- ⚠️ v120b: a Muralha conta pela CAIXA do muro (ver _G.DentroDaBarreira)
+				if _G.DentroDaBarreira and _G.DentroDaBarreira(plr, ball.Position, ball.Size.X / 2) then
+					if _G.MuroDaBarreira and _G.MuroDaBarreira(plr) and Remotes.HissatsuVFX and plr.Character then
+						Config.DispararVFX("HissatsuVFX", plr.Character, "Muralha Infinita@impacto", "Natureza", { Posicao = ball.Position })
+					end
 					bloqueadoNoChute = recentKickTime
 					ball.AssemblyLinearVelocity = Vector3.zero
 					ball.AssemblyAngularVelocity = Vector3.zero
@@ -6467,6 +6480,65 @@ end
 						print(string.format("🧱 [Defesa] barreira de %s parou o chute comum de %s", plr.Name, recentKicker.Name))
 					end
 					return
+				end
+			end
+		end
+	end)
+end)()
+
+-- ⚠️ v120b — O MURO AZUL DO CORTE GIRATÓRIO FICA DE PÉ. PEDIDO: "o match cutting
+-- (aquele corte azul no meio): faz ele durar mais tempo, porque se a bola bater
+-- nele vai diminuir a velocidade da bola — sem animação nenhuma, bateu, tira uns
+-- 40-50 de força; e claro, escala com o elemento, a vantagem. É difícil de acertar:
+-- pode aumentar um pouco o tamanho." O muro fica CORTE_DURACAO segundos onde a
+-- meia-lua parou; a bola que cruzar a caixa dele perde CORTE_FORCA (×0.8-1.2 pela
+-- vantagem do elemento do chute contra o elemento do corte), uma vez por chute.
+;(function()
+	local CORTE_DURACAO, CORTE_LARGURA, CORTE_ALTURA, CORTE_ESPESSURA = 3.5, 16, 10, 2.5
+	local CORTE_FORCA = 45
+	local cortes = {}
+	_G.RegistrarCorteAzul = function(dono, ponto, direcao, elemento)
+		local base = Vector3.new(ponto.X, ponto.Y, ponto.Z)
+		local centro = base + Vector3.new(0, CORTE_ALTURA / 2 - 3, 0) -- (ponto = altura do quadril; chão ~3 abaixo)
+		local c = {
+			CFrame = CFrame.lookAt(centro, centro + direcao), Dono = dono, Elemento = elemento,
+			Ate = tick() + CORTE_DURACAO, Chutes = {},
+			Duracao = CORTE_DURACAO, Largura = CORTE_LARGURA, Altura = CORTE_ALTURA,
+		}
+		table.insert(cortes, c)
+		return c
+	end
+	RunService.Heartbeat:Connect(function()
+		if #cortes == 0 then return end
+		local agora = tick()
+		for i = #cortes, 1, -1 do
+			if agora >= cortes[i].Ate then table.remove(cortes, i) end
+		end
+		if owner or not recentKicker then return end
+		local v = ball.AssemblyLinearVelocity
+		if v.Magnitude < 10 then return end
+		for _, c in ipairs(cortes) do
+			if c.Chutes[recentKickTime] then continue end
+			if c.Dono and recentKicker and not areOpponents(c.Dono, recentKicker) then continue end -- (não atrapalha o próprio time)
+			local rel = c.CFrame:PointToObjectSpace(ball.Position)
+			local folga = ball.Size.X / 2
+			if math.abs(rel.X) <= CORTE_LARGURA / 2 + folga and math.abs(rel.Y) <= CORTE_ALTURA / 2 + folga
+				and math.abs(rel.Z) <= CORTE_ESPESSURA / 2 + folga + 1 then
+				c.Chutes[recentKickTime] = true
+				local elementoChute = recentKicker and recentKicker:GetAttribute(Config.ELEMENT_ATTRIBUTE_NAME or "Element")
+				-- vantagem do CORTE (defesa) sobre o chute: tira mais; desvantagem: tira menos
+				local mult = Config.MultElementalDaDefesa and Config.MultElementalDaDefesa(elementoChute, c.Elemento) or 1
+				local tirar = CORTE_FORCA * mult
+				local rapidez = v.Magnitude
+				local nova = math.max(rapidez - tirar, 12)
+				local razao = nova / rapidez
+				ball.AssemblyLinearVelocity = v * razao
+				if pulseStraightFlightActive then
+					if pulseFlightVelocidade then pulseFlightVelocidade *= razao end
+					pulseFlightExternalMult *= razao
+				end
+				if Config.PULSE_FORCE_DEBUG_PRINTS then
+					print(string.format("🌀 [Corte] o muro azul de %s tirou %.0f de força (x%.2f elemento)", c.Dono and c.Dono.Name or "?", tirar, mult))
 				end
 			end
 		end

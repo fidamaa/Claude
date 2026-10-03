@@ -887,7 +887,11 @@ Data.Pulses = {
 		Duration = 5,
 		FreezeSelf = true,
 		AlliesScale = { Radius = 45, PerAlly = 0.5, Max = 2 },
-		Effect = { BlockRadius = 36, BlockImpulse = 45 },
+		-- ⚠️ v120b: o muro GIGANTE é a própria barreira (caixa, não mais a esfera de raio 36):
+		-- 40 de largura x 26 de altura sozinho (+10/+3 por companheiro perto, até 2), 8 studs
+		-- na frente de quem ergue. Jogador atravessa; a bola não.
+		Effect = { BlockRadius = 36, BlockImpulse = 45,
+			Muro = { Largura = 40, PorAliado = 10, Altura = 26, AlturaPorAliado = 3, Espessura = 4, Distancia = 8 } },
 	},
 
 	-- ⚠️ MANTIDA COMO ESTAVA (dash com MashAD A/D). É a única exceção à

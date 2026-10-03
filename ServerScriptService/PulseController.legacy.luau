@@ -2927,6 +2927,64 @@ _G.GetPulseBlock = function(player)
 	return bestRadius, bestImpulse
 end
 
+-- ⚠️ v120b — MURALHA INFINITA GIGANTE. PEDIDO: "a muralha tá muito pequena — o
+-- tamanho base dela é pra ser literalmente gigante (gostei da aparência). E a
+-- hitbox é bem maior do que ela: a hitbox precisa ser ELA — se bater nela, contou.
+-- As pessoas podem passar no meio dela, a bola não." A barreira com `Muro` no
+-- efeito deixa de ser uma esfera em volta de quem usa e vira a CAIXA do muro, na
+-- frente dele (mesma conta do desenho em HissatsuVFXClient). Barreiras sem Muro
+-- (outros Pulsos) continuam com o raio.
+do -- (do...end: sem gastar locals do topo do script)
+local function raizDe(player)
+	return player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+end
+local function muroDe(player, e)
+	local root = raizDe(player)
+	if not root then return nil end
+	local m = e.Muro
+	local frente = Vector3.new(root.CFrame.LookVector.X, 0, root.CFrame.LookVector.Z)
+	frente = frente.Magnitude > 0.01 and frente.Unit or Vector3.new(0, 0, -1)
+	-- companheiros perto (cresce com eles, igual ao desenho do muro)
+	local aliados = 0
+	for _, mate in ipairs(Players:GetPlayers()) do
+		if mate ~= player and player.Team and mate.Team == player.Team then
+			local r = raizDe(mate)
+			if r and (r.Position - root.Position).Magnitude <= 45 then aliados += 1 end
+		end
+	end
+	aliados = math.min(aliados, 2)
+	local largura = (m.Largura or 40) + (m.PorAliado or 10) * aliados
+	local altura = (m.Altura or 26) + (m.AlturaPorAliado or 3) * aliados
+	local chao = root.Position.Y - 3
+	local centro = Vector3.new(root.Position.X, chao + altura / 2, root.Position.Z) + frente * (m.Distancia or 8)
+	return {
+		CFrame = CFrame.lookAt(centro, centro + frente),
+		Tamanho = Vector3.new(largura, altura, m.Espessura or 4),
+	}
+end
+_G.MuroDaBarreira = function(player)
+	local e1, e2 = getActiveEffects(player)
+	for _, e in ipairs({ e1, e2 }) do
+		if e and e.Muro and e.BlockRadius then return muroDe(player, e) end
+	end
+	return nil
+end
+-- pos está dentro da barreira de `player`? (folga = raio da bola)
+_G.DentroDaBarreira = function(player, pos, folga)
+	local raio = _G.GetPulseBlock(player)
+	if not raio then return false end
+	local muro = _G.MuroDaBarreira(player)
+	if muro then
+		local rel = muro.CFrame:PointToObjectSpace(pos)
+		local f = folga or 0
+		return math.abs(rel.X) <= muro.Tamanho.X / 2 + f and math.abs(rel.Y) <= muro.Tamanho.Y / 2 + f
+			and math.abs(rel.Z) <= muro.Tamanho.Z / 2 + f
+	end
+	local root = raizDe(player)
+	return root ~= nil and (root.Position - pos).Magnitude <= raio
+end
+end
+
 -- Goleiro: bônus de mergulho vindo de um Pulso ATIVO (buff em duração —
 -- Muralha/Muralha Impenetrável/Reflexo Absoluto). Soma os dois slots.
 _G.GetPulseGKDiveBonus = function(player)

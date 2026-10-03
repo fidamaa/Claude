@@ -1004,16 +1004,23 @@ VFX["Muralha Infinita"] = function(ch, root)
 	animar(ch, "Muralha", 5)
 	local frente = frenteDe(root)
 	local lado = frente:Cross(Vector3.yAxis).Unit
-	local n = 3 + 2 * math.min(companheirosPerto(ch, 45), 2) -- cresce com companheiros perto
+	-- ⚠️ v120b — PEDIDO: "a muralha tá muito pequena: o tamanho base é pra ser
+	-- literalmente GIGANTE (gostei da aparência)". Mesmas medidas da barreira no
+	-- servidor (_G.MuroDaBarreira / Muro em PulseInstinctData): 40 x 26 sozinho,
+	-- +10 de largura e +3 de altura por companheiro perto (até 2), 8 studs à frente.
+	local aliados = math.min(companheirosPerto(ch, 45), 2)
+	local largura, alturaMuro = 40 + 10 * aliados, 26 + 3 * aliados
+	local n = math.ceil(largura / 6.2)
+	local larguraBloco = largura / n
 	local base = noChao(root.Position, 0)
 	local muros = {}
 	task.delay(0.4, function()
 		for i = 1, n do
 			local off = (i - (n + 1) / 2)
-			local pos = base + frente * (6 + math.abs(off) * -0.6) + lado * off * 5.2
-			local altura = 9 + math.random() * 3
+			local pos = base + frente * (8 + math.abs(off) * -0.25) + lado * off * larguraBloco
+			local altura = alturaMuro * (0.9 + math.random() * 0.18)
 			local m = parte({ Material = Enum.Material.Slate, Color = rgb(140 + math.random(-15, 15), 115, 85), Transparency = 0,
-				Size = V3(5, altura, 2.2), CFrame = CFrame.lookAt(pos - V3(0, altura / 2, 0), pos - V3(0, altura / 2, 0) + frente) })
+				Size = V3(larguraBloco + 0.6, altura, 4), CFrame = CFrame.lookAt(pos - V3(0, altura / 2, 0), pos - V3(0, altura / 2, 0) + frente) })
 			m.CanQuery = false
 			local alvo = CFrame.lookAt(pos + V3(0, altura / 2 - 0.3, 0), pos + V3(0, altura / 2 - 0.3, 0) + frente) * CFrame.Angles(math.rad(math.random(-5, 5)), 0, math.rad(math.random(-4, 4)))
 			task.delay(i * 0.06, function()
@@ -1022,7 +1029,7 @@ VFX["Muralha Infinita"] = function(ch, root)
 			end)
 			muros[i] = m
 		end
-		onda(base + V3(0, 0.2, 0), Vector3.yAxis, rgb(190, 160, 110), 30, 0.5, 0.35)
+		onda(base + V3(0, 0.2, 0), Vector3.yAxis, rgb(190, 160, 110), largura * 1.4, 0.5, 0.35)
 		-- o campo treme (câmera de quem está perto)
 		local meu = meuRoot()
 		local hum = meu and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
@@ -1045,6 +1052,22 @@ VFX["Muralha Infinita"] = function(ch, root)
 			end
 		end
 	end)
+end
+
+-- ⚠️ v120b: a bola BATE no muro (o servidor manda onde): poeira, lascas e um tremor
+VFX["Muralha Infinita@impacto"] = function(_ch, _root, dados)
+	local ponto = dados and typeof(dados.Posicao) == "Vector3" and dados.Posicao
+	if not ponto then return end
+	anel(ponto, Vector3.yAxis, rgb(220, 190, 140), 2, 14, 0.4, 0.3)
+	fumaca(ponto, cores({ { 0, rgb(210, 190, 160) }, { 1, rgb(130, 110, 85) } }), 18, 2.5, 10)
+	for _ = 1, 8 do
+		local lasca = parte({ Material = Enum.Material.Slate, Color = rgb(150, 120, 90), Transparency = 0,
+			Size = V3(0.6 + math.random(), 0.5 + math.random() * 0.6, 0.6 + math.random()), CFrame = CFrame.new(ponto) })
+		local destino = ponto + V3(math.random(-6, 6), math.random(2, 7), math.random(-6, 6))
+		TweenService:Create(lasca, TweenInfo.new(0.6, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+			{ CFrame = CFrame.new(destino) * CFrame.Angles(math.random() * 6, math.random() * 6, 0), Transparency = 1 }):Play()
+		Debris:AddItem(lasca, 0.65)
+	end
 end
 
 VFX["Pisão de Sumô"] = function(ch, _root)
@@ -1146,16 +1169,25 @@ VFX["Corte Giratório@muro"] = function(ch, root, dados)
 	local dir = (dados and typeof(dados.Dir) == "Vector3") and dados.Dir or frenteDe(root)
 	local ponto = (dados and typeof(dados.Posicao) == "Vector3") and noChao(dados.Posicao, 0.25) or noChao(root.Position + dir * 12, 0.25)
 	-- o MURO de fogo azul sobe de onde a meia-lua parou
-	local muro = parte({ Color = rgb(110, 200, 255), Size = V3(11, 0.2, 1.2), Transparency = 0.25,
+	-- ⚠️ v120b: maior e FICA DE PÉ (o servidor manda Duracao/Largura/Altura — a bola
+	-- que bate nele perde força, ver _G.RegistrarCorteAzul no BallController)
+	local larg = (dados and dados.Largura) or 16
+	local alt = (dados and dados.Altura) or 10
+	local dur = (dados and dados.Duracao) or 3.5
+	local muro = parte({ Color = rgb(110, 200, 255), Size = V3(larg, 0.2, 1.2), Transparency = 0.25,
 		CFrame = CFrame.lookAt(ponto, ponto + dir) })
 	TweenService:Create(muro, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-		{ Size = V3(11, 8, 1.2), CFrame = CFrame.lookAt(ponto + V3(0, 4, 0), ponto + V3(0, 4, 0) + dir) }):Play()
+		{ Size = V3(larg, alt, 1.2), CFrame = CFrame.lookAt(ponto + V3(0, alt / 2, 0), ponto + V3(0, alt / 2, 0) + dir) }):Play()
 	local fogo = emissor(muro, {
 		Textura = TEX.Fogo, Cor = cores({ { 0, rgb(220, 245, 255) }, { 0.5, AZUL }, { 1, rgb(30, 60, 200) } }), Brilho = 1,
 		Tamanho = numeros({ { 0, 3 }, { 1, 0.5 } }), Vida = { 0.3, 0.6 }, Vel = { 3, 8 }, Acel = V3(0, 10, 0), Taxa = 120,
 	})
 	faiscas(ponto + V3(0, 3, 0), rgb(150, 215, 255), 40, 22)
-	task.delay(0.5, function() fogo.Enabled = false; sumir(muro, 0.35) end)
+	-- (tremeluz enquanto está de pé)
+	durante(dur, function(t)
+		if muro.Parent then muro.Transparency = 0.3 + 0.12 * math.sin(t * 14) end
+	end)
+	task.delay(dur, function() fogo.Enabled = false; sumir(muro, 0.35) end)
 end
 
 VFX["Roubo Congelante@inicio"] = function(ch, root, dados)
