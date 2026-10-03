@@ -584,6 +584,10 @@ _G.PositionPlayerAtFormation = function(player, character)
 	local cframe = getFormationCFrame(player)
 	if not cframe then return end -- time/role ainda não definido — fica onde o Roblox colocou
 
+	-- ⚠️ v120b: cancela carrinho/dive/ragdoll/deslocamento em andamento antes de
+	-- teleportar (senão o corpo era puxado de volta ou caía pelo chão — ver
+	-- _G.LimparAcoesDoJogador no BallController)
+	if _G.LimparAcoesDoJogador then pcall(_G.LimparAcoesDoJogador, player) end
 	root.CFrame = cframe
 	root.AssemblyLinearVelocity = Vector3.zero
 	root.AssemblyAngularVelocity = Vector3.zero

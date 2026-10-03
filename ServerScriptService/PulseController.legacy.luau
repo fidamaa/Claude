@@ -267,7 +267,11 @@ _G.IsPulseInProgress = function(player)
 	for _, state in pairs(pending) do
 		if state and not state.Resolved then
 			local def = state.Def
-			if def and BALL_HOLDING_ACTIONS[def.Action] then
+			-- ⚠️ v120b — PEDIDO: "às vezes depois do carrinho o carrinho ou o dash param
+			-- de funcionar". Um combo que nunca resolvia (jogador resetado/ragdoll no
+			-- meio) deixava o dash bloqueado pra sempre: combo velho (> 6s) não conta.
+			local velho = state.StepsStart and (tick() - state.StepsStart) > 6
+			if def and BALL_HOLDING_ACTIONS[def.Action] and not velho then
 				return true
 			end
 		end
@@ -1943,7 +1947,14 @@ local function playHissatsuCutscene(player, def, onDone)
 			if r.Parent then r.Anchored = false end
 		end
 		if root.Parent then
-			root.CFrame = startCFrame * CFrame.new(spec.RootPosition(duration))
+			-- ⚠️ v120b — PEDIDO: "depois da Fúria Glacial (e de algumas habilidades) o
+			-- personagem entra na terra, a animação e o torso bugam e ele cai no void".
+			-- O último quadro de várias coreografias é agachado/aterrissando (altura do
+			-- quadril NEGATIVA — e o servidor nem calibra o chão): o HRP era teleportado
+			-- pra baixo da altura de pé e as pernas iam pra dentro do gramado. Agora só
+			-- o deslocamento no chão (X/Z) vale; a altura nunca fica abaixo da de pé.
+			local fim = spec.RootPosition(duration)
+			root.CFrame = startCFrame * CFrame.new(fim.X, math.max(fim.Y, 0), fim.Z)
 			root.AssemblyLinearVelocity = Vector3.zero
 		end
 		if ball.Parent then

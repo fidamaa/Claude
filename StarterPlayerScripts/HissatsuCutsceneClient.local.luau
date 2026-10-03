@@ -765,6 +765,15 @@ local function tocarCutsceneV2(spec, chutador, inicio, bolaLocal, horarioServido
 		for junta, c0 in pairs(c0Original) do
 			if junta.Vivo() then junta.Escrever(c0) end
 		end
+		-- ⚠️ v120b: o último quadro da coreografia costuma ser agachado (quadril abaixo
+		-- da altura de pé) — deixar o corpo ali enterrava as pernas no gramado e
+		-- bugava/derrubava no void ("depois da Fúria Glacial"). Termina sempre de pé.
+		if not replay and root.Parent and spec.RootPosition then
+			local okFim, fim = pcall(spec.RootPosition, spec.Duration)
+			if okFim and typeof(fim) == "Vector3" and fim.Y < 0 then
+				root.CFrame = inicio * CFrame.new(fim.X, 0, fim.Z) * (inicio:Inverse() * root.CFrame).Rotation
+			end
+		end
 		pasta:Destroy()
 		if ball and ball.Parent then
 			ball.LocalTransparencyModifier = 0

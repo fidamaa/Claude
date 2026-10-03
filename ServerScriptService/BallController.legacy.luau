@@ -4368,6 +4368,22 @@ _G.StartPulseDashTackle = function(player, slot, def)
 	end
 end
 
+-- ⚠️ v120b — PEDIDO: "às vezes, depois de dar carrinho, ele simplesmente para de
+-- funcionar o carrinho ou o dash". Carrinho e dash recusam enquanto existir um
+-- tackleDashes[player]; se o loop de baixo der erro numa entrada (dash de Pulso/
+-- Hissatsu malformado), ele para de rodar naquele quadro e a entrada NUNCA é
+-- limpa — e trava todo mundo. Faxina separada e simples: entrada vencida há mais
+-- de 1s (ou sem prazo) sai, aconteça o que acontecer no loop principal.
+RunService.Heartbeat:Connect(function()
+	local agora = tick()
+	for player, dash in pairs(tackleDashes) do
+		if typeof(dash) ~= "table" or typeof(dash.expiresAt) ~= "number" or agora >= dash.expiresAt + 1
+			or not player.Parent then
+			tackleDashes[player] = nil
+		end
+	end
+end)
+
 RunService.Heartbeat:Connect(function()
 	for player, dash in pairs(tackleDashes) do
 		local _, root = getCharacterParts(player)
@@ -4657,6 +4673,36 @@ Remotes.AttemptTackle.OnServerEvent:Connect(function(player, directionArg)
 		end)
 	end
 end)
+
+-- ⚠️ v120b — PEDIDO: "algumas resets depois de usar habilidades, o personagem entra
+-- na terra, encosta ali e começa a bugar a animação e o torso — senão cai no void".
+-- O reset (gol/kickoff) fazia root.CFrame = formação com coisas ainda em andamento:
+-- carrinho/dive ainda arrastando o corpo pro caminho antigo, ragdoll com as juntas
+-- soltas, deslocamento do cliente. Isto cancela tudo antes de reposicionar.
+_G.LimparAcoesDoJogador = function(player)
+	if typeof(player) ~= "Instance" or not player:IsA("Player") then return end
+	tackleDashes[player] = nil
+	if diving[player] then
+		diving[player] = nil
+		setIframeGlow(player, false)
+	end
+	local estadoRagdoll = ragdollState[player]
+	if estadoRagdoll then restoreFromRagdoll(player, estadoRagdoll.expiresAt) end
+	if player.Parent == Players then
+		Remotes.ApplyDisplacement:FireClient(player, Vector3.zero, 0) -- duração 0 = cancelar
+	end
+	local _, root, humanoid = getCharacterParts(player)
+	if humanoid then
+		humanoid.PlatformStand = false
+		humanoid.Sit = false
+		local estado = humanoid:GetState()
+		if estado == Enum.HumanoidStateType.Physics or estado == Enum.HumanoidStateType.Ragdoll
+			or estado == Enum.HumanoidStateType.FallingDown then
+			humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+		end
+	end
+	if root and not _G.HissatsuCutsceneActive then root.Anchored = false end
+end
 
 -- ===== EXPOSTO PARA OUTROS SCRIPTS =====
 _G.GetBallTouchers = function()
