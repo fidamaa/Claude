@@ -487,7 +487,7 @@ C.Flow = {
 		-- _upload/Flow_Shidou_Cena.mp3 (39s): falas do vídeo (demucs) nos tempos da cena —
 		-- "Big Bang Drive" em 8.9s — + a trilha com a explosão caindo no chute (10.4s).
 		-- Se mudar FS.ImpactTime, remixar o áudio (a explosão é presa nesse tempo).
-		Musica = { Id = "rbxassetid://92767227847282", Volume = 1.2 } },
+		Musica = { Id = "rbxassetid://134592522690900", Volume = 1.2 } }, -- (v125b: sem a fala com palavrão; o 92767227847282 ficou restrito)
 	{ Id = "Flow_Sae", Nome = "Flow do Sae", Raridade = "Legendary", Personagem = "Itoshi Sae",
 		Descricao = "O prodígio: Técnica altíssima — passe e chute de outro nível.",
 		Atributos = { Technique = 28, Kick = 12 },
