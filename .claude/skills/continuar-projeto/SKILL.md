@@ -117,6 +117,40 @@ description: Passagem de bastão do jogo de futebol Roblox (Inazuma Eleven + Blu
    o vídeo transforma).
 5. Testes que só o usuário faz (com 2+ jogadores): armas/counters, portal da Queda
    Celestial em voo, Rin com companheiro real.
+6. **Lista da noite de 03/10 (v122)** — o usuário deixou o Studio aberto. Ordem: FLOW
+   primeiro (testar com screenshots e só mandar quando estiver MUITO bom), depois o resto.
+   Ver a seção "Lista da noite" abaixo; marcar ✅ conforme fizer.
+
+## Lista da noite (v122) — palavras do usuário resumidas
+FLOW do Isagi:
+- F1 Rever o vídeo `E:\O Gênio da Adaptabilidade rBlueLock.mp4` coisa por coisa (quadros a
+  0,1s em `scratchpad/flow_isagi/q`) e conferir se falta algo; melhorar o que der e
+  anotar na skill `flow-cutscene`.
+- F2 Braços da cena final: "estão muito pra cima e muito pra frente; o OMBRO, o braço
+  inteiro com o ombro, tem que estar mais pra TRÁS".
+- F3 Espiral: "ainda está cortando; é pra começar a aparecer na tela e ir aumentando e
+  diminuindo o campo de visão, AINDA no cara — você ainda vendo o jogador correndo".
+- F4 Corrida do Rin (e corrida em geral) mais FLUIDA — pesquisar ciclo de corrida.
+- F5 Mais efeitos quando ele levanta.
+- F6 Brilho BRANCO do olho mais forte; a íris girar mais rápido ainda.
+- F7 O jogador se ARREPIAR.
+DEPOIS:
+- G1 Chute que vai pra esquerda/direita sozinho (colega). Curva do Rin: "vou pro lado
+  segurando o botão, solto, e é pra curvar" — só com A/D; voltar pra 24° mas virar de verdade.
+- G2 GK: dash pra frente e dive pro lado levantam mais DEVAGAR; punição por errar o dive;
+  dive pode ir um pouco mais longe.
+- G3 Tornado de Fogo (e Dragão / quem usa): na subida abrir as pernas devagar; no chute só a
+  perna do chute mexe, a outra vai pra trás (pose de bicicleta). (Pedido explícito —
+  pode mexer no Tornado nisso.)
+- G4 Queda Celestial: o rastro dura mais; é um CILINDRO (não cone) com um universo dentro
+  (planetas, estrelas saltando) sem sair do cilindro.
+- G5 Bug: chute lendário (Dragão) contra defesa lendária (Punho da Justiça) → força caiu
+  de 180 pra 0 na hora.
+- G6 Chutes em conjunto (menos a Zona Morta): companheiros mais LONGE do jogador.
+- G7 Chutes: só UM pé se move (conferir as poses/"estátuas" de chute).
+- G8 Fúria Glacial: não cair no chão — dar um MORTAL e chutar; a bola faz uma leve curva
+  e depois vai 100% reto na direção mirada.
+- G9 Hissatsus aéreas: de longe a mira sobe demais — baixar/alinhar a mira.
 
 ## Arquivos-chave
 - `ServerScriptService/BallController.legacy.luau` (bola, chute, posse, armas ativas;
