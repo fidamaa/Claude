@@ -379,7 +379,11 @@ function Anim.PreparoChute(c)
 		RHip = V(-(28 + 47 * c), 0, 6),                -- quadril estende até -75 (era -50)
 		RKnee = V(-(60 + 65 * c), 0, 0),               -- joelho dobra até -125
 		RAnkle = V(-(18 + 22 * c), 0, 0),              -- pé esticado
-		LHip = V(24 + 14 * c, 0, -6),                  -- perna de apoio flexionada (mais, com o tronco à frente)
+		-- ⚠️ v122 — PEDIDO: "nos chutes só UM pé se move". No R6 (sem joelho) a perna de
+		-- apoio ia de ~16° pra frente (preparo) até -4° (fim) no mundo — as duas pernas
+		-- mexiam. Agora ela fica PLANTADA (~2° pra trás no mundo): o quadril só desconta
+		-- a inclinação do tronco (Root) — o R6 encolhe o quadril pra frente em 0.7.
+		LHip = V(3 + 8.5 * c, 0, -6),                  -- perna de apoio parada (era 24 + 14c)
 		LKnee = V(-(28 + 22 * c), 0, 0),
 		LAnkle = V(14, 0, 0),
 		RootPos = V(0, -0.18 - 0.22 * c, 0),            -- desce mais quanto mais carrega
@@ -426,28 +430,28 @@ Anim.Acoes.Kick = {
 				Root = V(-8, 4, 4), Waist = V(-4, 0, 0), Neck = V(-18, -4, 0),
 				LShoulder = V(25, 0, -65), RShoulder = V(-30, 0, 45), LElbow = V(20, 0, 0), RElbow = V(25, 0, 0),
 				RHip = V(10, 0, 4), RKnee = V(-105, 0, 0), RAnkle = V(-30, 0, 0),
-				LHip = V(30, 0, -6), LKnee = V(-40, 0, 0), LAnkle = V(14, 0, 0),
+				LHip = V(9, 0, -6), LKnee = V(-40, 0, 0), LAnkle = V(14, 0, 0), -- (v122: apoio parado, era 30)
 				RootPos = V(0, -0.4, 0),
 			} },
 			{ 0.13, {
 				Root = V(-16, -3, 6), Waist = V(-8, -6, 0), Neck = V(-24, 0, 0), -- ⚠️ v108: giro pela metade (continua reto)
 				LShoulder = V(20, 0, -75), RShoulder = V(-35, 0, 45), LElbow = V(20, 0, 0), RElbow = V(25, 0, 0),
 				RHip = V(55 + 15 * c, 0, 2), RKnee = V(-18, 0, 0), RAnkle = V(-35, 0, 0),
-				LHip = V(34, 0, -6), LKnee = V(-42, 0, 0), LAnkle = V(14, 0, 0),
+				LHip = V(20, 0, -6), LKnee = V(-42, 0, 0), LAnkle = V(14, 0, 0), -- (v122: era 34)
 				RootPos = V(0, -0.45, 0),
 			} },
 			{ 0.26, { -- CONTATO: arqueado por cima da bola, baixo, tombando pro lado do apoio
 				Root = V(-18, -5, 8), Waist = V(-12, -9, 0), Neck = V(-26, 0, 0),
 				LShoulder = V(-5, 0, -75), RShoulder = V(25, 0, 35), LElbow = V(25, 0, 0), RElbow = V(20, 0, 0),
 				RHip = V(95 + 25 * c, 0, 0), RKnee = V(-12, 0, 0), RAnkle = V(-25, 0, 0),
-				LHip = V(28, 0, -4), LKnee = V(-36, 0, 0), LAnkle = V(10, 0, 0),
+				LHip = V(23, 0, -4), LKnee = V(-36, 0, 0), LAnkle = V(10, 0, 0), -- (v122: era 28)
 				RootPos = V(0, -0.38, 0),
 			} },
 			{ 0.42, {
 				Root = V(-8, -2, 2), Waist = V(-4, -3, 0), Neck = V(-6, 0, 0),
 				LShoulder = V(5, 0, -25), RShoulder = V(5, 0, 15), LElbow = V(15, 0, 0), RElbow = V(15, 0, 0),
 				RHip = V(25, 0, 0), RKnee = V(-35, 0, 0), RAnkle = V(-5, 0, 0),
-				LHip = V(5, 0, -4), LKnee = V(-10, 0, 0), LAnkle = V(0, 0, 0),
+				LHip = V(9, 0, -4), LKnee = V(-10, 0, 0), LAnkle = V(0, 0, 0), -- (v122: era 5)
 			} },
 			{ 0.52, neutro() },
 		}
