@@ -1227,6 +1227,43 @@ local function computeMoveTarget(teamName, bot)
 		return bot.GuardIntercept
 	end
 
+	-- ⚠️ v124 — CANTOS. PEDIDO: "fazem gol pelo lado do gol porque o goleiro é limitado a
+	-- não se mover nessa direção; se você for pra ponta do gol ele pode ir até lá, e se a
+	-- bola estiver se aproximando ele se move melhor até a ponta". Dois casos antes da
+	-- patrulha amortecida:
+	--   1) bola SOLTA vindo pro gol (chute/passe): vai pro ponto onde ela cruza a linha,
+	--      até a trave (GKBOT_POSTE_FRACAO), correndo (BolaVindo → GKBOT_CHASE_SPEED);
+	--   2) atacante na PONTA, perto da linha de fundo: fecha o primeiro poste.
+	bot.BolaVindo = false
+	do
+		local anchor0 = teamGoalCFrame(teamName)
+		local goalHalf0 = goalHalfWidth(teamName)
+		if anchor0 and goalHalf0 then
+			local normal = fieldForward(teamName)
+			local eixo = lateralAxisOf(teamName)
+			local rel = ball.Position - anchor0.Position
+			local relPlano = Vector3.new(rel.X, 0, rel.Z)
+			local prof = normal:Dot(relPlano)
+			local latBola = eixo:Dot(relPlano)
+			local limitePoste = goalHalf0 * (Config.GKBOT_POSTE_FRACAO or 0.92)
+			local base = anchor0.Position + normal * Config.GKBOT_FORWARD_OFFSET
+			local semDono = not (_G.GetBallOwner and _G.GetBallOwner())
+			local v = ball.AssemblyLinearVelocity
+			local vPlano = Vector3.new(v.X, 0, v.Z)
+			local vn = vPlano:Dot(normal)
+			if semDono and vPlano.Magnitude > 12 and vn < -4 and prof > 0 and prof < 140 then
+				local latCruza = latBola + eixo:Dot(vPlano) * (prof / -vn)
+				if math.abs(latCruza) < goalHalf0 * 1.4 then
+					bot.BolaVindo = true
+					return base + eixo * math.clamp(latCruza, -limitePoste, limitePoste)
+				end
+			end
+			if math.abs(latBola) > goalHalf0 * 0.8 and prof > -2 and prof < goalHalf0 * 1.6 then
+				return base + eixo * (math.sign(latBola) * limitePoste)
+			end
+		end
+	end
+
 	local anchor = teamGoalCFrame(teamName)
 	local area = findAreaPart(teamName)
 	local lateralAxis = lateralAxisOf(teamName) -- ⚠️ CORRIGIDO: eixo derivado dos 2 gols, nunca da rotação de uma Part
@@ -1547,6 +1584,7 @@ local function updateBotMovement(teamName, bot)
 	-- chega primeiro.
 	local chasing = (bot.ChaseTarget ~= nil and tick() < (bot.ChaseUntil or 0))
 		or (bot.GuardIntercept ~= nil and tick() < (bot.GuardInterceptUntil or 0))
+		or bot.BolaVindo == true -- ⚠️ v124: bola vindo pro gol = corre pro canto
 	local speed = chasing and Config.GKBOT_CHASE_SPEED or Config.GKBOT_WALK_SPEED
 
 	local direction = toTarget.Unit

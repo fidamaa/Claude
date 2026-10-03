@@ -530,7 +530,7 @@ Config.PULSE_DEFENDER_CHIP_RANGE = 12
 Config.PULSE_SHOT_FORCE_CAP_MULT = 6.0
 -- ⚠️ v119: teto da VELOCIDADE do voo do chute de Hissatsu (a força/vida da bola não
 -- muda). Antes a velocidade era igual à força (Mítica = 600-900 studs/s).
-Config.HISSATSU_VELOCIDADE_MAX = 210
+Config.HISSATSU_VELOCIDADE_MAX = 294 -- ⚠️ v124: "faz as hissatsus saírem 40% mais rápido" (era 210)
 
 -- ⚠️ v85 — MIRA DA HISSATSU SEM ASSISTENTE: o ponto sob o cursor é usado
 -- exatamente como vem (ver _G.PulseComputeShotTarget no BallController e
@@ -1340,8 +1340,8 @@ Config.GKBOT_DIVE_DURATION = 0.65 -- ⚠️ v110: 0.55 -> 0.65 (o voo agora dura
 -- até o ponto da bola, igual o mergulho do goleiro humano (antes ele só CORRIA)
 -- ⚠️ v110: TEMPO DE REAÇÃO — o bot só mergulha depois que o chute já é ameaça há
 -- esse tempo (antes reagia no mesmo quadro). Chute forte no canto chega antes.
-Config.GKBOT_TEMPO_REACAO = 0.17 -- ⚠️ v111: era 0.22 — "tenta fazer ele acelerar um pouquinho mais... se mirar num canto e chutar, ele não pega de jeito nenhum. Tem que pegar pelo menos algumas vezes"
-Config.GKBOT_DIVE_SPEED = 55 -- ⚠️ v111: 44 -> 55 ("pode deixar o mergulho um pouco mais rápido") · 38 -> 44 (mesmo pedido acima: chute no canto nunca era pego) -- ⚠️ v110: era 44 -- ⚠️ v110: era 52 ("o bot está muito rápido") -- ⚠️ v110: era 75 ("impossível de fazer gol, deixa ele um pouco mais fraco")
+Config.GKBOT_TEMPO_REACAO = 0.24 -- ⚠️ v124: "o dive às vezes está muito precoce" (espera um pouco mais; era 0.17) -- ⚠️ v111: era 0.22 — "tenta fazer ele acelerar um pouquinho mais... se mirar num canto e chutar, ele não pega de jeito nenhum. Tem que pegar pelo menos algumas vezes"
+Config.GKBOT_DIVE_SPEED = 50 -- ⚠️ v124: "deixa o dive só um pouquinho mais lento" (era 55) -- ⚠️ v111: 44 -> 55 ("pode deixar o mergulho um pouco mais rápido") · 38 -> 44 (mesmo pedido acima: chute no canto nunca era pego) -- ⚠️ v110: era 44 -- ⚠️ v110: era 52 ("o bot está muito rápido") -- ⚠️ v110: era 75 ("impossível de fazer gol, deixa ele um pouco mais fraco")
 -- ⚠️ v109: reage a chute que vai passar até esse tanto dele SE estiver indo pro gol
 -- dele (o raio pequeno de cima continua valendo pra bola que não vai no gol)
 Config.GKBOT_SHOT_REACT_RADIUS_NO_GOL = 22.5 -- ⚠️ v111: 15 -> 22.5 (+50%) -- ⚠️ v110: era 20 ("muito difícil de errar") -- ⚠️ v110: era 28
@@ -1497,6 +1497,12 @@ Config.GKBOT_FORWARD_OFFSET = 2.5
 -- que o gol, cobrindo a grande área inteira) — ver computeMoveTarget em
 -- GKBotController.lua.
 Config.GKBOT_LATERAL_POST_MARGIN = 0
+-- ⚠️ v124 — PEDIDO: "estão fazendo gol pelos cantos: o goleiro é limitado a não se mover
+-- nessa direção. Se você for pra ponta do gol, ele pode ir até lá; e se a bola estiver
+-- se aproximando, ele se move melhor até a ponta". Até que fração da meia-largura do gol
+-- ele vai quando a bola VEM pro gol ou o atacante está na ponta (a patrulha normal
+-- continua em GKBOT_LATERAL_GOAL_FRACTION).
+Config.GKBOT_POSTE_FRACAO = 0.92
 
 -- ⚠️ v5.9: PEDIDO — "faça o jogador andar menos pra direita/esquerda,
 -- isso é só pra ele se posicionar um pouco melhor, não ir da ponta a
@@ -1746,7 +1752,7 @@ Config.PRIMEIRO_TOQUE_VEL_MAX = 80
 -- pra conseguir dominar só passando por cima". Velocidade máxima da bola solta que se
 -- domina SÓ encostando/passando nela (antes 30, fixo no BallController). Só o domínio
 -- passivo usa isto — goleiro, carrinho e defesa continuam com o valor antigo.
-Config.DOMINIO_VEL_MAX = 42
+Config.DOMINIO_VEL_MAX = 55 -- ⚠️ v124: "um colega tentou pegar um passe mais ou menos e não conseguiu — pode aumentar" (era 42)
 Config.HEADER_VEL_MAX = 95
 
 -- ===== GRAVIDADE E JOGABILIDADE DA BOLA =====
@@ -1849,7 +1855,7 @@ Config.FLOW_CHARGE_ARMA = 5 -- efeito de Arma disparando numa ação / ativa usa
 -- abaixo.
 Config.BALL_PHYSICAL_PROPERTIES = {
 	Density = 0.7,
-	Friction = 1.5,           -- era 1.15/0.95/0.85/0.7/0.55/0.35 — mais "grude" no chão, desliza menos
+	Friction = 1.85,          -- ⚠️ v124: "quicar, só que deslizar um pouco menos quando estiver quicando" · era 1.5/1.15/0.95/0.85/0.7/0.55/0.35
 	Elasticity = 0.78,        -- ⚠️ v123: "faça a bola quicar mais" · era 0.65/0.6/0.4
 	FrictionWeight = 4.2,     -- era 3.2/2.6/2.2/1.8/1.4/1 — domina de vez sobre o material do chão
 	ElasticityWeight = 2.2,   -- ⚠️ v123: a elasticidade da bola manda mais no quique · era 1.6/1.4/1
