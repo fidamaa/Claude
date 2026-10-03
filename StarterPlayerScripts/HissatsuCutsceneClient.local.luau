@@ -710,6 +710,7 @@ local function tocarCutsceneV2(spec, chutador, inicio, bolaLocal, horarioServido
 	local tituloMostrado, tituloEscondido = false, false
 	local giroBola = 0
 	local ultimoT = 0
+	local colaNoChute = nil -- (v125) deslocamento da bola congelado no instante do chute
 	local conexao
 
 	-- ⚠️ v113: a bola tem os gomos em DECALS e um Highlight; esconder só a
@@ -860,7 +861,18 @@ local function tocarCutsceneV2(spec, chutador, inicio, bolaLocal, horarioServido
 			local contato = pePos + inicio:VectorToWorldSpace(spec.KickContactDir) * (raioBola + 0.3)
 			local cola = Cutscenes.Smooth(Cutscenes.Phase(t, spec.Phases.Kick[1] - 0.15, spec.ImpactTime))
 			local noChute = mundo(spec.BallPosition(spec.ImpactTime, bolaLocal))
-			bolaMundo += (contato - noChute) * cola
+			local desloc = (contato - noChute) * cola
+			-- ⚠️ v125: com ColaCongelaNoChute, depois do chute a bola NÃO segue mais o pé
+			-- (no Big Bang Drive ele cai de costas e a bola afundava no gramado junto)
+			if spec.ColaCongelaNoChute then
+				if t >= spec.ImpactTime then
+					colaNoChute = colaNoChute or desloc
+					desloc = colaNoChute
+				else
+					colaNoChute = nil -- (o depurador pode voltar no tempo)
+				end
+			end
+			bolaMundo += desloc
 			bolaPosLocal = inicio:PointToObjectSpace(bolaMundo)
 		end
 		giroBola += (spec.BallSpin and spec.BallSpin(t) or 10) * math.pi * 2 * dt

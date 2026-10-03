@@ -482,7 +482,12 @@ C.Flow = {
 	{ Id = "Flow_Shidou", Nome = "Flow do Shidou", Raridade = "Legendary", Personagem = "Shidou Ryusei",
 		Descricao = "Big Bang Drive: ativar o Flow é CHUTAR — com a bola, a cena sai pra onde você mira (voleio de bicicleta, chute explosivo). Chute e Velocidade sobem.",
 		Atributos = { Kick = 20, Speed = 10 },
-		Tema = { Cor = rgb(255, 110, 190), Cor2 = rgb(255, 240, 120), Motivo = "Explosao" } },
+		Tema = { Cor = rgb(255, 110, 190), Cor2 = rgb(255, 240, 120), Motivo = "Explosao" },
+		-- ⚠️ v125 — PEDIDO: "nem a música e nem o áudio de nada foi incluído... eu vou colocar".
+		-- _upload/Flow_Shidou_Cena.mp3 (39s): falas do vídeo (demucs) nos tempos da cena —
+		-- "Big Bang Drive" em 8.9s — + a trilha com a explosão caindo no chute (10.4s).
+		-- Se mudar FS.ImpactTime, remixar o áudio (a explosão é presa nesse tempo).
+		Musica = { Id = "rbxassetid://92767227847282", Volume = 1.2 } },
 	{ Id = "Flow_Sae", Nome = "Flow do Sae", Raridade = "Legendary", Personagem = "Itoshi Sae",
 		Descricao = "O prodígio: Técnica altíssima — passe e chute de outro nível.",
 		Atributos = { Technique = 28, Kick = 12 },

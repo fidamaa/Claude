@@ -6061,13 +6061,19 @@ function E.FlowShidou(ctx)
 			aura(24, 18)
 		end
 		if torso then
-			luzAnc.CFrame = CFrame.new(torso.Position + F * 2.2)
+			-- ⚠️ v125: no estádio escuro (POV da bola, giro e bicicleta) a luz fica do lado da
+			-- CÂMERA e acima — ele vira de costas pro gol e a luz na frente original deixava
+			-- só a silhueta preta
+			local noEstadio = t >= 8.55
+			local praCamera = (workspace.CurrentCamera.CFrame.Position - torso.Position)
+			praCamera = praCamera.Magnitude > 0.1 and praCamera.Unit or F
+			luzAnc.CFrame = CFrame.new(torso.Position + (noEstadio and (praCamera * 2.5 + U * 2) or F * 2.2))
 			-- (v124: nos closes do rosto/olho a luz rosa forte lavava o rosto inteiro; sem luz
 			-- nenhuma o rosto sumia no palco escuro — fica uma luz fraca, quase branca)
 			local noClose = t >= ph.Rosto[1] and t < ph.Tunel[1]
 			luzRosa.Color = noClose and rgb(255, 230, 242) or ROSA
 			luzRosa.Brightness = noClose and 1.1 or 3
-			luzRosa.Range = noClose and 9 or ((t >= ph.Aura[1] and t < 8.55) and 16 or ((t >= 9.3) and 12 or 0))
+			luzRosa.Range = noClose and 9 or ((t >= ph.Aura[1] and t < 8.55) and 16 or (noEstadio and 14 or 0))
 		end
 
 		-- olhos: brancos acendendo (4.0-6.3), depois ROSA (Flow) até o fim

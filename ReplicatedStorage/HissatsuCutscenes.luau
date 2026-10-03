@@ -3470,12 +3470,19 @@ end
 --   Chamas   7.5-8.8 30.7-34.9s ele no ar inclinado pra trás, câmera de baixo; chamas rosa
 --                               escorrendo das pernas e raios de luz atrás (✂️ 34.2s,
 --                               35.9-37.1s, 39.2-42.1s)
---   BigBang  8.8-9.5 42.2-47s   estádio ESCURO com brilhos, o gol ao fundo ("Big Bang
---                               Drive!"); a bola sobe na frente dele
---   Kick     9.5-10.4 47-50s    salta de costas (mortal), bola acima: voleio de bicicleta;
---                               a chuteira encontra a bola → ESTRELA rosa estoura
---   Impact   10.4-12 50.1-56.9s a bola sai em linha reta pra onde ele mirou, rastro rosa;
---                               ele termina o mortal e cai de pé (✂️ 64.3-65s)
+--   BigBang  8.8-9.75 45.4-46s  ⚠️ v125: POV DA BOLA em câmera lenta — ela vem do AR (de trás
+--                               dele), a câmera atrás dela olhando ele lá embaixo ("Big Bang
+--                               Drive!"); ele olha pra cima e VIRA DE COSTAS pro gol
+--   Kick     9.75-10.4 47-47.8s agacha e SALTA até a altura da bola: bicicleta DE COSTAS — o
+--                               corpo tomba pra trás e a perna passa por cima da cabeça
+--                               (SEM mortal); a chuteira encontra a bola → ESTRELA rosa
+--   Impact   10.4-12 48-50s     a bola sai em linha reta pra onde ele mirou, rastro rosa;
+--                               ele cai de costas no gramado e levanta
+-- ⚠️ v125 — PEDIDO: "É pra ter uma câmera, um POV da bola chegando perto dele em câmera
+-- lenta... vendo ela vindo do ar. Depois ele pulando pra alcançar a bola na mesma altura
+-- da bola... Antes de pular ele vai virar o personagem, aí vai pular e dar o Big Bang
+-- Drive de costas... Ele não vai pular e dar um mortal". O chute continua em 10.4s: o
+-- áudio (Flow_Shidou_Cena.mp3) tem a fala e a explosão da música presas nesse tempo.
 -- No último quadro o servidor solta a bola e o chute SAI (PulseController
 -- _G.TocarCenaFlow → ChuteNoFlow) e o Flow começa ao mesmo tempo (InstinctController).
 -- A câmera dos closes vem dos efeitos (FlowShidou.CameraMundo): segue a cabeça de verdade.
@@ -3488,7 +3495,8 @@ do
 	FS.Duration = 12
 	FS.ImpactTime = 10.4 -- o voleio: a chuteira acerta a bola
 	FS.ColarNoPe = true
-	FS.KickContactDir = V3(0, 0.25, -1).Unit
+	FS.ColaCongelaNoChute = true -- (v125) ele cai depois da bicicleta: a bola não desce junto com o pé
+	FS.KickContactDir = V3(0, 0.6, -1).Unit -- (v125) o pé pega a bola por trás/baixo e manda pro gol (−Z)
 	FS.SemTremidaImpacto = false
 	FS.ChuteNoFlow = true -- ⚠️ v124: ativar o Flow = CHUTAR (a cena termina com a bola saindo pra mira)
 	FS.TitleText = "FLOW · SHIDOU RYUSEI"
@@ -3499,44 +3507,59 @@ do
 	}
 	FS.Phases = {
 		Chega = { 0, 1.4 }, Aura = { 1.4, 3.0 }, Rosto = { 3.0, 4.4 }, Olho = { 4.4, 5.4 }, Tunel = { 5.4, 6.3 },
-		Peito = { 6.3, 7.5 }, Chamas = { 7.5, 8.8 }, BigBang = { 8.8, 9.5 }, Kick = { 9.5, FS.ImpactTime },
+		Peito = { 6.3, 7.5 }, Chamas = { 7.5, 8.8 }, BigBang = { 8.8, 9.75 }, Kick = { 9.75, FS.ImpactTime },
 		Impact = { FS.ImpactTime, FS.Duration },
 	}
 
-	-- corpo: levita nas chamas, agacha, SALTA e faz o mortal (backflip) até o voleio
+	-- corpo (⚠️ v125): levita nas chamas, desce, VIRA DE COSTAS pro gol (yaw 180), agacha,
+	-- SALTA até a altura da bola e tomba pra trás na bicicleta (pitch até ~105, NÃO 360);
+	-- cai de costas no gramado e senta/levanta. Termina de pé, de costas pro gol.
+	-- (R6 de pé: quadril ~3 studs acima do gramado; deitado de costas: ~0.5)
 	local FS_ALTURA = {
 		{ 0, 0 }, { 1.4, 0 }, { 1.8, 0.25 }, { 6.3, 0.25 }, { 7.6, 1.2 }, { 8.8, 1.2 },
-		{ 9.3, -0.35 }, { 10.15, 3.7 }, { FS.ImpactTime, 3.5 }, { 11.9, 0 }, { 12, 0 },
+		{ 9.15, 0 }, { 9.55, 0 }, { 9.75, -0.35 }, { 9.85, -0.1 }, { FS.ImpactTime, 3.0 },
+		{ 10.75, 2.5 }, { 11.25, -2.4 }, { 11.55, -2.4 }, { 11.95, -0.2 }, { 12, 0 },
 	}
-	-- (andou um pouco pra frente no salto: a câmera recua junto)
-	local FS_Z = { { 0, 0 }, { 9.3, 0 }, { FS.ImpactTime, -2.2 }, { 12, -4.5 } }
-	local FS_PITCH = { { 0, 0 }, { 9.4, 0 }, { FS.ImpactTime, 115 }, { 11.9, 360 }, { 12, 360 } }
+	-- tomba pra trás = vai na direção do gol (−Z)
+	local FS_Z = { { 0, 0 }, { 9.8, 0 }, { FS.ImpactTime, -0.6 }, { 11.25, -1.8 }, { 12, -1.8 } }
+	local FS_PITCH = {
+		{ 0, 0 }, { 9.8, 0 }, { 10.05, 35 }, { FS.ImpactTime, 105 }, { 10.8, 100 },
+		{ 11.25, 88 }, { 11.55, 88 }, { 11.95, 0 }, { 12, 0 },
+	}
 	function FS.RootPosition(t)
 		local respira = (t < 9) and 0.04 * math.sin(t * 3) or 0
 		return V3(0, sample(FS_ALTURA, t) + respira, sample(FS_Z, t))
 	end
-	function FS.RootCFrame(t) return CFrame.new(FS.RootPosition(t)) * CFrame.Angles(rad(sample(FS_PITCH, t)), 0, 0) end
+	function FS.RootCFrame(t)
+		local giro = smooth(phase(t, 9.2, 9.7)) * 180 -- vira suave (não linear)
+		return CFrame.new(FS.RootPosition(t)) * CFrame.Angles(0, rad(giro), 0) * CFrame.Angles(rad(sample(FS_PITCH, t)), 0, 0)
+	end
 
 	-- bola: cai do alto, fica na frente dele; some nos closes (tampava o rosto/peito);
-	-- reaparece no estádio escuro, sobe pro voleio e sai pra frente (a mira)
+	-- (v125) reaparece no CÉU atrás dele e vem caindo em câmera lenta (POV), acelera
+	-- no salto e encontra a chuteira acima da cabeça; sai pra frente (a mira, −Z)
 	local FS_BOLA_PARADA = V3(0.2, 0.1, -2.4)
-	local FS_BOLA_ALTO = V3(0.1, 4.4, -2.0)
-	local FS_BOLA_CONTATO = V3(0, 5.0, -2.4)
+	local FS_BOLA_CEU = V3(-0.5, 15, 26)
+	local FS_BOLA_CONTATO = V3(-0.5, 6.2, -0.3) -- (pé direito: com o giro de 180 fica no −X)
+	local FS_BOLA_U = { { 8.6, 0 }, { 9.75, 0.36 }, { FS.ImpactTime, 1 } } -- devagar → rápido
 	function FS.BallPosition(t, _s)
 		if t < 1.4 then
 			return V3(0.4, 9, -2.4):Lerp(FS_BOLA_PARADA, (t / 1.4) ^ 2)
-		elseif t < 8.8 then
+		elseif t < 8.6 then
 			return FS_BOLA_PARADA + V3(0, 0.08 * math.sin(t * 2.5), 0)
-		elseif t < 9.9 then
-			return FS_BOLA_PARADA:Lerp(FS_BOLA_ALTO, smooth(phase(t, 8.8, 9.9)))
 		elseif t < FS.ImpactTime then
-			return FS_BOLA_ALTO:Lerp(FS_BOLA_CONTATO, smooth(phase(t, 9.9, FS.ImpactTime)))
+			local u = sample(FS_BOLA_U, t)
+			return FS_BOLA_CEU:Lerp(FS_BOLA_CONTATO, u) + V3(0, 10 * u * (1 - u), 0) -- arco de cruzamento
 		end
 		-- sai pra frente (-Z = pra onde ele mirou); o servidor continua dali
-		return FS_BOLA_CONTATO + V3(0, -1.0, -9) * easeOut(phase(t, FS.ImpactTime, FS.Duration))
+		-- (v125: 9 → 16 studs — parecia fraco saindo devagar)
+		return FS_BOLA_CONTATO + V3(0, -1.6, -16) * easeOut(phase(t, FS.ImpactTime, FS.Duration))
 	end
 	function FS.BallVisible(t) return t < 3.0 or t >= 8.6 end
-	function FS.BallSpin(t) return (t >= FS.ImpactTime) and 14 or 3 end
+	function FS.BallSpin(t)
+		if t >= FS.ImpactTime then return 14 end
+		return (t >= 8.6 and t < 9.75) and 0.8 or 3 -- câmera lenta: gira devagar
+	end
 
 	-- R6: braço/perna RETOS. Braço pra fora com |rz| >= 40 em movimento (não entra no tronco).
 	-- Root rx+ inclina pra TRÁS; a perna fica reta compensando (Hip = -Root).
@@ -3566,18 +3589,35 @@ do
 			RShoulder = { -38, 0, 72 }, LShoulder = { -38, 0, -72 } } },
 		{ 8.80, { Root = { 34, 0, 0 }, Neck = { -20, 0, 0 }, RHip = { -48, 0, 14 }, LHip = { -28, 0, -14 },
 			RShoulder = { -40, 0, 76 }, LShoulder = { -40, 0, -76 } } },
-		-- BigBang: agacha pra saltar (peso pra frente, braços atrás)
-		{ 9.30, { Root = { -14, 0, 0 }, Neck = { 18, 0, 0 }, RHip = { 62, 0, 8 }, LHip = { 62, 0, -8 },
-			RShoulder = { -50, 0, 42 }, LShoulder = { -50, 0, -42 } } },
-		-- decola: estica e abre
-		{ 9.80, { Root = { 6, 0, 0 }, Neck = { 28, 0, 0 }, RHip = { 20, 0, 10 }, LHip = { -10, 0, -10 },
-			RShoulder = { 110, 0, 55 }, LShoulder = { 110, 0, -55 } } },
-		-- Kick: corpo deitado no mortal, perna direita ERGUIDA acima da cabeça (voleio de bicicleta)
-		{ FS.ImpactTime, { Root = { 8, 0, 0 }, Neck = { 38, 0, 0 }, RHip = { 100, 0, 8 }, LHip = { -8, 0, -12 },
-			RShoulder = { 25, 0, 80 }, LShoulder = { 25, 0, -80 } } },
-		-- termina o mortal e cai de pé, braços abertos
-		{ 11.50, { Root = { 6, 0, 0 }, Neck = { 10, 0, 0 }, RHip = { 25, 0, 8 }, LHip = { 10, 0, -8 },
-			RShoulder = { 30, 0, 70 }, LShoulder = { 30, 0, -70 } } },
+		-- BigBang (v125): de pé, olhando a bola vir do céu enquanto VIRA de costas pro gol
+		{ 9.15, { Root = { 4, 0, 0 }, Neck = { 32, 0, 0 }, RHip = { -4, 0, 8 }, LHip = { -4, 0, -8 },
+			RShoulder = { -8, 0, 42 }, LShoulder = { -8, 0, -42 } } },
+		{ 9.55, { Root = { 2, 0, 0 }, Neck = { 30, 0, 0 }, RHip = { -2, 0, 8 }, LHip = { -2, 0, -8 },
+			RShoulder = { -15, 0, 45 }, LShoulder = { -15, 0, -45 } } },
+		-- agacha pra saltar (peso pra frente, braços atrás)
+		{ 9.75, { Root = { -14, 0, 0 }, Neck = { 30, 0, 0 }, RHip = { 58, 0, 8 }, LHip = { 58, 0, -8 },
+			RShoulder = { -50, 0, 45 }, LShoulder = { -50, 0, -45 } } },
+		-- decola: estica, braços sobem
+		{ 9.90, { Root = { 0, 0, 0 }, Neck = { 20, 0, 0 }, RHip = { 8, 0, 8 }, LHip = { -6, 0, -8 },
+			RShoulder = { 120, 0, 50 }, LShoulder = { 120, 0, -50 } } },
+		-- tombando pra trás: a perna direita começa a subir (tesoura), a esquerda fica
+		{ 10.15, { Root = { 0, 0, 0 }, Neck = { 10, 0, 0 }, RHip = { 55, 0, 8 }, LHip = { -12, 0, -10 },
+			RShoulder = { 30, 0, 72 }, LShoulder = { 30, 0, -72 } } },
+		-- Kick: corpo tombado ~105 (RootCFrame), perna direita por CIMA da cabeça (105+90 =
+		-- ~195 do "pra baixo" → aponta pra cima e um pouco pro gol); esquerda na horizontal
+		{ FS.ImpactTime, { Root = { 0, 0, 0 }, Neck = { 12, 0, 0 }, RHip = { 90, 0, 8 }, LHip = { -10, 0, -12 },
+			RShoulder = { -25, 0, 82 }, LShoulder = { -25, 0, -82 } } },
+		-- caindo de costas, pernas descendo, braços abertos pra amortecer
+		{ 10.80, { Root = { 0, 0, 0 }, Neck = { 18, 0, 0 }, RHip = { 45, 0, 10 }, LHip = { 15, 0, -10 },
+			RShoulder = { -40, 0, 80 }, LShoulder = { -40, 0, -80 } } },
+		-- deitado de costas no gramado (mãos abertas no chão)
+		{ 11.25, { Root = { 0, 0, 0 }, Neck = { 22, 0, 0 }, RHip = { 12, 0, 12 }, LHip = { 8, 0, -12 },
+			RShoulder = { -10, 0, 85 }, LShoulder = { -10, 0, -85 } } },
+		{ 11.55, { Root = { 0, 0, 0 }, Neck = { 18, 0, 0 }, RHip = { 12, 0, 12 }, LHip = { 8, 0, -12 },
+			RShoulder = { -10, 0, 85 }, LShoulder = { -10, 0, -85 } } },
+		-- senta e levanta (o tronco volta pra frente — não é giro, é levantar)
+		{ 11.95, { Root = { -6, 0, 0 }, Neck = { 8, 0, 0 }, RHip = { 20, 0, 8 }, LHip = { 20, 0, -8 },
+			RShoulder = { 10, 0, 55 }, LShoulder = { 10, 0, -55 } } },
 		{ 12.00, { Root = { 0, 0, 0 }, Neck = { 6, 0, 0 }, RHip = { 12, 0, 8 }, LHip = { 12, 0, -8 },
 			RShoulder = { 20, 0, 60 }, LShoulder = { 20, 0, -60 } } },
 	}
@@ -3607,18 +3647,26 @@ do
 			-- de baixo e de lado: ele no ar, chamas escorrendo
 			local u = smooth(phase(t, 7.5, 8.8))
 			return rootPos + V3(2.6, -2.2, -3.8):Lerp(V3(2.1, -1.8, -3.0), u), rootPos + V3(0, 0.9, 0), 56
-		elseif t < 9.5 then
-			-- ATRÁS dele, olhando o gol no escuro (ele está de costas pra câmera)
-			local u = smooth(phase(t, 8.8, 9.5))
-			return rootPos + V3(0.8, 0.4, 5.8):Lerp(V3(0.6, 0.6, 5.0), u), rootPos + V3(0, 0.5, -22), 62
+		elseif t < 9.75 then
+			-- ⚠️ v125: POV DA BOLA em câmera lenta — atrás dela no caminho, olhando ele lá
+			-- embaixo (a bola grande no primeiro plano, ele virando de costas pro gol)
+			local bola = FS.BallPosition(t)
+			-- (conferido no Studio: olhando pro corpo a câmera ficava de cima, só gramado;
+			-- mirando acima dele aparece o estádio no fundo, como no vídeo)
+			local alvo = rootPos + V3(0, 0.6, 0)
+			local tras = (bola - alvo).Unit
+			-- (de lado: a bola fica à esquerda e ele aparece virando — no meio ela tampava ele)
+			-- (mira um pouco ACIMA dele, na direção da bola: senão ela ficava atrás da faixa preta)
+			local mira = (rootPos + V3(0, 1.2, 0)):Lerp(bola, 0.12)
+			return bola + tras * 3.4 + V3(2.0, -0.6, 0), mira, 60
 		elseif t < FS.ImpactTime then
-			-- perfil do voleio
-			local u = smooth(phase(t, 9.5, FS.ImpactTime))
-			return rootPos + V3(7, 0.4, -0.5):Lerp(V3(5.6, 1.0, -1.4), u), rootPos + V3(0, 1.0, -1.6), 50
+			-- perfil do salto, de baixo e do lado da perna de chute: vê ele subir até a bola
+			local u = smooth(phase(t, 9.75, FS.ImpactTime))
+			return V3(-10.5, -0.6, 2.5):Lerp(V3(-9.5, 0.8, 1.2), u), V3(0, 1.6, 0):Lerp(V3(0, 4.4, -0.3), u), 60
 		end
-		-- a bola sai: atrás e do lado, vendo ela ir
+		-- a bola sai: baixo, atrás dele — ele cai de costas no primeiro plano e a bola vai pro gol
 		local u = smooth(phase(t, FS.ImpactTime, FS.Duration))
-		return rootPos + V3(5.5, 2.6, 4.2):Lerp(V3(6.5, 3.2, 3.2), u), rootPos + V3(0, 2.4, -11), 60
+		return V3(-3.5, 2.2, 7):Lerp(V3(-4.2, 1.4, 6), u), V3(0, 2.6, -12):Lerp(V3(0, 1.8, -16), u), 62
 	end
 end
 

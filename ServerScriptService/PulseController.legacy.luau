@@ -2121,7 +2121,11 @@ _G.TocarCenaFlow = function(player, aimPoint, aoFim)
 			if chute then
 				-- onde a coreografia termina (no chão, X/Z do salto; nunca abaixo da altura de pé)
 				local fim = spec.RootPosition(duration)
-				root.CFrame = startCFrame * CFrame.new(fim.X, math.max(fim.Y, 0), fim.Z)
+				-- ⚠️ v125: mantém o GIRO do fim da cena (o Shidou termina de COSTAS pro gol,
+				-- como na bicicleta do anime) — antes voltava de frente num estalo
+				local giroFim = spec.RootCFrame and spec.RootCFrame(duration) or CFrame.identity
+				local _, yawFim, _ = giroFim:ToEulerAnglesYXZ()
+				root.CFrame = startCFrame * CFrame.new(fim.X, math.max(fim.Y, 0), fim.Z) * CFrame.Angles(0, yawFim, 0)
 			else
 				root.CFrame = startCFrame
 			end
