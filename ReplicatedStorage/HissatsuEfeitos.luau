@@ -3553,6 +3553,10 @@ local TEX_FLOW = {
 	-- mVkclcc3z-c 0-3s)
 	OlhoQC = "rbxassetid://100317620382409",
 	Vinheta = "rbxassetid://81167227589820",
+	-- ⚠️ v120c: espiral de PINCELADAS (vídeo 10,9-12s): a borda (miolo vazado) entra
+	-- pelas bordas fechando a visão; a cheia é o estado fechado
+	EspiralBorda = "rbxassetid://123809615543770",
+	EspiralCheia = "rbxassetid://85165185407714",
 	PecasSolidas = { "rbxassetid://75123581494537", "rbxassetid://77996428576582", "rbxassetid://113216829601203" },
 	-- 6 peças diferentes (cada imagem uma peça) — também usadas no Flow da partida
 	Pecas = {
@@ -3872,6 +3876,9 @@ function E.FlowIsagi(ctx)
 	irisTela.SizeConstraint = Enum.SizeConstraint.RelativeXY
 	irisTela.Visible = false
 	local fundoEspiral = chapado(rgb(8, 10, 16), 2)
+	local espBorda = quadrado(TEX_FLOW.EspiralBorda, rgb(34, 40, 58), 3)
+	local espBorda2 = quadrado(TEX_FLOW.EspiralBorda, rgb(90, 100, 125), 3)
+	local espCheia = quadrado(TEX_FLOW.EspiralCheia, rgb(46, 54, 74), 4)
 	local redTela1 = quadrado(TEX_FLOW.Redemoinho, rgb(70, 80, 100), 3)
 	local redTela2 = quadrado(TEX_FLOW.Redemoinho, rgb(130, 140, 160), 4)
 	local vinheta = quadrado(TEX_FLOW.Vinheta, rgb(0, 0, 0), 5)
@@ -3925,6 +3932,42 @@ function E.FlowIsagi(ctx)
 		local bb, cam = placaFlow(anc, 9, 26, { { Imagem = TEX_FLOW.Riscos, Cor = rgb(6, 7, 12), Transp = 1 } })
 		-- (perto das costas: longe, a neblina densa clareava o preto)
 		riscosLev[i] = { Anc = anc, BB = bb, Img = cam[1], X = (i - 2.5) * 4.6, Z = 2.6 + (i % 2) * 0.9, Vel = 1.4 + i * 0.35 }
+	end
+
+	-- ⚠️ v120c — PEDIDO: "as listras de quando ele levanta: se movimentando pra um lado
+	-- e pro outro, ou aparecendo várias — um efeito do cara levantando mesmo, como se
+	-- fosse um AR PRA CIMA". Riscos (escuros e claros) subindo rápido atrás e dos
+	-- lados dele enquanto ele sobe.
+	local arAnc = parte(pasta, "ArSubindo", { Size = V3(12, 1, 3) })
+	local arEscuro = emissor(arAnc, {
+		Textura = TEX_FLOW.Gota, Cor = rgb(16, 18, 26), Brilho = 0, Tamanho = numeros({ { 0, 1.6 }, { 1, 2.4 } }),
+		Transp = numeros({ { 0, 0.15 }, { 0.7, 0.3 }, { 1, 1 } }), Vida = { 0.35, 0.6 }, Vel = { 32, 52 }, Spread = 4,
+		Direcao = Enum.NormalId.Top, RotVel = 0, Forma = Enum.ParticleEmitterShape.Box, Estilo = Enum.ParticleEmitterShapeStyle.Volume,
+	})
+	local arClaro = emissor(arAnc, {
+		Textura = TEX_FLOW.Gota, Cor = rgb(245, 248, 255), Brilho = 0.3, Tamanho = numeros({ { 0, 1.2 }, { 1, 1.8 } }),
+		Transp = numeros({ { 0, 0.2 }, { 0.7, 0.35 }, { 1, 1 } }), Vida = { 0.3, 0.5 }, Vel = { 40, 60 }, Spread = 4,
+		Direcao = Enum.NormalId.Top, RotVel = 0, Forma = Enum.ParticleEmitterShape.Box, Estilo = Enum.ParticleEmitterShapeStyle.Volume,
+	})
+	arEscuro.Rate, arClaro.Rate = 0, 0
+	arEscuro.Enabled, arClaro.Enabled = true, true
+
+	-- o Rin leva a BOLA (ele te passou e saiu com ela — "às vezes ele pegou a bola de você")
+	local bolaRin = nil
+	do
+		-- (este módulo não carrega o FootballConfig: a bola de verdade é a peça da cena)
+		local bolaReal = ctx.Ball
+		local okB, b = pcall(function() return bolaReal and bolaReal:Clone() end)
+		if okB and b then
+			for _, f in ipairs(b:GetChildren()) do
+				if not (f:IsA("DataModelMesh") or f:IsA("Decal") or f:IsA("Texture")) then f:Destroy() end
+			end
+			b.Name = "BolaDoRin"
+			b.Anchored, b.CanCollide, b.CanQuery, b.CanTouch = true, false, false, false
+			b.Transparency = 1
+			b.Parent = pasta
+			bolaRin = b
+		end
 	end
 
 	-- ===== OLHOS: NO ROSTO, no lugar dos olhos =====
@@ -4166,15 +4209,20 @@ function E.FlowIsagi(ctx)
 			poeira:Emit(16)
 		end)
 		local kr = (t >= 2.8 and t < 4.9) and smooth(phase(t, 2.8, 3.1)) * (1 - smooth(phase(t, 4.5, 4.9))) or 0
-		for _, rl in ipairs(riscosLev) do
+		for i, rl in ipairs(riscosLev) do
 			rl.BB.Enabled = kr > 0.01
 			if kr > 0.01 then
-				rl.Anc.CFrame = CFrame.new(root.Position + R * rl.X - F * rl.Z + U * 3)
+				-- ⚠️ v120c: balançam de um lado pro outro (cada painel no seu ritmo)
+				local balanco = math.sin(t * (2.2 + i * 0.7) + i * 1.3) * 1.6
+				rl.Anc.CFrame = CFrame.new(root.Position + R * (rl.X + balanco) - F * rl.Z + U * 3)
 				rl.Img.ImageTransparency = 1 - 0.95 * kr
-				-- descem enquanto ele sobe
-				rl.Img.Position = UDim2.fromScale(0.5, 0.5 + ((t * rl.Vel) % 1) * 0.18)
+				-- SOBEM (o ar subindo com ele)
+				rl.Img.Position = UDim2.fromScale(0.5 + math.sin(t * 5 + i) * 0.04, 0.5 - ((t * rl.Vel * 1.6) % 1) * 0.22)
 			end
 		end
+		arAnc.CFrame = CFrame.new(chaoMundo(root.Position) - F * 2.2 + U * 0.6) * (inicio - inicio.Position)
+		arEscuro.Rate = 170 * kr
+		arClaro.Rate = 90 * kr
 
 		-- ---------- olhos: BRANCOS (ainda no chão) → se TRANSFORMAM na íris ----------
 		-- ⚠️ v120 — PEDIDO: "o olho vai brilhar BRANCO antes de ver o Rin, ainda no
@@ -4233,6 +4281,18 @@ function E.FlowIsagi(ctx)
 
 		-- ---------- F: da visão dele, o Rin correndo na frente (câmera lenta), no branco ----------
 		local rin = t >= ph.Rin[1] and t < 8.62
+		local rinClone = ctx.Clones and ctx.Clones[1]
+		if bolaRin then
+			local alfa = 0
+			if rin and rinClone and rinClone.Root then
+				local rr = rinClone.Root
+				local raioB = bolaRin.Size.X / 2
+				bolaRin.CFrame = CFrame.new(chaoMundo(rr.Position) + U * raioB + rr.CFrame.LookVector * 1.7) * CFrame.Angles(-t * 4, 0, 0)
+				alfa = smooth(phase(t, 6.6, 6.95)) * (1 - smooth(phase(t, 8.45, 8.62)))
+			end
+			bolaRin.Transparency = 1 - alfa
+			bolaRin.LocalTransparencyModifier = 0
+		end
 		nevoa.Enabled = rin
 		if rin then
 			nevoa.Rate = 26
@@ -4250,22 +4310,30 @@ function E.FlowIsagi(ctx)
 		local fecha = smooth(phase(t, ph.Visao[1], 8.6)) -- 0 aberto → 1 fechado
 		local abre = smooth(phase(t, 8.78, 9.05)) -- reabre já no mundo dele
 		local kv = naVisao and (fecha * (1 - abre)) or 0
-		-- o fundo escurece por completo (sem sobrar branco) e some na reabertura
-		fundoEspiral.BackgroundTransparency = naVisao and (1 - smooth(phase(t, ph.Visao[1], 8.35)) * (1 - abre)) or 1
-		redTela1.ImageTransparency = naVisao and (1 - 0.9 * smooth(phase(t, ph.Visao[1], 8.25)) * (1 - abre)) or 1
-		redTela2.ImageTransparency = naVisao and (1 - 0.6 * smooth(phase(t, 8.1, 8.4)) * (1 - abre)) or 1
-		vinheta.ImageTransparency = naVisao and 0 or 1
+		-- ⚠️ v120c — PEDIDO: "a espiral tá uma merda: precisa ser um PNG que vai
+		-- aumentando e colocando mais efeito na tela até cobrir a tela inteira — uma
+		-- espiral que FECHA, como fechando um olho". As pinceladas (EspiralBorda, miolo
+		-- vazado) entram pelas bordas girando e o buraco vai fechando; uma 2ª camada
+		-- mais clara entra junto; a espiral CHEIA cobre o resto e gira (tudo escuro).
+		redTela1.ImageTransparency, redTela2.ImageTransparency, vinheta.ImageTransparency = 1, 1, 1
+		local entra = smooth(phase(t, ph.Visao[1], 8.5))
+		local cheia = smooth(phase(t, 8.3, 8.6))
+		fundoEspiral.BackgroundTransparency = naVisao and (1 - smooth(phase(t, 8.4, 8.6)) * (1 - abre)) or 1
+		espBorda.ImageTransparency = naVisao and (1 - math.min(1, entra * 3) * (1 - abre)) or 1
+		espBorda2.ImageTransparency = naVisao and (1 - 0.55 * smooth(phase(t, 8.12, 8.4)) * (1 - abre)) or 1
+		espCheia.ImageTransparency = naVisao and (1 - cheia * (1 - abre)) or 1
 		if naVisao then
-			local giro = (t - ph.Visao[1])
-			-- gira cada vez mais rápido e CRESCE
-			redTela1.Rotation = -giro * (160 + 420 * giro)
-			redTela2.Rotation = giro * (90 + 300 * giro)
-			local esc = 1.4 + 1.8 * fecha + 1.2 * abre
-			redTela1.Size = UDim2.fromScale(esc, esc)
-			redTela2.Size = UDim2.fromScale(esc * 0.75, esc * 0.75)
-			-- a vinheta preta fecha até o centro (tamanho 3 = aberta, 0.15 = fechada)
-			local vt = 3.2 - 3.05 * kv
-			vinheta.Size = UDim2.fromScale(vt, vt)
+			local giro = t - ph.Visao[1]
+			-- (o miolo vazado tem raio 0.34 da imagem: de 3.6 a tela inteira está livre;
+			-- em 1.25 o buraco fica pequeno no centro — a cheia termina de fechar)
+			local escB = lerp(3.8, 1.25, entra) + 2.5 * abre
+			espBorda.Size = UDim2.fromScale(escB, escB)
+			espBorda.Rotation = -giro * (120 + 380 * giro)
+			espBorda2.Size = UDim2.fromScale(escB * 1.12, escB * 1.12)
+			espBorda2.Rotation = giro * (80 + 260 * giro) + 40
+			local escC = lerp(2.4, 1.7, cheia) + 2 * abre
+			espCheia.Size = UDim2.fromScale(escC, escC)
+			espCheia.Rotation = -giro * (200 + 500 * giro)
 		end
 		local preto = (t >= 8.55 and t < 8.95) and (smooth(phase(t, 8.55, 8.66)) * (1 - smooth(phase(t, 8.78, 8.95)))) or 0
 		telaPreta.BackgroundTransparency = 1 - preto
@@ -4468,7 +4536,9 @@ function E.FlowIsagi(ctx)
 			-- os olhos de quebra-cabeça, a cabeça se desfazendo
 			local u = smooth(phase(t, 11.3, spec.Duration))
 			-- (enquadra os olhos E o cérebro de peças em cima da cabeça)
-			return cam(meio + Lh * lerp(2.9, 2.1, u) + U * lerp(0.6, 0.45, u), meio + U * lerp(0.5, 0.35, u), lerp(40, 32, u))
+			-- ⚠️ v120c — PEDIDO: "na cena final tá muito perto do rosto: distancia um pouco
+			-- pra aparecer mais do corpo dele" (rosto, peito e os braços pra trás)
+			return cam(meio + Lh * lerp(6.2, 5.0, u) + U * lerp(0.4, 0.2, u), meio - U * lerp(0.9, 1.1, u), lerp(48, 42, u))
 		end
 		return nil -- planos abertos: câmera da coreografia
 	end

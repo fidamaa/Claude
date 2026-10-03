@@ -2544,13 +2544,16 @@ FI.Clones = {
 		local bob = math.abs(math.sin(t * 3.6 * RIN_LENTO * math.pi)) * 0.3
 		return CFrame.lookAt(p + V3(0, bob, 0), p + V3(0, bob, -1))
 	end,
+	-- ⚠️ v120c — PEDIDO: "do nada aparece um cara mexendo o braço estranho. Você
+	-- acabou de levantar e está olhando o jogador correndo pra frente: ele está DE
+	-- COSTAS correndo (vídeo 10,0-11,0s)". Corrida normal vista de trás, em câmera
+	-- lenta: braço oposto à perna, bem aberto do corpo (R6 não pode encostar no tronco).
 	Pose = function(_i, t)
 		local w = math.sin(t * 3.6 * RIN_LENTO * math.pi)
 		return {
-			Root = { -30, 0, 0 }, Neck = { 22, 0, 0 },
-			RHip = { 62 * w + 8, 0, 0 }, LHip = { -62 * w + 8, 0, 0 },
-			-- os dois braços BEM atrás (oscilam entre −40 e −110), abertos
-			RShoulder = { -75 - 35 * w, 0, 18 }, LShoulder = { -75 + 35 * w, 0, -18 },
+			Root = { -22, 0, 0 }, Neck = { 14, 0, 0 },
+			RHip = { 55 * w + 6, 0, 4 }, LHip = { -55 * w + 6, 0, -4 },
+			RShoulder = { -58 * w - 10, 0, 22 }, LShoulder = { 58 * w - 10, 0, -22 },
 		}
 	end,
 	Alpha = function(_i, t)
