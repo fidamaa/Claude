@@ -1594,8 +1594,11 @@ end
 -- ============================================================
 Estilos.BuracoNegro = function(s, C, cor)
 	local T = s.Total
-	s:Ambiente({ Hora = 0.2, Brilho = -0.3, Saturacao = -0.45, Contraste = 0.28, Tint = Color3.fromRGB(225, 210, 255), Estrelas = 5000, Entrada = 1.4, Saida = 1.8,
-		Neblina = { Density = 0.4, Color = Color3.fromRGB(40, 22, 60), Decay = Color3.fromRGB(25, 10, 40), Haze = 1, Glare = 0 } })
+	-- ⚠️ v120b — PEDIDO: "o Black Hole tá deixando o clima muito escuro, precisa
+	-- deixar um pouco mais claro". Era meia-noite (0.2h), brilho −0.3 e neblina
+	-- roxa densa: agora é um anoitecer roxo (18.6h), brilho −0.08, neblina leve.
+	s:Ambiente({ Hora = 18.6, Brilho = -0.08, Saturacao = -0.25, Contraste = 0.2, Tint = Color3.fromRGB(232, 220, 255), Estrelas = 3500, Entrada = 1.4, Saida = 1.8,
+		Neblina = { Density = 0.2, Color = Color3.fromRGB(95, 70, 130), Decay = Color3.fromRGB(70, 45, 105), Haze = 0.6, Glare = 0 } })
 	aberturaNaBola(s, C, cor, 0.8)
 	local H = C.Gol + C.Dentro * 70 + Vector3.new(0, 95, 0)
 	local LARANJA = Color3.fromRGB(255, 170, 90)
@@ -1676,7 +1679,7 @@ Estilos.BuracoNegro = function(s, C, cor)
 			s:Tween(bn.Camadas[2], 0.5, { ImageTransparency = 1 })
 		end
 		if u >= 0.72 and u < 0.8 then
-			s.AmbBrilho = -0.35 * suave(janela(u, 0.72, 0.79))
+			s.AmbBrilho = -0.15 * suave(janela(u, 0.72, 0.79)) -- (era −0.35: mais claro, pedido v120b)
 		end
 		-- EXPLOSÃO
 		if u >= 0.8 and not explodiu then
@@ -1711,6 +1714,11 @@ end
 -- PLANETA gigante cresce no céu atrás do gol e começa a PISCAR cada vez mais
 -- rápido; explode em supernova (flash, cascas de cor, raios, onda que varre o
 -- campo); sobra uma nebulosa colorida e chuva de estrelas.
+-- ⚠️ v120b — PEDIDO: "a Supernova tem que ser literalmente um planeta aparecendo,
+-- não um PNG explodindo — pode ser um grandão". O planeta agora é 3D de verdade:
+-- esfera rochosa girando, borda de luz (atmosfera), anel e lua também 3D; ele
+-- SOBE do horizonte atrás do gol e cresce; as rachaduras de luz piscam cada vez
+-- mais rápido e ele EXPLODE em pedaços de rocha que voam pra todo lado.
 -- ============================================================
 Estilos.Supernova = function(s, C, cor)
 	local T = s.Total
@@ -1722,38 +1730,52 @@ Estilos.Supernova = function(s, C, cor)
 		Speed = NumberRange.new(7, 16), EmissionDirection = Enum.NormalId.Top, SpreadAngle = Vector2.new(8, 8), Size = seq({ { 0, 1 }, { 0.5, 3.2 }, { 1, 0 } }) })
 	local sobemPerto = s:EmissorCamera(C, 1, 70, { Texture = TEX.Estrela, Color = cseq({ { 0, BRANCO }, { 1, cor } }), Lifetime = NumberRange.new(4, 6),
 		Speed = NumberRange.new(5, 11), EmissionDirection = Enum.NormalId.Top, SpreadAngle = Vector2.new(10, 10), Size = seq({ { 0, 0.6 }, { 0.5, 1.8 }, { 1, 0 } }) })
-	-- planeta
-	local P = C.Gol - C.Dentro * 170 + Vector3.new(0, 150, 0)
-	local corPlaneta = cor:Lerp(Color3.fromRGB(255, 160, 90), 0.35)
-	local planeta = s:Placa(P, 1, {
-		{ Imagem = TEX.Brilho, Cor = corPlaneta, Transp = 0, Escala = 2.1 },
-		{ Imagem = TEX.Anel, Cor = Color3.fromRGB(255, 230, 200), Transp = 0.25, Escala = 2.0, EscalaY = 0.5, Rot = -16 },
-		{ Imagem = TEX.Esfera, Cor = corPlaneta, Transp = 0, Escala = 1 },
-		{ Imagem = TEX.Brilho, Cor = BRANCO, Transp = 1, Escala = 1.3 },
-	})
-	local lua = s:Placa(P, 1, { { Imagem = TEX.Esfera, Cor = Color3.fromRGB(200, 210, 230) } })
+	-- o PLANETA (3D): nasce abaixo do horizonte, sobe e cresce atrás do gol
+	local P = C.Gol - C.Dentro * 260 + Vector3.new(0, 150, 0)
+	local P0 = P - Vector3.new(0, 260, 0)
+	local corPlaneta = cor:Lerp(Color3.fromRGB(190, 120, 80), 0.45)
+	local rocha = s:Parte({ Shape = Enum.PartType.Ball, Material = Enum.Material.Slate, Color = corPlaneta, Size = Vector3.one, CFrame = CFrame.new(P0) })
+	-- rachaduras de luz por dentro (aparecem quando ele pisca)
+	local nucleo = s:Parte({ Shape = Enum.PartType.Ball, Material = Enum.Material.Neon, Color = PALETA[2], Size = Vector3.one, CFrame = CFrame.new(P0), Transparency = 1 })
+	-- borda de atmosfera
+	local atmosfera = s:Parte({ Shape = Enum.PartType.Ball, Material = Enum.Material.ForceField, Color = cor:Lerp(BRANCO, 0.3), Size = Vector3.one, CFrame = CFrame.new(P0) })
+	-- anel (disco fino de luz) e lua
+	local anel3D = s:Parte({ Shape = Enum.PartType.Cylinder, Material = Enum.Material.ForceField, Color = Color3.fromRGB(255, 225, 190), Size = Vector3.one, CFrame = CFrame.new(P0) })
+	local lua = s:Parte({ Shape = Enum.PartType.Ball, Material = Enum.Material.Slate, Color = Color3.fromRGB(190, 195, 210), Size = Vector3.one, CFrame = CFrame.new(P0) })
+	-- halo de luz atrás (brilho que faz o planeta "existir" no céu escuro)
+	local halo = s:Placa(P0, 1, { { Imagem = TEX.Brilho, Cor = cor, Transp = 0.35, Escala = 1 } })
 	local EXPLODE = 0.56
 	local explodiu = false
 	local cascas, nebulosa = {}, {}
 	local chuva
 	s:Cada(function(t, u)
-		local k = janela(u, 0, 0.4)
 		if not explodiu then
-			-- cresce (planeta maior)
-			local tam = lerp(40, 230, suave(k))
-			-- pisca, cada vez mais rápido
+			-- sobe do horizonte (u 0-0.3) e cresce (planeta GRANDÃO)
+			local sobe = suave(janela(u, 0.02, 0.3))
+			local centro = P0:Lerp(P, sobe)
+			local tam = lerp(70, 260, suave(janela(u, 0.02, 0.45)))
+			-- pisca, cada vez mais rápido (as rachaduras acendem por dentro)
 			local freq = lerp(0.6, 9, janela(u, 0.25, EXPLODE) ^ 1.6)
-			planeta.Fase = (planeta.Fase or 0) + freq * (1 / 60)
 			local pisca = janela(u, 0.22, 0.3) * (0.5 + 0.5 * math.sin(t * freq * 2 * math.pi))
-			planeta.Gui.Size = UDim2.fromScale(tam * (1 + 0.05 * pisca), tam * (1 + 0.05 * pisca))
-			planeta.Camadas[1].ImageTransparency = 0.25 - 0.25 * pisca
-			planeta.Camadas[4].ImageTransparency = 1 - 0.85 * pisca
-			planeta.Camadas[3].ImageColor3 = corPlaneta:Lerp(BRANCO, 0.6 * pisca)
+			local giro = CFrame.Angles(0.35, t * 0.25, 0.1)
+			rocha.Size = Vector3.one * tam
+			rocha.CFrame = CFrame.new(centro) * giro
+			rocha.Color = corPlaneta:Lerp(PALETA[2], 0.35 * pisca)
+			nucleo.Size = Vector3.one * tam * 1.004
+			nucleo.CFrame = rocha.CFrame
+			nucleo.Transparency = 1 - 0.55 * pisca * janela(u, 0.3, EXPLODE)
+			atmosfera.Size = Vector3.one * tam * 1.08
+			atmosfera.CFrame = CFrame.new(centro)
+			anel3D.Size = Vector3.new(0.6, tam * 2.1, tam * 2.1)
+			anel3D.CFrame = CFrame.new(centro) * CFrame.Angles(0, 0, math.rad(90)) * CFrame.Angles(math.rad(-16), 0, 0)
+			halo.Ancora.CFrame = CFrame.new(centro - C.Dentro * 30)
+			halo.Gui.Size = UDim2.fromScale(tam * 2.4, tam * 2.4)
+			halo.Camadas[1].ImageTransparency = 0.45 - 0.3 * pisca
 			s.AmbBrilho = 0.06 * pisca
 			-- lua orbitando
 			local ang = t * 0.8
-			lua.Ancora.CFrame = CFrame.new(P + C.Lado * math.cos(ang) * tam * 0.85 + Vector3.new(0, math.sin(ang) * tam * 0.2, 0) - C.Dentro * math.sin(ang) * 20)
-			lua.Gui.Size = UDim2.fromScale(tam * 0.16, tam * 0.16)
+			lua.Size = Vector3.one * tam * 0.16
+			lua.CFrame = CFrame.new(centro + C.Lado * math.cos(ang) * tam * 0.95 + Vector3.new(0, math.sin(ang) * tam * 0.2, 0) - C.Dentro * math.sin(ang) * tam * 0.5)
 			-- estrelas sobem
 			local ke = janela(u, 0.04, 0.15)
 			sobem.Rate = 700 * ke
@@ -1765,17 +1787,37 @@ Estilos.Supernova = function(s, C, cor)
 			sobem.Rate = 0
 			sobemPerto.Rate = 0
 			s:Flash(BRANCO, 2, 1.8)
-			lua.Gui:Destroy()
-			-- o planeta vira a explosão
-			s:Tween(planeta.Gui, 2.4, { Size = UDim2.fromScale(1600, 1600) }, Enum.EasingStyle.Quart)
-			for _, c in ipairs(planeta.Camadas) do
-				if c:IsA("ImageLabel") then s:Tween(c, 2.4, { ImageTransparency = 1 }, Enum.EasingStyle.Quad, Enum.EasingDirection.In) end
+			local tamFinal = rocha.Size.X
+			local centro = rocha.Position
+			-- o planeta se PARTE: pedaços de rocha (e de núcleo em brasa) voando pra todo lado
+			for i = 1, 46 do
+				local a1, a2 = rnd(0, math.pi * 2), rnd(-1.2, 1.2)
+				local dirP = Vector3.new(math.cos(a1) * math.cos(a2), math.sin(a2), math.sin(a1) * math.cos(a2))
+				local brasa = i % 4 == 0
+				local tamP = rnd(0.08, 0.2) * tamFinal
+				local pedaco = s:Parte({
+					Material = brasa and Enum.Material.Neon or Enum.Material.Slate,
+					Color = brasa and PALETA[(i % 3) + 2] or corPlaneta,
+					Size = Vector3.new(tamP, tamP * rnd(0.5, 1), tamP * rnd(0.6, 1.2)),
+					CFrame = CFrame.new(centro + dirP * tamFinal * 0.35) * CFrame.Angles(rnd(0, 6), rnd(0, 6), rnd(0, 6)),
+				})
+				local destino = centro + dirP * tamFinal * rnd(2.2, 4.5)
+				s:Tween(pedaco, rnd(2.2, 3.4), { CFrame = CFrame.new(destino) * CFrame.Angles(rnd(-9, 9), rnd(-9, 9), rnd(-9, 9)),
+					Size = pedaco.Size * 0.4, Transparency = 1 }, Enum.EasingStyle.Quart)
+				Debris:AddItem(pedaco, 3.5)
 			end
-			planeta.Camadas[3].ImageColor3 = BRANCO
+			for _, p in ipairs({ rocha, nucleo, atmosfera, anel3D, lua }) do p:Destroy() end
+			halo.Gui.Size = UDim2.fromScale(tamFinal * 2.4, tamFinal * 2.4)
+			s:Tween(halo.Gui, 2.4, { Size = UDim2.fromScale(1600, 1600) }, Enum.EasingStyle.Quart)
+			s:Tween(halo.Camadas[1], 2.4, { ImageTransparency = 1 }, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+			-- bola de fogo que expande no lugar do planeta
+			local fogo = s:Parte({ Shape = Enum.PartType.Ball, Material = Enum.Material.Neon, Color = BRANCO, Size = Vector3.one * tamFinal * 0.8, CFrame = CFrame.new(centro) })
+			s:Tween(fogo, 1.6, { Size = Vector3.one * tamFinal * 3.2, Transparency = 1, Color = PALETA[3] }, Enum.EasingStyle.Quart)
+			Debris:AddItem(fogo, 1.7)
 			-- cascas de cor em velocidades diferentes
 			for i = 1, 4 do
-				local casca = s:Placa(P, 1, { { Imagem = (i % 2 == 0) and TEX.Anel or TEX.Brilho, Cor = PALETA[i + 1], Transp = 0.1 } })
-				s:Tween(casca.Gui, 1.4 + i * 0.6, { Size = UDim2.fromScale(500 + i * 380, 500 + i * 380) }, Enum.EasingStyle.Quart)
+				local casca = s:Placa(centro, 1, { { Imagem = (i % 2 == 0) and TEX.Anel or TEX.Brilho, Cor = PALETA[i + 1], Transp = 0.1 } })
+				s:Tween(casca.Gui, 1.4 + i * 0.6, { Size = UDim2.fromScale(600 + i * 420, 600 + i * 420) }, Enum.EasingStyle.Quart)
 				s:Tween(casca.Camadas[1], 1.4 + i * 0.6, { ImageTransparency = 1 }, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
 				table.insert(cascas, casca)
 			end
@@ -1783,11 +1825,11 @@ Estilos.Supernova = function(s, C, cor)
 			for i = 1, 36 do
 				local a1, a2 = i / 36 * math.pi * 2, math.sin(i * 1.9) * 1.1
 				local dirR = Vector3.new(math.cos(a1) * math.cos(a2), math.sin(a2), math.sin(a1) * math.cos(a2))
-				local r = s:Parte({ Color = PALETA[(i % 5) + 1], Size = Vector3.new(3, 3, 14), CFrame = CFrame.lookAt(P, P + dirR) })
-				s:Tween(r, 1.6, { Size = Vector3.new(0.4, 0.4, 600), CFrame = CFrame.lookAt(P + dirR * 300, P + dirR * 301), Transparency = 1 })
+				local r = s:Parte({ Color = PALETA[(i % 5) + 1], Size = Vector3.new(3, 3, 14), CFrame = CFrame.lookAt(centro, centro + dirR) })
+				s:Tween(r, 1.6, { Size = Vector3.new(0.4, 0.4, 700), CFrame = CFrame.lookAt(centro + dirR * 350, centro + dirR * 351), Transparency = 1 })
 				Debris:AddItem(r, 1.7)
 			end
-			s:Estouro(P, { Texture = TEX.Estrela, Color = cseq({ { 0, BRANCO }, { 0.4, PALETA[2] }, { 1, PALETA[4] } }), Speed = NumberRange.new(80, 220),
+			s:Estouro(centro, { Texture = TEX.Estrela, Color = cseq({ { 0, BRANCO }, { 0.4, PALETA[2] }, { 1, PALETA[4] } }), Speed = NumberRange.new(80, 220),
 				Lifetime = NumberRange.new(1.5, 2.6), SpreadAngle = Vector2.new(180, 180), Drag = 0.8, Size = seq({ { 0, 10 }, { 1, 0 } }) }, 420)
 			-- a onda chega no campo
 			local origem = Vector3.new(C.Gol.X, C.ChaoY, C.Gol.Z)
@@ -1803,7 +1845,7 @@ Estilos.Supernova = function(s, C, cor)
 			-- nebulosa que fica
 			for i = 1, 7 do
 				local off = C.Lado * rnd(-200, 200) + Vector3.new(0, rnd(-60, 90), 0) - C.Dentro * rnd(-40, 120)
-				local nb = s:Placa(P + off, rnd(260, 480), { { Imagem = TEX.Nuvem, Cor = PALETA[(i % 4) + 2], Transp = 1, Rot = rnd(0, 360) } })
+				local nb = s:Placa(centro + off, rnd(260, 480), { { Imagem = TEX.Nuvem, Cor = PALETA[(i % 4) + 2], Transp = 1, Rot = rnd(0, 360) } })
 				s:Em(0.8, function() s:Tween(nb.Camadas[1], 2, { ImageTransparency = 0.35 }) end)
 				table.insert(nebulosa, nb)
 			end

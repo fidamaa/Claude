@@ -151,7 +151,9 @@ local EFEITO_MULT = { Common = 2, Rare = 2.5, Epic = 3, Legendary = 4, Mythic = 
 -- ⚠️ v119 — PEDIDO: "se demorar no máximo 20 segundos, pode colocar pra todos os
 -- efeitos durarem 2 segundos a mais, antes de começar o replay". Comum 9s · Raro
 -- 10.75s · Épico 12.5s · Lendário 16s · Mítico 19.5s (o efeito estica junto).
-local EFEITO_EXTRA_SEG = 2
+-- ⚠️ v120b — PEDIDO: "diminui a duração dos efeitos de gol, menos dois segundos,
+-- tá durando bastante tempo". Os 2s extras da v119 saíram (Comum 7s … Mítico 17.5s).
+local EFEITO_EXTRA_SEG = 0
 local function duracaoDoEfeito(item)
 	return EFEITO_BASE_SEG * (EFEITO_MULT[item.Raridade] or 2) + EFEITO_EXTRA_SEG
 end
