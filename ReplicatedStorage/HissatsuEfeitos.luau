@@ -3588,12 +3588,15 @@ end
 -- Flow que usa esta posição.
 -- A cabeça R6 clássica é desenhada por uma SpecialMesh 1.25x maior que a peça: com o
 -- z na face da PEÇA os olhos ficavam enterrados dentro da cabeça (medido no Studio).
-local function FlowCenaOlhos(head)
+-- (v126: fx opcional = fração da largura da cabeça pro lado — o Shidou usa olhos mais
+-- separados; os outros Flows continuam no 0.055)
+local function FlowCenaOlhos(head, fx)
+	fx = fx or 0.055
 	local s = head.Size
 	local malha = head:FindFirstChildOfClass("SpecialMesh")
 	local escalaZ = (malha and malha.MeshType == Enum.MeshType.Head) and malha.Scale.Z or 1
 	local z = -s.Z * 0.5 * escalaZ - 0.05
-	return { V3(-s.X * 0.055, s.Y * 0.25, z), V3(s.X * 0.055, s.Y * 0.25, z) }
+	return { V3(-s.X * fx, s.Y * 0.25, z), V3(s.X * fx, s.Y * 0.25, z) }
 end
 
 local function lerp(a, b, k) return a + (b - a) * k end
@@ -5797,7 +5800,9 @@ end
 -- TUDO que é criado no corpo (emissores), na câmera ou no PlayerGui entra em
 -- `prender` e some junto com a cena.
 -- (v124) o olho do Flow do Shidou — usado na cena e durante o Flow na partida
-E.OLHO_SHIDOU = { Imagem = TEX_FLOW.IrisShidou, CorBrilho = rgb(255, 120, 200), Girar = false, X = 0.055, Y = 0.25 }
+-- (v126 — PEDIDO: "os olhos dele precisam ficar um pouco mais separados": X 0.055 → 0.075)
+local OLHO_SHIDOU_X = 0.075
+E.OLHO_SHIDOU = { Imagem = TEX_FLOW.IrisShidou, CorBrilho = rgb(255, 120, 200), Girar = false, X = OLHO_SHIDOU_X, Y = 0.25 }
 
 function E.FlowShidou(ctx)
 	local pasta, spec, inicio = ctx.Pasta, ctx.Spec, ctx.Inicio
@@ -6006,12 +6011,154 @@ function E.FlowShidou(ctx)
 		Tamanho = numeros({ { 0, 0.9 }, { 1, 0 } }), Vida = { 0.5, 1.1 }, Vel = { 20, 44 }, Spread = 180, RotVel = 500, Drag = 3,
 	})
 
+	-- ===== ⚠️ v126 — AS ASAS (vídeo 28.6-30s: o risco rosa nas costas ESTOURA em labaredas e
+	-- raios rosa enormes pros dois lados; "pode pôr até as asas dele, ele tem durante o Big
+	-- Bang Drive"). Cada asa = penas de RAIO (rosa grossas + miolo branco + um fio ciano)
+	-- saindo das costas em leque + uma lâmina de FOGO rosa (partículas) ao longo delas.
+	-- Nascem no estouro do peito (6.9s) e ficam até o fim; abrem mais no chute e na saída.
+	local asas = {}
+	for _, lado in ipairs({ -1, 1 }) do
+		local a = { Lado = lado, Penas = {}, Miolos = {} }
+		for k = 1, 5 do a.Penas[k] = novoRaio(pasta, (k % 2 == 0) and MAGENTA or ROSA, 0.2) end
+		a.Miolos[1] = novoRaio(pasta, BRANCO, 0.08)
+		a.Miolos[2] = novoRaio(pasta, BRANCO, 0.08)
+		a.Fio = novoRaio(pasta, CIANO, 0.06)
+		a.Lamina = parte(pasta, "AsaFogo" .. lado)
+		a.Fogo = emissor(a.Lamina, {
+			Textura = TEX.Fogo, Cor = cores({ { 0, rgb(255, 235, 250) }, { 0.3, ROSA }, { 1, MAGENTA } }), Brilho = 0.85,
+			Tamanho = numeros({ { 0, 1.4 }, { 1, 0.3 } }), Transp = numeros({ { 0, 0.2 }, { 1, 1 } }), Vida = { 0.25, 0.5 },
+			Vel = { 0.5, 2.5 }, Spread = 180, Acel = V3(0, 5, 0),
+			Forma = Enum.ParticleEmitterShape.Box, Estilo = Enum.ParticleEmitterShapeStyle.Volume,
+		})
+		a.Faisca = emissor(a.Lamina, {
+			Textura = TEX.Faisca, Cor = cores({ { 0, BRANCO }, { 0.5, CIANO }, { 1, ROSA } }), Brilho = 1,
+			Tamanho = numeros({ { 0, 0.35 }, { 1, 0 } }), Vida = { 0.25, 0.5 }, Vel = { 2, 6 }, Spread = 180, RotVel = 300,
+			Forma = Enum.ParticleEmitterShape.Box, Estilo = Enum.ParticleEmitterShapeStyle.Volume,
+		})
+		asas[lado] = a
+	end
+	local function apagarAsas()
+		for _, a in pairs(asas) do
+			for _, r in ipairs(a.Penas) do r.Apagar() end
+			for _, r in ipairs(a.Miolos) do r.Apagar() end
+			a.Fio.Apagar()
+			a.Fogo.Enabled = false
+			a.Faisca.Enabled = false
+		end
+	end
+	local function desenharAsas(t, abre)
+		if not torso or abre < 0.02 then apagarAsas() return end
+		local cf = torso.CFrame
+		local up, right, tras = cf.UpVector, cf.RightVector, -cf.LookVector
+		local bate = 0.12 * math.sin(t * 7)
+		for lado, a in pairs(asas) do
+			local base = cf.Position + up * 0.55 + tras * 0.55 + right * lado * 0.45
+			local function dirPena(k, n)
+				local ang = -0.35 + 1.4 * (k - 1) / (n - 1) + bate
+				return (right * lado * math.cos(ang) + up * math.sin(ang) + tras * 0.35).Unit
+			end
+			for k, r in ipairs(a.Penas) do
+				local comp = abre * (5.5 + 2.2 * math.sin(k * 1.3 + 0.5))
+				r.Desenhar(base, base + dirPena(k, #a.Penas) * comp, 7, 0.45 * abre, 0.2 + 0.06 * abre, 0.05)
+			end
+			for m, r in ipairs(a.Miolos) do
+				local k = (m == 1) and 2 or 4
+				r.Desenhar(base, base + dirPena(k, #a.Penas) * abre * 4.2, 6, 0.3 * abre, 0.08, 0)
+			end
+			a.Fio.Desenhar(base, base + dirPena(3, #a.Penas) * abre * 7.5, 8, 0.6 * abre, 0.06, 0.1)
+			local meio = dirPena(3, #a.Penas)
+			local vert = (up - meio * up:Dot(meio))
+			vert = vert.Magnitude > 0.05 and vert.Unit or up
+			a.Lamina.Size = V3(6.5 * abre, 3 * abre, 0.5)
+			a.Lamina.CFrame = CFrame.fromMatrix(base + meio * 3.2 * abre, meio, vert)
+			a.Fogo.Enabled = true
+			a.Fogo.Rate = 110 * abre
+			a.Faisca.Enabled = true
+			a.Faisca.Rate = 35 * abre
+		end
+	end
+
+	-- ===== ⚠️ v126 — SONS: o chute "um pouco mais forte que um chute padrão" (o chute do jogo
+	-- + uma pancada surda por baixo) e o "whoosh" do salto e da bola saindo (Pro Sound Effects)
+	local SOM = {
+		Chute = "rbxassetid://9119327493", -- Config.SOUNDS.Kick
+		Pancada = "rbxassetid://9113570289", -- Boxing Hits 14 (smack/whump/thud)
+		Whoosh = "rbxassetid://9126229267", -- Whoosh By Fast Airy Swooshing 1 (0.7s)
+	}
+	local sonsPre = {}
+	for nome, id in pairs(SOM) do
+		local s = Instance.new("Sound")
+		s.Name = "FlowShidou" .. nome
+		s.SoundId = id
+		s.Parent = pasta
+		sonsPre[nome] = s
+	end
+	task.spawn(function()
+		local lista = {}
+		for _, s in pairs(sonsPre) do table.insert(lista, s) end
+		pcall(function() game:GetService("ContentProvider"):PreloadAsync(lista) end)
+	end)
+	local function tocar(nome, volume, velocidade)
+		local s = Instance.new("Sound")
+		s.SoundId = SOM[nome]
+		s.Volume = volume or 1
+		s.PlaybackSpeed = velocidade or 1
+		s.Parent = game:GetService("SoundService")
+		s:Play()
+		game:GetService("Debris"):AddItem(s, 4)
+	end
+
+	-- ===== ⚠️ v126 — a bola PARADA na chuteira: energia estalando entre o pé e a bola e um
+	-- brilho rosa pulsando no contato (a força acumulando antes de sair)
+	local raiosParada = { novoRaio(pasta, ROSA, 0.12), novoRaio(pasta, BRANCO, 0.06), novoRaio(pasta, CIANO, 0.06) }
+	local brilhoContato = esfera(pasta, "BrilhoContato", ROSA)
+	brilhoContato.Transparency = 1
+	local ancParada = parte(pasta, "FaiscasParada")
+	local faiscasParada = emissor(ancParada, {
+		Textura = TEX.Faisca, Cor = cores({ { 0, BRANCO }, { 0.5, ROSA }, { 1, CIANO } }), Brilho = 1,
+		Tamanho = numeros({ { 0, 0.5 }, { 1, 0 } }), Vida = { 0.2, 0.4 }, Vel = { 6, 14 }, Spread = 180, RotVel = 400, Drag = 2,
+	})
+
+	-- ===== ⚠️ v126 — explosõezinhas em volta da saída da bola (bola neon que incha e some +
+	-- labareda), em sequência rápida
+	local function explosaozinha(pos, cor, tam, atraso)
+		task.delay(atraso or 0, function()
+			if not pasta.Parent then return end
+			local b = esfera(pasta, "Explosaozinha", cor)
+			b.Size = Vector3.one * 0.4
+			b.CFrame = CFrame.new(pos)
+			b.Transparency = 0.05
+			TweenService:Create(b, TweenInfo.new(0.38, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+				{ Size = Vector3.one * tam, Transparency = 1 }):Play()
+			local f = emissor(b, {
+				Textura = TEX.Fogo, Cor = cores({ { 0, BRANCO }, { 0.35, cor }, { 1, MAGENTA } }), Brilho = 0.9,
+				Tamanho = numeros({ { 0, tam * 0.45 }, { 1, 0.2 } }), Transp = numeros({ { 0, 0.1 }, { 1, 1 } }),
+				Vida = { 0.25, 0.5 }, Vel = { 4, 10 }, Spread = 180, Drag = 4,
+			})
+			f:Emit(16)
+			game:GetService("Debris"):AddItem(b, 0.9)
+		end)
+	end
+
+	-- primeira pessoa (0-1.4s): a câmera fica nos olhos dele — a cabeça e o cabelo somem
+	-- (senão a franja tampava a visão pra cima)
+	local function cabecaTransp(v)
+		if head then head.LocalTransparencyModifier = v end
+		for _, d in ipairs(head and head:GetDescendants() or {}) do
+			if d:IsA("Decal") then d.Transparency = (v > 0.5) and 1 or 0 end
+		end
+	end
+	pasta.Destroying:Connect(function() cabecaTransp(0) end)
+
 	local auraFeita, estourou, bateu = false, false, false
+	local saiu, somSalto = false, false
 	local tImpacto = nil
 	local efeitos = {}
 
 	function efeitos.Quadro(t, _dt, s)
 		local rootPos = ctx.Root.Position
+		-- (v126) primeira pessoa: sem a cabeça na frente da câmera
+		cabecaTransp(t < ph.Chega[2] and 1 or 0)
 
 		-- cor da cena
 		if t < ph.Aura[1] then
@@ -6078,7 +6225,7 @@ function E.FlowShidou(ctx)
 
 		-- olhos: brancos acendendo (4.0-6.3), depois ROSA (Flow) até o fim
 		if head then
-			local o = FlowCenaOlhos(head)
+			local o = FlowCenaOlhos(head, OLHO_SHIDOU_X)
 			local branco = smooth(phase(t, 4.0, 4.7)) * (1 - smooth(phase(t, 6.3, 6.9)))
 			local rosaN = smooth(phase(t, 6.6, 7.2))
 			-- (v124: as bolas brancas só no "olho branco"; o rosa é a íris desenhada)
@@ -6100,7 +6247,9 @@ function E.FlowShidou(ctx)
 			end
 		end
 		-- (v124: desde o close do ROSTO — a franja cobria o rosto inteiro de frente)
-		cabeloTransp(0.8 * smooth(phase(t, 2.9, 3.2)) * (1 - smooth(phase(t, 5.8, 6.3))))
+		local closeParada = (t >= ph.Parada[1] and t < ph.Parada[2]) and 0.6 or 0
+		cabeloTransp(math.max(t < ph.Chega[2] and 1 or 0, closeParada,
+			0.8 * smooth(phase(t, 2.9, 3.2)) * (1 - smooth(phase(t, 5.8, 6.3)))))
 
 		-- tela: preto → o branco do olho cresce → branco total
 		local preta = smooth(phase(t, ph.Tunel[1], ph.Tunel[1] + 0.12)) * (1 - smooth(phase(t, ph.Tunel[2], ph.Tunel[2] + 0.2)))
@@ -6173,10 +6322,78 @@ function E.FlowShidou(ctx)
 		if destaqueBola then
 			destaqueBola.Enabled = t >= ph.BigBang[1] and s.BolaVisivel
 		end
-		if rastroPe then rastroPe.Ligar(t >= 9.7 and t < 10.9) end
+		if rastroPe then rastroPe.Ligar(t >= 9.6 and t < 10.0) end
 
-		-- estrela do voleio (cresce até 9 studs; mais que isso a câmera entra no raio e some)
-		if bateu then
+		-- (v126) AS ASAS: nascem no estouro do peito; abrem mais no chutão, na bola parada e
+		-- na saída (e voltam ao normal depois)
+		local abre = easeOut(phase(t, 6.9, 7.25))
+		if t >= ph.Kick[1] and t < ph.Parada[1] then
+			abre *= 1.35
+		elseif t >= ph.Parada[1] and t < ph.Parada[2] then
+			-- (conferido no Studio: no close do rosto as asas abertas tampavam tudo)
+			abre *= 0.7
+		end
+		if t >= ph.Explosao[1] then
+			abre *= 1 + 0.45 * (1 - easeOut(phase(t, ph.Explosao[1], ph.Explosao[1] + 0.7)))
+		end
+		desenharAsas(t, abre)
+
+		-- (v126) o salto (whoosh) e a bola PARADA: energia estalando entre o pé e a bola
+		if not somSalto and t >= 9.08 and t < 9.6 then
+			somSalto = true
+			tocar("Whoosh", 0.9, 1.0)
+		end
+		if t >= ph.Parada[1] and t < ph.Parada[2] and peD then
+			local k = phase(t, ph.Parada[1], ph.Parada[2])
+			local pe = peD.CFrame:PointToWorldSpace(V3(0, -peD.Size.Y / 2, 0))
+			for i, r in ipairs(raiosParada) do
+				if math.random() < 0.85 then
+					local d = V3(math.random() - 0.5, math.random() - 0.5, math.random() - 0.5)
+					r.Desenhar(pe, s.BolaMundo + d * 1.6, 5, 0.35 + 0.3 * k, 0.12 - i * 0.03, 0.05)
+				else
+					r.Apagar()
+				end
+			end
+			brilhoContato.CFrame = CFrame.new(s.BolaMundo)
+			brilhoContato.Size = Vector3.one * (1.0 + 0.5 * k + 0.12 * math.sin(t * 40))
+			brilhoContato.Transparency = 0.72 - 0.15 * k
+			ancParada.CFrame = CFrame.new(s.BolaMundo)
+			faiscasParada.Enabled = true
+			faiscasParada.Rate = 40 + 120 * k
+		else
+			for _, r in ipairs(raiosParada) do r.Apagar() end
+			brilhoContato.Transparency = 1
+			faiscasParada.Enabled = false
+		end
+
+		-- (v126) a SAÍDA (explosão da música, 10.4s): a bola sai em velocidade máxima
+		if not saiu and t >= ph.Explosao[1] then
+			saiu = true
+			bateu = true
+			tImpacto = ph.Explosao[1]
+			local p = s.BolaMundo
+			ctx.Flash(rgb(255, 235, 250), 0.0, 0.55)
+			ctx.Tremer(2.2, 0.6)
+			tocar("Whoosh", 1.1, 0.8)
+			faiscasImpacto:Emit(220)
+			local dirSaida = ctx.DirecaoChute or F
+			onda(pasta, p, dirSaida, ROSA, 46, 0.5, 0.5)
+			onda(pasta, p, dirSaida, AMARELO, 30, 0.4, 0.35)
+			onda(pasta, p, U, BRANCO, 26, 0.45, 0.3)
+			anelVazado(pasta, p, dirSaida, BRANCO, 2, 34, 0.55, 0.4)
+			anelVazado(pasta, p + dirSaida * 4, dirSaida, ROSA, 2, 18, 0.4, 0.3)
+			-- explosõezinhas em volta, em sequência
+			local cores2 = { ROSA, AMARELO, BRANCO, MAGENTA, CIANO }
+			for i = 1, 10 do
+				local ang = i * 2.39
+				local raio = 2 + (i % 4) * 1.4
+				local off = (R * math.cos(ang) + U * math.sin(ang)) * raio + dirSaida * ((i % 3) * 1.5 - 1)
+				explosaozinha(p + off, cores2[(i % #cores2) + 1], 2.4 + (i % 3) * 1.1, (i - 1) * 0.035)
+			end
+		end
+
+		-- estrela da saída (cresce até 9 studs; mais que isso a câmera entra no raio e some)
+		if bateu and s.BolaVisivel then
 			local k = phase(t, tImpacto, tImpacto + 0.55)
 			local lado2 = 1 + 8 * easeOut(k)
 			estrelaAnc.CFrame = CFrame.new(s.BolaMundo)
@@ -6196,18 +6413,21 @@ function E.FlowShidou(ctx)
 		else
 			caudaFogo.Enabled = false
 			caudaEstrelas.Enabled = false
+			estrelaBB.Enabled = false -- (v126: a bola some em 10.85 — a estrela não fica pendurada)
 		end
 	end
 
+	-- (v126) o CONTATO do chutão: som de chute forte (chute + pancada surda), estalo branco
+	-- e faíscas; a explosão grande é na SAÍDA da bola (Quadro, ph.Explosao)
 	function efeitos.Impacto(s)
-		bateu = true
-		tImpacto = spec.ImpactTime
-		ctx.Flash(rgb(255, 235, 250), 0.1, 0.45)
-		ctx.Tremer(1.4, 0.5)
-		faiscasImpacto:Emit(140)
-		onda(pasta, s.BolaMundo, F, ROSA, 40, 0.5, 0.45)
-		onda(pasta, s.BolaMundo, U, AMARELO, 28, 0.4, 0.3)
-		anelVazado(pasta, s.BolaMundo, F, BRANCO, 2, 30, 0.55, 0.35)
+		tocar("Chute", 1.6, 0.85)
+		tocar("Pancada", 1.0, 0.9)
+		ctx.Flash(rgb(255, 240, 250), 0.35, 0.25)
+		ctx.Tremer(0.9, 0.22)
+		ancImpacto.CFrame = CFrame.new(s.BolaMundo)
+		faiscasImpacto:Emit(70)
+		anelVazado(pasta, s.BolaMundo, ctx.DirecaoChute or F, BRANCO, 1.5, 12, 0.3, 0.25)
+		onda(pasta, s.BolaMundo, ctx.DirecaoChute or F, ROSA, 14, 0.3, 0.3)
 	end
 
 	-- depois da cutscene a bola segue em fogo rosa no voo de verdade
@@ -6247,8 +6467,9 @@ function E.FlowShidou(ctx)
 		return CFrame.lookAt(pos, alvo), fov
 	end
 	function efeitos.CameraMundo(t)
-		if not head or t < ph.Rosto[1] or t >= ph.Peito[1] then return nil end
-		local o = FlowCenaOlhos(head)
+		if not head then return nil end
+		if t < ph.Rosto[1] or t >= ph.Peito[1] then return nil end
+		local o = FlowCenaOlhos(head, OLHO_SHIDOU_X)
 		local meio = head.CFrame:PointToWorldSpace((o[1] + o[2]) / 2)
 		-- ⚠️ v124 (conferido no Studio): pela inclinação da CABEÇA a câmera ia pra cima e
 		-- mostrava só o topo do cabelo. Agora é a frente do CORPO, na horizontal.
@@ -6259,9 +6480,10 @@ function E.FlowShidou(ctx)
 			local u = smooth(phase(t, ph.Rosto[1], ph.Olho[1]))
 			return cam(meio + Lh * lerp(3.4, 2.4, u) + R * lerp(0.35, 0.2, u) - U * 0.1, meio, lerp(38, 34, u))
 		end
-		-- Olho/Tunel: zoom até ~1.1 stud (mais perto o brilho do olho some)
+		-- Olho/Tunel (v126 — PEDIDO: "não precisa dar um close nos olhos, só coloca mais o
+		-- rosto"): o rosto INTEIRO no quadro, aproxima só um pouco (era até 1.15 stud)
 		local u = smooth(phase(t, ph.Olho[1], ph.Tunel[1]))
-		return cam(meio + Lh * lerp(2.4, 1.15, u) + R * lerp(0.2, 0.05, u), meio, lerp(34, 24, u))
+		return cam(meio + Lh * lerp(2.4, 2.05, u) + R * lerp(0.2, 0.1, u), meio, lerp(34, 32, u))
 	end
 
 	return efeitos

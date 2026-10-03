@@ -856,10 +856,14 @@ local function tocarCutsceneV2(spec, chutador, inicio, bolaLocal, horarioServido
 		-- (desloca o caminho inteiro pela diferença entre onde a bola estaria
 		-- no instante do chute e o contato com o pé de verdade; a Zona Morta
 		-- desliga isso — a bola fica no meio dos três pés)
-		if pe and spec.KickContactDir and spec.ColarNoPe ~= false and t >= spec.Phases.Kick[1] - 0.15 then
+		-- (v126: ColaInicio = quando a bola começa a ir pro pé de verdade; o padrão é 0.15s antes
+		-- do Kick. No Shidou a bola fica PARADA no ar enquanto ele sobe: colar cedo puxava ela
+		-- junto com o pé no salto)
+		local colaIni = spec.ColaInicio or (spec.Phases.Kick[1] - 0.15)
+		if pe and spec.KickContactDir and spec.ColarNoPe ~= false and t >= colaIni then
 			local raioBola = ball and ball.Size.X / 2 or 0.85
 			local contato = pePos + inicio:VectorToWorldSpace(spec.KickContactDir) * (raioBola + 0.3)
-			local cola = Cutscenes.Smooth(Cutscenes.Phase(t, spec.Phases.Kick[1] - 0.15, spec.ImpactTime))
+			local cola = Cutscenes.Smooth(Cutscenes.Phase(t, colaIni, spec.ImpactTime))
 			local noChute = mundo(spec.BallPosition(spec.ImpactTime, bolaLocal))
 			local desloc = (contato - noChute) * cola
 			-- ⚠️ v125: com ColaCongelaNoChute, depois do chute a bola NÃO segue mais o pé
