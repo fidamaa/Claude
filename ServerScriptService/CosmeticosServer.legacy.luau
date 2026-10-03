@@ -153,9 +153,13 @@ local EFEITO_MULT = { Common = 2, Rare = 2.5, Epic = 3, Legendary = 4, Mythic = 
 -- 10.75s · Épico 12.5s · Lendário 16s · Mítico 19.5s (o efeito estica junto).
 -- ⚠️ v120b — PEDIDO: "diminui a duração dos efeitos de gol, menos dois segundos,
 -- tá durando bastante tempo". Os 2s extras da v119 saíram (Comum 7s … Mítico 17.5s).
-local EFEITO_EXTRA_SEG = 0
+-- ⚠️ v123 — PEDIDO: "diminua o tempo dos efeitos de gol em 2 segundos" + "é pra durar no
+-- máximo 10 seg" (Comum 5s · Raro 6.75s · Épico 8.5s · Lendário e Mítico 10s; o efeito
+-- encolhe junto — o cliente recebe o `total`).
+local EFEITO_EXTRA_SEG = -2
+local EFEITO_MAX_SEG = 10
 local function duracaoDoEfeito(item)
-	return EFEITO_BASE_SEG * (EFEITO_MULT[item.Raridade] or 2) + EFEITO_EXTRA_SEG
+	return math.min(EFEITO_BASE_SEG * (EFEITO_MULT[item.Raridade] or 2) + EFEITO_EXTRA_SEG, EFEITO_MAX_SEG)
 end
 _G.UltimaDuracaoEfeitoGol = 0
 _G.DuracaoEfeitoGolDe = function(scorer)
