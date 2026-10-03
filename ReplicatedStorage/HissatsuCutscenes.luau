@@ -2461,12 +2461,14 @@ end
 -- EXAGERADO pra fora". Braço R6 é reto: com |rz| pequeno ele atravessa o tronco
 -- (principalmente com o tronco inclinado). Regra: |rz| ≥ 20 parado, ≥ 40 em
 -- movimento/pra trás.
+-- ⚠️ v120e — PEDIDO: "o braço vai um pouco pra frente do torso: coloca ele pra ir
+-- pra TRÁS do corpo, afastado, um pouco de lado; uma pose mais da hora no final".
+-- Braços bem pra trás e abertos (d ≈ 0.8 de lado, 0.55 pra trás), tronco torcido de
+-- lado, passada larga e a cabeça projetada pra frente.
 local FI_DASH = {
-	Root = { -34, 0, 0 }, Neck = { 30, 0, 0 },
-	RHip = { 58, 0, 8 }, LHip = { -30, 0, -8 },
-	-- ⚠️ v120d — PEDIDO: "o braço no dash ainda está um pouco dentro do torso: mais
-	-- distante". Bem aberto pros lados (rz 72) e menos pra trás (rx −45).
-	RShoulder = { -45, 0, 72 }, LShoulder = { -45, 0, -72 },
+	Root = { -36, 14, 0 }, Neck = { 30, -10, 0 },
+	RHip = { 70, 0, 8 }, LHip = { -40, 0, -8 },
+	RShoulder = { -80, 0, 55 }, LShoulder = { -80, 0, -55 },
 }
 local FI_POSE = {
 	{ 0.00, FI_QUATRO },
@@ -2508,7 +2510,7 @@ local FI_POSE = {
 		RShoulder = { -25, 0, 62 }, LShoulder = { -25, 0, -62 } } },
 	-- ...e DISPARA pra frente com os braços pra trás (bem abertos)
 	{ 10.70, FI_DASH },
-	{ 12.00, comMudanca(FI_DASH, { Root = { -30, 0, 0 }, RShoulder = { -50, 0, 76 }, LShoulder = { -50, 0, -76 } }) },
+	{ 12.00, comMudanca(FI_DASH, { Root = { -32, 16, 0 }, RShoulder = { -86, 0, 58 }, LShoulder = { -86, 0, -58 } }) },
 }
 function FI.Pose(t)
 	local pose = samplePoseFluida(FI_POSE, t)

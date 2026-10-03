@@ -11,6 +11,8 @@ import numpy as np
 
 SR = 44100
 DUR = 39.0  # cena (12s) + Flow (25s) + folga
+# ⚠️ v120e — PEDIDO: "o áudio acontece 0.1s depois da cena: tem que começar 0.1s antes"
+ADIANTA = 0.1
 
 
 def ler(caminho):
@@ -151,7 +153,7 @@ def eventos():
     for tb in (2.9, 3.35, 3.75, 4.1):
         ev.append((tb, sfx_coracao(1.2), 0.8))                # coração acelera ao levantar
     ev.append((3.0, sfx_vento(1.5, True), 0.9))               # sobe com o joelho
-    ev.append((4.55, sfx_cliques(0.5, 18, np.random.default_rng(1)), 0.8))  # peças encaixando (olho vira íris)
+    ev.append((4.55, sfx_cliques(0.5, 7, np.random.default_rng(1)), 0.45))  # peças encaixando (olho vira íris) — v120e: menos
     ev.append((4.75, sfx_brilho(2400, 1.2), 0.8))
     ev.append((5.9, sfx_vento(0.7, True, 500, 7000), 1.0))    # zoom pra dentro do olho
     ev.append((6.55, sfx_brilho(3200, 0.9), 0.6))             # o branco
@@ -159,12 +161,12 @@ def eventos():
         ev.append((tb, sfx_coracao(1.3), 0.9))                # câmera lenta: coração
     ev.append((8.0, sfx_espiral(0.85), 1.1))                  # a espiral fecha a visão
     ev.append((9.55, sfx_explosao(1.8), 1.0))                 # A PISADA (a batida da Puzzle)
-    ev.append((9.6, sfx_cliques(0.8, 40, np.random.default_rng(2), 2200), 0.9))  # peças surgindo do chão
+    ev.append((9.6, sfx_cliques(0.8, 14, np.random.default_rng(2), 2200), 0.5))  # peças surgindo do chão — v120e: menos
     ev.append((10.3, sfx_brilho(1900, 0.6), 0.7))             # olhos brancos
     ev.append((10.5, sfx_vento(0.35, True, 800, 6000), 1.0))
     ev.append((10.55, sfx_explosao(1.4), 1.0))                # DASH
     ev.append((10.78, sfx_cliques(0.06, 2, np.random.default_rng(3), 3500), 1.0))  # pisca
-    ev.append((10.85, sfx_cliques(1.2, 60, np.random.default_rng(4), 1700), 0.8))  # cabeça se desfazendo
+    ev.append((10.85, sfx_cliques(1.2, 18, np.random.default_rng(4), 1700), 0.4))  # cabeça se desfazendo — v120e: menos
     ev.append((10.85, sfx_brilho(2600, 1.4), 0.7))
     return ev
 
@@ -174,20 +176,29 @@ def main():
     total = int(DUR * SR)
     mix = np.zeros((2, total), np.float32)
     # música: Puzzle a partir de 4,75s (a batida de 14,3s cai na pisada 9,55)
-    mus = trecho(ler(puzzle_src), 4.75, 4.75 + DUR, 0.6, 2.5)
+    mus = trecho(ler(puzzle_src), 4.75 + ADIANTA, 4.75 + ADIANTA + DUR, 0.6, 2.5)
+    mus = mus[:, :total]
     # ducking da música enquanto a voz fala
     duck = np.ones(mus.shape[1], np.float32)
     a, b = int(0.0 * SR), int(4.9 * SR)
-    duck[a:b] = 0.45
-    duck[b:b + int(0.6 * SR)] = np.linspace(0.45, 1, int(0.6 * SR))
+    duck[a:b] = 0.4
+    duck[b:b + int(0.6 * SR)] = np.linspace(0.4, 1, int(0.6 * SR))
+    # (a frase "I haven't lost yet": a música abaixa mais por baixo dela)
+    f0, f1 = int(1.5 * SR), int(2.6 * SR)
+    duck[f0:f1] = 0.22
     mix[:, :mus.shape[1]] += mus * duck * 0.85
     # voz do Jin-Woo: o grito (32,2s do clipe) cai no começo da levantada (2,9s)
     voz = trecho(ler(voz_src), 29.4, 34.0, 0.05, 0.35)
-    ini = int(0.1 * SR)
-    mix[:, ini:ini + voz.shape[1]] += voz * 1.15
+    # ⚠️ v120e — PEDIDO: "aumenta o som do 'I haven't lost yet'": a voz inteira mais
+    # alta e a frase (31,0-32,0s do clipe) ainda mais
+    ganho = np.full(voz.shape[1], 1.7, np.float32)
+    g0, g1 = int((31.0 - 29.4) * SR), int((32.0 - 29.4) * SR)
+    ganho[g0:g1] = 2.4
+    ini = int(max(0.1 - ADIANTA, 0) * SR)
+    mix[:, ini:ini + voz.shape[1]] += voz * ganho
     # efeitos
     for quando, som, ganho in eventos():
-        i = int(quando * SR)
+        i = int(max(quando - ADIANTA, 0) * SR)
         som = som.astype(np.float32)
         n = min(len(som), total - i)
         mix[:, i:i + n] += som[:n] * ganho * 0.55

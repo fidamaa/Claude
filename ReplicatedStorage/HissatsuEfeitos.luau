@@ -4114,24 +4114,26 @@ function E.FlowIsagi(ctx)
 		topoCabeca = prender(Instance.new("Attachment"))
 		topoCabeca.Position = V3(0, head.Size.Y * 0.45, 0)
 		topoCabeca.Parent = head
-		emissorPecas(head, 14, 0.3, { 2, 5 })
+		-- ⚠️ v120e — PEDIDO: "os efeitos de quebra-cabeça mais separados: mais e menores,
+		-- vários mini quebra-cabeças (o do chão tá ótimo)"
+		emissorPecas(head, 26, 0.17, { 3, 7 })
 	end
-	if torso then emissorPecas(torso, 5, 0.38, { 1, 3 }) end
-	if bracoD then emissorPecas(bracoD, 3, 0.3, { 1, 3 }) end
-	if bracoE then emissorPecas(bracoE, 3, 0.3, { 1, 3 }) end
+	if torso then emissorPecas(torso, 10, 0.2, { 2, 5 }) end
+	if bracoD then emissorPecas(bracoD, 6, 0.16, { 2, 5 }) end
+	if bracoE then emissorPecas(bracoE, 6, 0.16, { 2, 5 }) end
 	-- o "cérebro": peças em domo em cima da cabeça, encaixadas e tremendo
 	local cerebro = {}
 	if head then
 		local rngC = Random.new(7)
-		for i = 1, 16 do
+		for i = 1, 28 do
 			local a = prender(Instance.new("Attachment"))
-			local ang = (i / 16) * math.pi * 2
+			local ang = (i / 28) * math.pi * 2
 			local anel = (i % 2 == 0) and 0.55 or 0.3
 			local base = V3(math.cos(ang) * head.Size.X * anel, head.Size.Y * (0.62 + rngC:NextNumber(0, 0.25)), math.sin(ang) * head.Size.Z * anel - head.Size.Z * 0.1)
 			a.Position = base
 			a.Parent = head
 			local escura = i % 3 ~= 0
-			local tam = rngC:NextNumber(0.24, 0.42)
+			local tam = rngC:NextNumber(0.13, 0.24)
 			local bb, cam = placaFlow(a, tam, tam, {
 				{ Imagem = escura and TEX_FLOW.PecasSolidas[(i - 1) % 3 + 1] or TEX_FLOW.Pecas[(i - 1) % 6 + 1],
 					Cor = escura and PECA_ESCURA or CIANO, Transp = 0 },
@@ -4146,7 +4148,7 @@ function E.FlowIsagi(ctx)
 		Textura = TEX_FLOW.Estrela, Cor = cores({ { 0, BRANCO }, { 1, CIANO } }), Brilho = 1, Tamanho = numeros({ { 0, 0.7 }, { 1, 0 } }),
 		Vida = { 0.6, 1.1 }, Vel = { 10, 22 }, Drag = 2, Forma = Enum.ParticleEmitterShape.Box, Estilo = Enum.ParticleEmitterShapeStyle.Volume,
 	}))
-	local pecasCorpo = E.PecasEmVolta(character, rgb(40, 110, 235), CIANO, 2.2, 1.0)
+	local pecasCorpo = E.PecasEmVolta(character, rgb(40, 110, 235), CIANO, 4, 0.45)
 	for _, e in ipairs(pecasCorpo) do
 		e.Enabled = false
 		prender(e)
@@ -4226,7 +4228,9 @@ function E.FlowIsagi(ctx)
 			poeiraPe.CFrame = CFrame.new(chaoMundo(root.Position))
 			poeira:Emit(16)
 		end)
-		local kr = (t >= 2.8 and t < 4.9) and smooth(phase(t, 2.8, 3.1)) * (1 - smooth(phase(t, 4.5, 4.9))) or 0
+		-- ⚠️ v120e — PEDIDO: "a lista de quando ele sobe não pode acabar assim que ele
+		-- termina de subir — precisa se manter depois, pra dar impacto". Vai até o zoom.
+		local kr = (t >= 2.8 and t < 6.0) and smooth(phase(t, 2.8, 3.1)) * (1 - smooth(phase(t, 5.5, 6.0))) or 0
 		for i, rl in ipairs(riscosLev) do
 			rl.BB.Enabled = kr > 0.01
 			if kr > 0.01 then
@@ -4324,8 +4328,12 @@ function E.FlowIsagi(ctx)
 		end
 
 		-- ---------- G: a espiral escurece TUDO, cresce e gira, fechando a visão ----------
-		local naVisao = t >= ph.Visao[1] and t < 9.05
-		local fecha = smooth(phase(t, ph.Visao[1], 8.6)) -- 0 aberto → 1 fechado
+		-- ⚠️ v120e — PEDIDO: "a espiral tem que vir com o Rin AINDA correndo (ela tapa a
+		-- visão e é a transição); e não pode ficar preto direto: tem que ter o efeito
+		-- da tela fechando em espiral". Começa em 7.6 (Rin na tela até ela fechar) e
+		-- só fica preto depois que o miolo tapou tudo.
+		local naVisao = t >= 7.6 and t < 9.05
+		local fecha = smooth(phase(t, 7.6, 8.6)) -- 0 aberto → 1 fechado
 		local abre = smooth(phase(t, 8.78, 9.05)) -- reabre já no mundo dele
 		local kv = naVisao and (fecha * (1 - abre)) or 0
 		-- ⚠️ v120c — PEDIDO: "a espiral tá uma merda: precisa ser um PNG que vai
@@ -4334,19 +4342,19 @@ function E.FlowIsagi(ctx)
 		-- vazado) entram pelas bordas girando e o buraco vai fechando; uma 2ª camada
 		-- mais clara entra junto; a espiral CHEIA cobre o resto e gira (tudo escuro).
 		redTela1.ImageTransparency, redTela2.ImageTransparency, vinheta.ImageTransparency = 1, 1, 1
-		local entra = smooth(phase(t, ph.Visao[1], 8.5))
+		local entra = smooth(phase(t, 7.6, 8.45))
 		local cheia = smooth(phase(t, 8.3, 8.6))
-		fundoEspiral.BackgroundTransparency = naVisao and (1 - smooth(phase(t, 8.4, 8.6)) * (1 - abre)) or 1
+		fundoEspiral.BackgroundTransparency = naVisao and (1 - smooth(phase(t, 8.45, 8.62)) * (1 - abre)) or 1
 		espBorda.ImageTransparency = naVisao and (1 - math.min(1, entra * 3) * (1 - abre)) or 1
-		espBorda2.ImageTransparency = naVisao and (1 - 0.55 * smooth(phase(t, 8.12, 8.4)) * (1 - abre)) or 1
+		espBorda2.ImageTransparency = naVisao and (1 - 0.55 * smooth(phase(t, 7.85, 8.3)) * (1 - abre)) or 1
 		espCheia.ImageTransparency = naVisao and (1 - cheia * (1 - abre)) or 1
 		-- ⚠️ v120d — PEDIDO: "a espiral tapa a tela mas fica um CÍRCULO BRANCO no meio
 		-- que não tapa — tem que tapar também". O miolo (espiral redonda) nasce no centro
 		-- e cresce girando até cobrir o buraco da borda, que ao mesmo tempo encolhe.
-		local cresce = smooth(phase(t, 8.08, 8.42))
+		local cresce = smooth(phase(t, 7.95, 8.42))
 		espMiolo.ImageTransparency = naVisao and (1 - math.min(1, cresce * 2) * (1 - abre)) or 1
 		if naVisao then
-			local giro = t - ph.Visao[1]
+			local giro = math.max(t - 7.6, 0) * 0.75
 			-- (o miolo vazado tem raio 0.34 da imagem: de 3.6 a tela inteira está livre;
 			-- em 1.25 o buraco fica pequeno no centro — a cheia termina de fechar)
 			local escB = lerp(3.8, 1.25, entra) + 2.5 * abre
@@ -4362,7 +4370,7 @@ function E.FlowIsagi(ctx)
 			espCheia.Size = UDim2.fromScale(escC, escC)
 			espCheia.Rotation = -giro * (200 + 500 * giro)
 		end
-		local preto = (t >= 8.55 and t < 8.95) and (smooth(phase(t, 8.55, 8.66)) * (1 - smooth(phase(t, 8.78, 8.95)))) or 0
+		local preto = (t >= 8.62 and t < 8.95) and (smooth(phase(t, 8.62, 8.7)) * (1 - smooth(phase(t, 8.8, 8.95)))) or 0
 		telaPreta.BackgroundTransparency = 1 - preto
 		telaBranca.BackgroundTransparency = 1 - branco
 
