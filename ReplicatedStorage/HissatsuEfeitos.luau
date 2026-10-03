@@ -3746,7 +3746,7 @@ function E.OlhosFlow(character)
 		if not sg.Enabled then return end
 		local agora = os.clock()
 		for i, im in ipairs(imagens) do
-			im.Iris.Rotation = (im.Iris.Rotation + dt * 48 * (i == 1 and 1 or -1)) % 360 -- (v120f: "um pouco mais rápido", era 22)
+			im.Iris.Rotation = (im.Iris.Rotation + dt * 85 * (i == 1 and 1 or -1)) % 360 -- (v122: "mais rápido ainda"; v120f 48, antes 22)
 			im.Brilho.Size = UDim2.fromScale(diam * (1.9 + 0.12 * math.sin(agora * 2.4 + i)) / W, diam * (1.9 + 0.12 * math.sin(agora * 2.4 + i)) / H)
 		end
 	end)
@@ -3904,15 +3904,16 @@ function E.FlowIsagi(ctx)
 	local telaBranca = chapado(rgb(248, 250, 255), 7)
 
 	-- ===== A-C: neblina, poeira de luz, vapor, suor =====
-	local chaoNeblina = parte(pasta, "NeblinaChao", { Size = V3(60, 1, 76) })
-	chaoNeblina.CFrame = inicio * CFrame.new(0, ctx.ChaoY + 0.6, -14)
+	-- (v122: maior — na câmera de perfil da levantada sobrava gramado limpo do lado)
+	local chaoNeblina = parte(pasta, "NeblinaChao", { Size = V3(96, 1, 96) })
+	chaoNeblina.CFrame = inicio * CFrame.new(0, ctx.ChaoY + 0.6, -10)
 	local neblina = emissor(chaoNeblina, {
 		Textura = TEX_FLOW.Nuvem, Cor = cores({ { 0, rgb(240, 244, 252) }, { 1, rgb(214, 224, 240) } }), Brilho = 0.2,
 		Tamanho = numeros({ { 0, 10 }, { 1, 18 } }), Transp = numeros({ { 0, 1 }, { 0.3, 0.55 }, { 0.7, 0.62 }, { 1, 1 } }),
 		Vida = { 3, 4.5 }, Vel = { 0.3, 1.2 }, Spread = 30, Direcao = Enum.NormalId.Top, RotVel = 12,
-		Forma = Enum.ParticleEmitterShape.Box, Estilo = Enum.ParticleEmitterShapeStyle.Volume, Taxa = 34,
+		Forma = Enum.ParticleEmitterShape.Box, Estilo = Enum.ParticleEmitterShapeStyle.Volume, Taxa = 60,
 	})
-	neblina:Emit(70)
+	neblina:Emit(120)
 	local poeiraLuz = emissor(chaoNeblina, {
 		Textura = TEX_FLOW.Brilho, Cor = rgb(230, 240, 255), Brilho = 0.6, Tamanho = numeros({ { 0, 0 }, { 0.5, 0.14 }, { 1, 0 } }),
 		Vida = { 2, 3 }, Vel = { 0.2, 0.6 }, Acel = V3(0, 0.3, 0),
@@ -3969,6 +3970,45 @@ function E.FlowIsagi(ctx)
 	})
 	arEscuro.Rate, arClaro.Rate = 0, 0
 	arEscuro.Enabled, arClaro.Enabled = true, true
+	-- ⚠️ v122: os riscos saíam tortos (o emissor sorteia rotação 0-360); o ar sobe RETO
+	for _, e in ipairs({ arEscuro, arClaro }) do
+		e.Rotation = NumberRange.new(0)
+		e.RotSpeed = NumberRange.new(0)
+		e.Orientation = Enum.ParticleOrientation.FacingCamera
+	end
+
+	-- ⚠️ v122 — PEDIDO: "o jogador se ARREPIAR" + "mais efeitos quando ele levanta".
+	-- Arrepio: faíscas brancas miúdas saltando da pele (do corpo todo) e, quando os
+	-- olhos acendem, um pulso de luz saindo do corpo. Levantada: pedrinhas/terra
+	-- voando quando ele empurra o chão, anéis de ar nos pés e um vapor branco
+	-- subindo do corpo como chama.
+	local arrepios = {}
+	for _, nomeParte in ipairs({ "Torso", "UpperTorso", "Right Arm", "Left Arm", "Head", "RightUpperArm", "LeftUpperArm" }) do
+		local pc = character:FindFirstChild(nomeParte)
+		if pc and pc:IsA("BasePart") then
+			local e = prender(emissor(pc, {
+				Textura = TEX_FLOW.Estrela, Cor = cores({ { 0, BRANCO }, { 1, CIANO } }), Brilho = 1,
+				Tamanho = numeros({ { 0, 0.22 }, { 1, 0 } }), Vida = { 0.18, 0.32 }, Vel = { 2, 5 }, Spread = 180, RotVel = 300,
+				Forma = Enum.ParticleEmitterShape.Box, Estilo = Enum.ParticleEmitterShapeStyle.Surface,
+			}))
+			e.Rate = 0
+			e.Enabled = true
+			table.insert(arrepios, e)
+		end
+	end
+	local vaporCorpo = torso and prender(emissor(torso, {
+		Textura = TEX_FLOW.Nuvem, Cor = rgb(245, 248, 255), Brilho = 0.35, Tamanho = numeros({ { 0, 1.2 }, { 1, 3.2 } }),
+		Transp = numeros({ { 0, 0.55 }, { 0.6, 0.7 }, { 1, 1 } }), Vida = { 0.5, 0.9 }, Vel = { 4, 8 }, Spread = 25,
+		Direcao = Enum.NormalId.Top, Acel = V3(0, 8, 0), RotVel = 60,
+		Forma = Enum.ParticleEmitterShape.Box, Estilo = Enum.ParticleEmitterShapeStyle.Volume,
+	}))
+	if vaporCorpo then vaporCorpo.Rate = 0 vaporCorpo.Enabled = true end
+	local pedrasAnc = parte(pasta, "PedrasLevanta")
+	local pedras = emissor(pedrasAnc, {
+		Textura = TEX_FLOW.Brilho, Cor = rgb(120, 105, 85), Brilho = 0, Tamanho = numeros({ { 0, 0.35 }, { 1, 0.2 } }),
+		Transp = numeros({ { 0, 0 }, { 0.8, 0 }, { 1, 1 } }), Vida = { 0.6, 1.0 }, Vel = { 12, 22 }, Spread = 35,
+		Direcao = Enum.NormalId.Top, Acel = V3(0, -60, 0), RotVel = 200,
+	})
 
 	-- o Rin leva a BOLA (ele te passou e saiu com ela — "às vezes ele pegou a bola de você")
 	local bolaRin = nil
@@ -4008,8 +4048,16 @@ function E.FlowIsagi(ctx)
 			a.Parent = head
 			local luzOlho = parte(pasta, "OlhoLuz" .. i, { Shape = Enum.PartType.Ball, Color = BRANCO })
 			luzOlho.Size = V3(0.32, 0.17, 0.06)
+			-- ⚠️ v122 — PEDIDO: "aumenta um pouquinho o brilho do olho, o brilho BRANCO":
+			-- halo maior + miolo branco + uma luz de verdade no rosto
+			local luzReal = Instance.new("PointLight")
+			luzReal.Color = BRANCO
+			luzReal.Range = 5
+			luzReal.Brightness = 0
+			luzReal.Parent = luzOlho
 			local bb, cam = placaFlow(a, 1.1, 1.1, {
 				{ Imagem = TEX_FLOW.Brilho, Cor = AZUL_CLARO, Transp = 0.15 },
+				{ Imagem = TEX_FLOW.Brilho, Cor = BRANCO, Transp = 0, Escala = 0.5 },
 			}, true)
 			bb.StudsOffset = V3(0, 0, 0.25) -- (um pouco na direção da câmera: o brilho não some dentro da cabeça)
 			-- lágrima de luz: um feixe que escorre do olho
@@ -4031,6 +4079,8 @@ function E.FlowIsagi(ctx)
 	end
 	local function acenderOlhos(nivel, cor, tam)
 		for _, o in ipairs(olhos) do
+			local pl = o.Luz:FindFirstChildOfClass("PointLight")
+			if pl then pl.Brightness = 4 * math.max(nivel, 0) end
 			if nivel > 0.01 and head then
 				o.Luz.CFrame = head.CFrame * CFrame.new(o.Local + V3(0, 0, -0.005))
 				o.Luz.Size = V3(0.32, 0.17, 0.06) * (tam or 1)
@@ -4226,8 +4276,27 @@ function E.FlowIsagi(ctx)
 		-- levanta: poeira e os riscos PRETOS atrás dele
 		umaVez("levanta", t, 3.1, function()
 			poeiraPe.CFrame = CFrame.new(chaoMundo(root.Position))
-			poeira:Emit(16)
+			poeira:Emit(22)
+			pedrasAnc.CFrame = CFrame.new(chaoMundo(root.Position) + U * 0.3)
+			pedras:Emit(26)
+			anelVazado(pasta, chaoMundo(root.Position) + U * 0.3, U, rgb(235, 240, 250), 2, 18, 0.5, 0.25)
+			ctx.Tremer(0.5, 0.25)
 		end)
+		umaVez("dePe", t, 4.35, function()
+			anelVazado(pasta, chaoMundo(root.Position) + U * 0.3, U, BRANCO, 2, 22, 0.55, 0.3)
+			onda(pasta, chaoMundo(root.Position) + U * 0.2, U, rgb(230, 238, 252), 26, 0.5, 0.2)
+			pedrasAnc.CFrame = CFrame.new(chaoMundo(root.Position) + U * 0.3)
+			pedras:Emit(14)
+		end)
+		umaVez("pulsoArrepio", t, 2.8, function()
+			if torso then anelVazado(pasta, torso.Position, F, BRANCO, 1, 9, 0.35, 0.2) end
+			for _, e in ipairs(arrepios) do e:Emit(10) end
+		end)
+		local kArrepio = (t >= 2.75 and t < 5.6) and (1 - smooth(phase(t, 5.2, 5.6))) or 0
+		for _, e in ipairs(arrepios) do e.Rate = 22 * kArrepio end
+		if vaporCorpo then
+			vaporCorpo.Rate = ((t >= 2.9 and t < 5.6) and 26 * (1 - smooth(phase(t, 5.2, 5.6))) or 0)
+		end
 		-- ⚠️ v120e — PEDIDO: "a lista de quando ele sobe não pode acabar assim que ele
 		-- termina de subir — precisa se manter depois, pra dar impacto". Vai até o zoom.
 		local kr = (t >= 2.8 and t < 6.0) and smooth(phase(t, 2.8, 3.1)) * (1 - smooth(phase(t, 5.5, 6.0))) or 0
@@ -4257,8 +4326,9 @@ function E.FlowIsagi(ctx)
 		for _, o in ipairs(olhos) do
 			local nivelBB = math.max(brilhoOlho, incha)
 			o.BB.Enabled = nivelBB > 0.01
-			o.BB.Size = UDim2.fromScale(1.1 + 0.9 * incha, 1.1 + 0.9 * incha)
-			o.Camadas[1].ImageTransparency = 1 - 0.85 * nivelBB * (0.85 + 0.15 * math.sin(t * 9))
+			o.BB.Size = UDim2.fromScale(1.5 + 1.1 * incha, 1.5 + 1.1 * incha)
+			o.Camadas[1].ImageTransparency = 1 - 0.95 * nivelBB * (0.85 + 0.15 * math.sin(t * 9))
+			o.Camadas[2].ImageTransparency = 1 - nivelBB
 			o.Lagrima.Enabled = escorre > 0.02
 			o.Fim.Position = o.Base + V3(math.sin(t * 2 + o.Base.X * 10) * 0.02, -head.Size.Y * 0.95 * escorre, 0.02)
 		end
@@ -4342,22 +4412,35 @@ function E.FlowIsagi(ctx)
 		-- vazado) entram pelas bordas girando e o buraco vai fechando; uma 2ª camada
 		-- mais clara entra junto; a espiral CHEIA cobre o resto e gira (tudo escuro).
 		redTela1.ImageTransparency, redTela2.ImageTransparency, vinheta.ImageTransparency = 1, 1, 1
-		local entra = smooth(phase(t, 7.6, 8.45))
-		local cheia = smooth(phase(t, 8.3, 8.6))
-		fundoEspiral.BackgroundTransparency = naVisao and (1 - smooth(phase(t, 8.45, 8.62)) * (1 - abre)) or 1
-		espBorda.ImageTransparency = naVisao and (1 - math.min(1, entra * 3) * (1 - abre)) or 1
-		espBorda2.ImageTransparency = naVisao and (1 - 0.55 * smooth(phase(t, 7.85, 8.3)) * (1 - abre)) or 1
+		-- ⚠️ v122 — PEDIDO: "ainda está CORTANDO. É pra começar a aparecer na tela e ir
+		-- aumentando, diminuindo o campo de visão, ainda no cara, ainda vendo o jogador
+		-- correndo". No teste (v120e) a borda começava em escala 3.8: o buraco (raio
+		-- 0.34·escala) ficava FORA da tela até ~8.2 e depois o miolo/cheia fechavam de
+		-- uma vez — parecia corte. Agora a borda já nasce nos cantos (escala 1.75) e o
+		-- buraco vai apertando devagar em volta do Rin até 8.45; o miolo só fecha no fim.
+		local entra = phase(t, 7.6, 8.45)
+		entra = entra * (2 - entra) -- (sai rápido e desacelera: a tela já começa a fechar)
+		local cheia = smooth(phase(t, 8.42, 8.6))
+		fundoEspiral.BackgroundTransparency = naVisao and (1 - smooth(phase(t, 8.5, 8.62)) * (1 - abre)) or 1
+		espBorda.ImageTransparency = naVisao and (1 - math.min(1, phase(t, 7.6, 7.75)) * (1 - abre)) or 1
+		espBorda2.ImageTransparency = naVisao and (1 - 0.5 * smooth(phase(t, 7.7, 8.1)) * (1 - abre)) or 1
 		espCheia.ImageTransparency = naVisao and (1 - cheia * (1 - abre)) or 1
+		vinheta.ImageTransparency = naVisao and (1 - 0.85 * smooth(phase(t, 7.6, 8.0)) * (1 - abre)) or 1
+		if naVisao then
+			vinheta.SizeConstraint = Enum.SizeConstraint.RelativeXY
+			local escV = lerp(1.6, 1.02, entra) -- (menor que 1 aparecia a borda retangular da imagem)
+			vinheta.Size = UDim2.fromScale(escV, escV)
+		end
 		-- ⚠️ v120d — PEDIDO: "a espiral tapa a tela mas fica um CÍRCULO BRANCO no meio
 		-- que não tapa — tem que tapar também". O miolo (espiral redonda) nasce no centro
 		-- e cresce girando até cobrir o buraco da borda, que ao mesmo tempo encolhe.
-		local cresce = smooth(phase(t, 7.95, 8.42))
+		local cresce = smooth(phase(t, 8.3, 8.52)) -- (v122: só fecha quando o Rin some)
 		espMiolo.ImageTransparency = naVisao and (1 - math.min(1, cresce * 2) * (1 - abre)) or 1
 		if naVisao then
 			local giro = math.max(t - 7.6, 0) * 0.75
 			-- (o miolo vazado tem raio 0.34 da imagem: de 3.6 a tela inteira está livre;
 			-- em 1.25 o buraco fica pequeno no centro — a cheia termina de fechar)
-			local escB = lerp(3.8, 1.25, entra) + 2.5 * abre
+			local escB = lerp(1.9, 1.2, entra) + 2.5 * abre -- (v122: era 3.8 → 1.25; abaixo de ~1.2 o quadrado girando deixava os cantos da tela abertos)
 			espBorda.Size = UDim2.fromScale(escB, escB)
 			espBorda.Rotation = -giro * (120 + 380 * giro)
 			espBorda2.Size = UDim2.fromScale(escB * 1.12, escB * 1.12)
@@ -4540,7 +4623,7 @@ function E.FlowIsagi(ctx)
 			-- correndo em câmera lenta; a espiral fecha enquanto ele olha o Rin
 			local rinP = spec.RinPos and ctx.Mundo(spec.RinPos(t) + V3(0, 0.8, 0)) or (hp + F * 9)
 			local u = smooth(phase(t, ph.Rin[1], ph.Pisa[1] - 0.3))
-			return cam(meio + Lh * 0.45 + U * 0.05, rinP, lerp(50, 44, u))
+			return cam(meio + Lh * 0.45 + U * 0.05, rinP, lerp(58, 50, u)) -- (v122: mais aberta, era 50→44: o Rin enchia a tela)
 		elseif t >= ph.Pisa[1] - 0.3 and t < ph.Dash[1] then
 			-- H: baixa, no pé — ele ergue, segura e pisa DEVAGAR; depois abre
 			local previsto = pontoPisada or chaoMundo(ctx.Mundo(V3(0.5, 0, -2.4)))

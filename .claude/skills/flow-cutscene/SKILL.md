@@ -82,6 +82,23 @@ Erros concretos (cada um virou regra):
    "braços abertos". → escolha a câmera que mostra a pose (perfil/3/4).
 10. **Companheiro "aleatório"**: sem colega de time ele virava uma sombra do
     próprio jogador. → reserva: qualquer jogador → goleiro bot.
+11. **Transição de tela que "corta"** (v122): a arte da espiral estava em
+    escala tão grande que o buraco ficava FORA da tela e depois fechava de uma
+    vez. → calcule a geometria: imagem quadrada pela LARGURA (`RelativeXX`),
+    canto da tela a ~0,57·largura do centro (16:9); buraco da EspiralBorda tem
+    raio 0,34·escala. Começar em ~1,9 (traços já nos cantos) e apertar até
+    ~1,2; abaixo de 1,2 o quadrado girando abre os cantos. Vinheta em
+    `RelativeXY` nunca abaixo de 1,02 (aparece o retângulo da imagem). O miolo
+    só fecha quando o personagem do fundo some.
+12. **Personagem lavado no fundo branco** (v122): neblina + correção clara deixam
+    o companheiro quase branco. → Highlight com véu escuro (Fill ~0,35, cor
+    azul-escura) vira silhueta forte, como no anime.
+13. **Partícula de "risco" torta** (v122): o `emissor` sorteia Rotation 0–360.
+    → riscos/linhas: `Rotation = NumberRange.new(0)` e `RotSpeed` 0.
+14. **Revisão no Studio** (v122): Play + gancho de teste no servidor
+    (`workspace:SetAttribute("TesteFlow", ...)`) + `CutsceneDebugT` no cliente
+    + `screen_capture` em cada fase; mudar o disco exige PARAR o Play (o sync
+    só entra em Edit) e dar Play de novo. Remover o gancho antes do commit.
 
 ## A aura tem que ter SENTIDO, igual ao anime
 

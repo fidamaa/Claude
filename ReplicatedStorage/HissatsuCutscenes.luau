@@ -2468,7 +2468,13 @@ end
 local FI_DASH = {
 	Root = { -36, 14, 0 }, Neck = { 30, -10, 0 },
 	RHip = { 70, 0, 8 }, LHip = { -40, 0, -8 },
-	RShoulder = { -78, 0, 74 }, LShoulder = { -78, 0, -74 }, -- (v120f: "afasta mais os braços", era 55)
+	-- ⚠️ v122 — PEDIDO: "o braço está muito pra cima e muito pra frente: o OMBRO, o braço
+	-- inteiro, tem que estar mais pra TRÁS". Com o tronco 36° pra frente, braço "pra
+	-- trás do tronco" aponta pra CIMA no mundo; (−78, 74) apontava 96% pro lado. Agora
+	-- (−50, 20): no mundo 94% pra trás, levemente pra baixo e um pouco aberto (medido).
+	-- (v122 teste: na câmera 3/4 do dash, braço na HORIZONTAL pra trás parecia aberto
+	-- em T; um pouco abaixo da horizontal lê como "jogado pra trás")
+	RShoulder = { -40, 0, 18 }, LShoulder = { -40, 0, -18 },
 }
 local FI_POSE = {
 	{ 0.00, FI_QUATRO },
@@ -2510,7 +2516,7 @@ local FI_POSE = {
 		RShoulder = { -25, 0, 62 }, LShoulder = { -25, 0, -62 } } },
 	-- ...e DISPARA pra frente com os braços pra trás (bem abertos)
 	{ 10.70, FI_DASH },
-	{ 12.00, comMudanca(FI_DASH, { Root = { -32, 16, 0 }, RShoulder = { -84, 0, 78 }, LShoulder = { -84, 0, -78 } }) },
+	{ 12.00, comMudanca(FI_DASH, { Root = { -32, 16, 0 }, RShoulder = { -44, 0, 20 }, LShoulder = { -44, 0, -20 } }) },
 }
 function FI.Pose(t)
 	local pose = samplePoseFluida(FI_POSE, t)
@@ -2519,11 +2525,17 @@ function FI.Pose(t)
 	local amp = t < 2.6 and 2.2 or (t < 4.4 and 1.4 or 1.0)
 	pose.Root[1] += amp * math.sin(t * f)
 	pose.Neck[1] += amp * 0.6 * math.sin(t * f - 0.6)
-	if t >= 4.4 and t < 5.2 then -- puto: o corpo treme de raiva
-		local tremor = 0.8 * math.sin(t * 37)
+	-- ⚠️ v122 — PEDIDO: "faça o jogador se ARREPIAR". Do olho acender até a
+	-- transformação, um tremor fino no corpo inteiro (arrepio), mais forte quando ele
+	-- fica de pé puto (4.4-5.2).
+	if t >= 2.75 and t < 5.6 then
+		local k = (t >= 4.4 and t < 5.2) and 1 or 0.55
+		local tremor = 0.9 * k * math.sin(t * 41)
 		pose.RShoulder[1] += tremor
 		pose.LShoulder[1] -= tremor
-		pose.Neck[3] += 0.6 * math.sin(t * 29)
+		pose.Root[3] += 0.7 * k * math.sin(t * 47 + 1)
+		pose.Neck[3] += 0.8 * k * math.sin(t * 29)
+		pose.Neck[1] += 0.5 * k * math.sin(t * 53)
 	end
 	return pose
 end
@@ -2535,17 +2547,71 @@ end
 -- vai esticado pra trás, o tronco bem inclinado).
 local function fiRinPos(t)
 	local u = phase(t, 6.6, 8.9)
-	return V3(0.9, 0, -7 - 5.5 * u)
+	-- (v122: mais longe — no teste ele enchia a tela e parecia gigante)
+	return V3(0.9, 0, -10 - 6 * u)
 end
 local RIN_LENTO = 0.42 -- câmera lenta (fração da passada normal)
+-- ⚠️ v122 — PEDIDO: "a animação do jogador correr está estranha: faz ele correr de um
+-- jeito mais fluido (pode procurar no Google, se esforça)". Ciclo de corrida de
+-- verdade (referência: as 4 poses de corrida — contato, descida, impulso e voo; braço
+-- oposto à perna; quadril e ombros torcendo em sentidos opostos; o corpo sobe e desce
+-- 2x por passada, mais baixo na descida e mais alto no voo). Passado pela Catmull-Rom
+-- (sem "para-e-anda"). R6: perna e braço retos, braço aberto do corpo.
+-- Quadril da perna DIREITA ao longo da passada (φ 0→1); a esquerda é φ+0.5.
+local CORRIDA_QUADRIL = {
+	{ 0.000, 40 },  -- contato: perna da frente
+	{ 0.125, 24 },  -- descida (carga)
+	{ 0.250, 2 },   -- passando sob o corpo
+	{ 0.375, -26 }, -- impulso
+	{ 0.500, -40 }, -- voo: perna de trás esticada
+	{ 0.625, -22 }, -- volta (rápida)
+	{ 0.750, 14 },
+	{ 0.875, 38 },  -- chega na frente antes do contato
+	{ 1.000, 40 },
+}
+local function quadrilCorrida(f)
+	f = f % 1
+	for i = 1, #CORRIDA_QUADRIL - 1 do
+		local a, b = CORRIDA_QUADRIL[i], CORRIDA_QUADRIL[i + 1]
+		if f <= b[1] then
+			local u = (f - a[1]) / (b[1] - a[1])
+			local p0 = CORRIDA_QUADRIL[i - 1] and CORRIDA_QUADRIL[i - 1][2] or CORRIDA_QUADRIL[#CORRIDA_QUADRIL - 1][2]
+			local p3 = CORRIDA_QUADRIL[i + 2] and CORRIDA_QUADRIL[i + 2][2] or CORRIDA_QUADRIL[2][2]
+			return catmull(p0, a[2], b[2], p3, u)
+		end
+	end
+	return CORRIDA_QUADRIL[1][2]
+end
+local function poseCorrida(fase)
+	local hr = quadrilCorrida(fase)
+	local hl = quadrilCorrida(fase + 0.5)
+	local w2 = math.cos(4 * math.pi * fase)
+	local tor = math.cos(2 * math.pi * fase)
+	return {
+		Root = { -18 + 3 * w2, 6 * tor, 0 },
+		Neck = { 14 - 2 * w2, -4 * tor, 0 },
+		RHip = { hr, 0, 4 }, LHip = { hl, 0, -4 },
+		-- braço oposto à perna (o direito acompanha a perna ESQUERDA), um pouco mais
+		-- pra frente que pra trás, e abrindo mais quando vai pra trás
+		RShoulder = { 0.95 * hl + 8, 0, 16 + 6 * math.max(0, -hl / 40) },
+		LShoulder = { 0.95 * hr + 8, 0, -(16 + 6 * math.max(0, -hr / 40)) },
+	}
+end
+local function alturaCorrida(fase)
+	-- mais baixo na descida (φ 0.125 / 0.625), mais alto no voo (0.375 / 0.875)
+	return 0.13 + 0.13 * math.cos(4 * math.pi * (fase - 0.375))
+end
+local RIN_FREQ = 1.8 * RIN_LENTO -- passadas por segundo (câmera lenta)
 FI.Clones = {
 	Quantidade = 1,
-	Cor = rgb(40, 200, 180),
-	-- companheiro de verdade sem o contorno roxo: só um fio de luz verde-água
-	Contorno = { Fill = 1, Outline = rgb(150, 255, 230), OutlineTransp = 0.55 },
+	-- ⚠️ v122: no fundo branco (neblina + correção de cor clara) o companheiro ficava
+	-- LAVADO, quase branco. Um véu azul-escuro por cima dá a silhueta forte do take
+	-- (no vídeo o Rin é escuro contra o branco) sem esconder quem ele é.
+	Cor = rgb(16, 28, 44),
+	Contorno = { Fill = 0.35, Outline = rgb(150, 255, 230), OutlineTransp = 0.35 },
 	CFrame = function(_i, t)
 		local p = fiRinPos(t)
-		local bob = math.abs(math.sin(t * 3.6 * RIN_LENTO * math.pi)) * 0.3
+		local bob = alturaCorrida(t * RIN_FREQ)
 		return CFrame.lookAt(p + V3(0, bob, 0), p + V3(0, bob, -1))
 	end,
 	-- ⚠️ v120c — PEDIDO: "do nada aparece um cara mexendo o braço estranho. Você
@@ -2553,12 +2619,7 @@ FI.Clones = {
 	-- COSTAS correndo (vídeo 10,0-11,0s)". Corrida normal vista de trás, em câmera
 	-- lenta: braço oposto à perna, bem aberto do corpo (R6 não pode encostar no tronco).
 	Pose = function(_i, t)
-		local w = math.sin(t * 3.6 * RIN_LENTO * math.pi)
-		return {
-			Root = { -22, 0, 0 }, Neck = { 14, 0, 0 },
-			RHip = { 55 * w + 6, 0, 4 }, LHip = { -55 * w + 6, 0, -4 },
-			RShoulder = { -58 * w - 10, 0, 22 }, LShoulder = { 58 * w - 10, 0, -22 },
-		}
+		return poseCorrida(t * RIN_FREQ)
 	end,
 	Alpha = function(_i, t)
 		-- (some dentro da espiral, quando a visão fecha)
