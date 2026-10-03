@@ -3603,7 +3603,7 @@ Remotes.UpdateKickCharging.OnServerEvent:Connect(function(player, carregando)
 end)
 
 -- (⚠️ v120b: com nome em _G pra dar pra testar o chute pelo servidor; sem local novo no topo)
-_G.ProcessarChuteServidor = function(player, chargedForce, targetPoint, noAr)
+_G.ProcessarChuteServidor = function(player, chargedForce, targetPoint, noAr, tentativaGuardada)
 	if _G.HissatsuCutsceneActive then return end -- ⚠️ v87: ninguém age durante a cutscene de Hissatsu
 	if isStunned(player) then return end
 	-- ⚠️ v24: com uma Hissatsu de bola em andamento, a bola não sai do pé por
@@ -3648,7 +3648,19 @@ _G.ProcessarChuteServidor = function(player, chargedForce, targetPoint, noAr)
 		-- (voleio) ganha o alcance maior; o toque de primeira rasteiro fica igual.
 		local ehVoleio = noAr == true and ballHeightAboveGround >= Config.VOLLEY_MIN_BALL_HEIGHT
 		local alcanceToque = Config.VOLLEY_RANGE * (ehVoleio and (Config.VOLLEY_HITBOX_MULT or 1.5) or 1)
+		-- ⚠️ v121: o voleio mede na HORIZONTAL (com teto de altura próprio)
+		if ehVoleio then
+			local rel = ball.Position - root.Position
+			distance = Vector3.new(rel.X, 0, rel.Z).Magnitude
+			if math.abs(rel.Y) > (Config.VOLLEY_ALTURA_MAX or 14) then distance = math.huge end
+		end
 		if not bolaLivre or not bolaFraca or distance > alcanceToque then
+			-- ⚠️ v121 — CHUTE ANTECIPADO: a bola ainda não chegou — guarda o pedido por
+			-- CHUTE_ANTECIPADO_SEG; se ela chegar nesse tempo, o chute sai sozinho
+			if tentativaGuardada then return "fora" end
+			if _G.GuardarChuteAntecipado then
+				_G.GuardarChuteAntecipado(player, chargedForce, targetPoint, noAr)
+			end
 			-- ⚠️ v85 — PEDIDO: "se eu chutar sem a bola, a animação de chutar
 			-- não sai... a animação de chute precisa sair mesmo sem a bola".
 			-- Antes o handler só saía daqui — o preparo (perna levantada) era
@@ -3918,6 +3930,25 @@ _G.ProcessarChuteServidor = function(player, chargedForce, targetPoint, noAr)
 	end
 end
 Remotes.KickBall.OnServerEvent:Connect(function(...) return _G.ProcessarChuteServidor(...) end)
+
+-- ⚠️ v121 — CHUTE ANTECIPADO (ver Config.CHUTE_ANTECIPADO_SEG): o pedido fica guardado
+-- e é tentado de novo todo quadro até a bola chegar (posse, primeiro toque ou voleio).
+do
+	local guardados = {} -- [player] = { Forca, Alvo, NoAr, Ate }
+	_G.GuardarChuteAntecipado = function(player, forca, alvo, noAr)
+		guardados[player] = { Forca = forca, Alvo = alvo, NoAr = noAr, Ate = tick() + (Config.CHUTE_ANTECIPADO_SEG or 0.35) }
+	end
+	RunService.Heartbeat:Connect(function()
+		for player, g in pairs(guardados) do
+			if tick() > g.Ate or not player.Parent then
+				guardados[player] = nil
+			else
+				local r = _G.ProcessarChuteServidor(player, g.Forca, g.Alvo, g.NoAr, true)
+				if r ~= "fora" then guardados[player] = nil end
+			end
+		end
+	end)
+end
 
 -- ===== CABEÇADA =====
 Remotes.AttemptHeader.OnServerEvent:Connect(function(player, targetPoint)

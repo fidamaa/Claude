@@ -1688,7 +1688,15 @@ Config.PASS_FORCE = 55
 -- ===== VOLEIO (chute sem posse prévia, bola no ar) =====
 Config.VOLLEY_MIN_BALL_HEIGHT = 3   -- igual à cabeçada: altura mínima da bola acima do chão
 Config.VOLLEY_RANGE = 6             -- alcance pra alcançar a bola no ar
-Config.VOLLEY_HITBOX_MULT = 1.5     -- ⚠️ v119: "aumenta a hitbox em 1.5x pra dar voleio" (bola no ar = 9 studs)
+-- ⚠️ v121 — PEDIDO: "aumenta a hitbox do voleio e da cabeçada, os dois, ainda está muito
+-- difícil; é pra conseguir mesmo de uma distância considerável". Voleio: 6 x 2.2 = ~13 studs
+-- na HORIZONTAL (antes 9 em distância 3D — bola alta gastava o alcance na altura) e até
+-- VOLLEY_ALTURA_MAX de altura.
+Config.VOLLEY_HITBOX_MULT = 2.2     -- era 1.5 (v119)
+Config.VOLLEY_ALTURA_MAX = 14
+-- ⚠️ v121 — CHUTE ANTECIPADO. PEDIDO: "se eu soltar 0.2-0.3s ANTES de pegar a bola, ainda
+-- conta e a bola sai". O pedido de chute fica guardado por esse tempo e sai quando a bola chega.
+Config.CHUTE_ANTECIPADO_SEG = 0.35
 Config.VOLLEY_FORCE_MULTIPLIER = 1.25 -- voleio bem cronometrado sai mais forte que um chute normal
 
 -- ===== CABEÇADA =====
@@ -1708,8 +1716,10 @@ Config.HEADER_COOLDOWN = 1.2      -- era 3.0
 -- ⚠️ v120b — PEDIDO: "o voleio tá difícil porque acerta a cabeçada: diminui a
 -- hitbox da cabeçada (o voleio fica como está)". 11 → 7 e a bola precisa estar
 -- um pouco mais alta.
-Config.HEADER_RANGE = 7           -- era 11 (v5.3), 6 antes — HORIZONTAL só
-Config.HEADER_MIN_BALL_HEIGHT = 2 -- era 1 (v5.3), 3 antes (medido a partir do torso)
+-- ⚠️ v121 — PEDIDO: "aumenta a hitbox da cabeçada também, de uma distância considerável"
+-- (v120b tinha diminuído pra 7 porque roubava o voleio; agora os dois maiores).
+Config.HEADER_RANGE = 13          -- era 7 (v120b), 11 (v5.3), 6 antes — HORIZONTAL só
+Config.HEADER_MIN_BALL_HEIGHT = 1 -- era 2 (v120b), 1 (v5.3), 3 antes (medido a partir do torso)
 Config.HEADER_MAX_BALL_HEIGHT = 15 -- ⚠️ NOVO: teto da faixa cabeceável
 -- ⚠️ v105 — PEDIDO: "a cabeçada tá muito fraca... coloque a força dela pra ir
 -- mais longe". 65 -> 115, e sobe mais (HEADER_ELEVACAO) pra ganhar distância.

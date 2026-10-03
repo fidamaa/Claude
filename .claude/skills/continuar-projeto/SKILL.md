@@ -13,7 +13,7 @@ description: Passagem de bastão do jogo de futebol Roblox (Inazuma Eleven + Blu
 - Falar SEMPRE em português com o usuário. Ele salva e publica os places — lembre
   ele de publicar os DOIS no fim.
 - Comentários no código em português com `⚠️ vNN` + a frase do PEDIDO do usuário.
-  Versão atual: v120f (próxima: v121).
+  Versão atual: v121 (próxima: v122).
 - Commit no fim de cada bloco, terminando com
   `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`; depois `git push`.
   NÃO commitar `Lobby/ServerScriptService/MatchmakingQueue.legacy.luau` (mudança do
@@ -100,19 +100,15 @@ description: Passagem de bastão do jogo de futebol Roblox (Inazuma Eleven + Blu
 - Painel de debug: `StarterPlayerScripts/DebugAbilitySelectorHUD_local.local.luau`.
 
 ## PENDENTE (fazer nesta ordem, um de cada vez, avisando e esperando o usuário testar)
-1. **Voleio e cabeçada mais fáceis** — PEDIDO: "aumenta a hitbox do voleio e da
-   cabeçada, dos dois, porque ainda está muito difícil; é pra eu conseguir fazer mesmo
-   de uma distância considerável". (Antes ele tinha pedido cabeçada MENOR porque
-   roubava o voleio — agora quer os dois maiores.) Onde: `FootballConfig.luau`
-   (`VOLLEY_RANGE`, `VOLLEY_HITBOX_MULT`, `HEADER_RANGE`, `HEADER_MIN/MAX_BALL_HEIGHT`)
-   e o handler `_G.ProcessarChuteServidor` (BallController, alcance do voleio:
-   `alcanceToque`) / `Remotes.AttemptHeader`.
-2. **Chute antecipado (buffer)** — PEDIDO: "se eu segurar o botão e soltar 0.2-0.3s
-   ANTES da bola chegar em mim, ainda conta e a bola sai". Guardar o pedido de chute
-   (força + mira) por ~0.35s quando não dá pra chutar ainda, e disparar quando a bola
-   chegar (posse ou ao alcance do voleio/primeiro toque). Onde: `_G.ProcessarChuteServidor`
-   (quando `not hasControl` e fora do alcance hoje vira "chute no vazio" e retorna) +
-   o ponto em que o jogador ganha a posse (`setOwner`) / o Heartbeat de recepção.
+1. ✅ FEITO (v121, falta o usuário testar) — **Voleio e cabeçada mais fáceis**: voleio
+   ~13 studs na HORIZONTAL (`VOLLEY_HITBOX_MULT` 2.2, teto `VOLLEY_ALTURA_MAX` 14),
+   cabeçada `HEADER_RANGE` 13 / min 1. O cliente (`FootballClient.acaoAerea`) escolhe
+   cabeçada se a bola está na faixa da cabeça, senão voleio. Se ele reclamar que a
+   cabeçada "rouba" o voleio de novo, ajuste a faixa de altura, não o alcance.
+2. ✅ FEITO (v121, falta testar) — **Chute antecipado**: soltar o chute até
+   `CHUTE_ANTECIPADO_SEG` (0.35s) antes da bola chegar: o pedido fica guardado
+   (`_G.GuardarChuteAntecipado`, BallController, logo antes da CABEÇADA) e é tentado
+   todo quadro via `_G.ProcessarChuteServidor(..., tentativaGuardada=true)`.
 3. Perguntar ao usuário: a foto do desenho no caderno (`rbxassetid://116382303436712`)
    vai pro "Desenho" do Bentes ou pra pintura "Obra-prima" do Tiluca (NPCs do Lobby)?
 4. Outros Flows (Bachira, Nagi, Rin, Barou...): quando ele pedir "faça o Flow do X",
