@@ -460,6 +460,13 @@ do
 	botaoDebug(paginaFlow, "Encher o Flow (aperte a tecla do Flow)", Color3.fromRGB(90, 80, 150)).MouseButton1Click:Connect(function()
 		DebugConfigureTesting:FireServer("EncherFlow", true)
 	end)
+	-- ⚠️ v126e — PEDIDO: "põe um botão no debugger pra poder tocar a animação do Flow, porque
+	-- nem sempre eu vou ter alguém pra testar". Toca o Flow escolhido acima de verdade (cena,
+	-- música, aura), sem precisar de medidor, bola ou adversário. Usa a mira das Hissatsus.
+	botaoDebug(paginaFlow, "▶ Tocar o Flow agora (sem precisar de nada)", Color3.fromRGB(150, 70, 160)).MouseButton1Click:Connect(function()
+		local mira = _G.HissatsuComputeAimPoint and _G.HissatsuComputeAimPoint() or nil
+		DebugConfigureTesting:FireServer("TocarFlow", mira)
+	end)
 
 	titulo(paginaFlow, "Cosméticos e gol")
 	botaoDebug(paginaFlow, "Sortear cosméticos (1 de cada)", Color3.fromRGB(150, 110, 60)).MouseButton1Click:Connect(function()

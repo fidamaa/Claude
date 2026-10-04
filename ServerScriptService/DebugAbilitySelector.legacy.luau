@@ -246,6 +246,14 @@ Remotes.DebugConfigureTesting.OnServerEvent:Connect(function(player, kind, value
 		if _G.ResetarFlowsDaPartida then _G.ResetarFlowsDaPartida() end
 		if _G.AddInstinctCharge then _G.AddInstinctCharge(player, 100) end
 
+	elseif kind == "TocarFlow" then
+		-- ⚠️ v126e — PEDIDO: "põe um botão no debugger pra tocar a animação do Flow, porque nem
+		-- sempre eu vou ter alguém pra testar". value = a mira (Vector3) ou nil.
+		if _G.TocarFlowDebug then
+			local ok = _G.TocarFlowDebug(player, typeof(value) == "Vector3" and value or nil)
+			if not ok then warn("🛠 DebugAbilitySelector: não deu pra tocar o Flow agora (outra cena rodando?)") end
+		end
+
 	elseif kind == "TestarGol" then
 		-- ⚠️ v110: comemoração + efeito de gol equipados, sem precisar marcar
 		if _G.EfeitoDeGolCosmetico then _G.EfeitoDeGolCosmetico(player) end

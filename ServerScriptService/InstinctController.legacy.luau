@@ -644,6 +644,12 @@ Remotes.ActivateInstinctMode.OnServerEvent:Connect(function(player, aimPoint)
 		end
 	end
 
+	_G.LigarFlowComCena(player, aimPoint)
+end)
+
+-- (v126e) a cena + o Flow em si — chamada pela tecla do Flow (acima, depois das exigências)
+-- e pelo botão do debug (_G.TocarFlowDebug, sem exigência nenhuma)
+_G.LigarFlowComCena = function(player, aimPoint, opcoes)
 	FlowsUsados[player] = true
 	player:SetAttribute("FlowUsado", true)
 	InstinctCharge[player] = 0
@@ -670,7 +676,7 @@ Remotes.ActivateInstinctMode.OnServerEvent:Connect(function(player, aimPoint)
 	-- junto com o chute (segundo retorno = true); as outras seguem como antes
 	local cena, ligaSozinha = 0, false
 	if _G.TocarCenaFlow then
-		cena, ligaSozinha = _G.TocarCenaFlow(player, aimPoint, comecarFlow)
+		cena, ligaSozinha = _G.TocarCenaFlow(player, aimPoint, comecarFlow, opcoes)
 		cena = cena or 0
 	end
 	-- (v126c) acabou a música, acabou o Flow
@@ -681,7 +687,40 @@ Remotes.ActivateInstinctMode.OnServerEvent:Connect(function(player, aimPoint)
 	if not ligaSozinha then
 		task.delay(cena, comecarFlow)
 	end
-end)
+end
+
+-- ⚠️ v126e — PEDIDO: "põe um botão no debugger pra poder tocar a animação do Flow, porque nem
+-- sempre eu vou ter alguém pra testar". Toca o Flow EQUIPADO do jeito de verdade (cena,
+-- música, aura, olhos, duração), pulando tudo que ele exige: medidor, 1 por partida, outro
+-- Flow ativo, bola/adversário. Shidou: a bola é posta no ar em cima dele. Aiku: sem
+-- adversário com a bola, a cena usa o goleiro bot (ou a sombra) como adversário.
+_G.TocarFlowDebug = function(player, aimPoint)
+	if _G.HissatsuCutsceneActive then return false end
+	local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+	if not root then return false end
+	-- encerra um Flow que ainda esteja valendo (dele ou de outro), pra poder tocar de novo
+	for outro in pairs(InstinctModeState) do
+		InstinctModeState[outro] = nil
+		if outro.Parent then
+			outro:SetAttribute("FlowAtivo", nil)
+			Remotes.InstinctModeFeedback:FireClient(outro, "ModeEnded")
+		end
+	end
+	if _G.FlowExigeBola and _G.FlowExigeBola(player) then
+		local bola = workspace:FindFirstChild(Config.BALL_NAME)
+		if bola then
+			if _G.ReleaseBallOwner then _G.ReleaseBallOwner() end
+			if _G.CancelarVooDaBola then _G.CancelarVooDaBola() end
+			bola.AssemblyLinearVelocity = Vector3.zero
+			bola.CFrame = CFrame.new(root.Position + Vector3.new(0, 14, 0) + root.CFrame.LookVector * 2)
+		end
+	end
+	if typeof(aimPoint) ~= "Vector3" then
+		aimPoint = root.Position + root.CFrame.LookVector * 80
+	end
+	_G.LigarFlowComCena(player, aimPoint, { Debug = true })
+	return true
+end
 
 local function otherTeamName(teamName)
 	for _, t in ipairs(Config.TEAM_NAMES) do
