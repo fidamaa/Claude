@@ -6073,14 +6073,14 @@ function E.FlowAiku(ctx)
 	end
 	-- E (6.95-9.05): os dois painéis perto da bola (a onda e o radar)
 	-- (v126f: em cima da bola, um de cada lado — na frente da câmera eles tampavam a bola)
-	addPainel(1, ph.Bola[1] + 0.15, function(bola) return bola - F * 1.0 + U * 2.3 - R * 0.4 end)
-	addPainel(2, ph.Bola[1] + 0.35, function(bola) return bola + F * 1.6 + U * 2.1 - R * 0.4 end)
+	addPainel(1, ph.Bola[1] + 0.15, function(bola) return bola - F * 1.6 + U * 2.8 - R * 0.6 end)
+	addPainel(2, ph.Bola[1] + 0.35, function(bola) return bola + F * 2.4 + U * 2.6 - R * 0.6 end)
 	-- F (9.05-13.55): ele "enxerga" o adversário: os painéis se multiplicam em volta do domo
 	do
 		local rng = Random.new(77)
 		for i = 1, 12 do
 			local ang = (i / 12) * math.pi * 1.7 - math.pi * 0.85
-			local raio = 4.8 + rng:NextNumber(-0.4, 1.4)
+			local raio = 6.2 + rng:NextNumber(-0.4, 1.4) -- (v126i: um pouco mais longe)
 			local alt = rng:NextNumber(-0.2, 3.2)
 			addPainel((i % 3) + 1, ph.Domo[1] + 0.3 + (i - 1) * 0.38, function(_bola, rp)
 				-- (v126f: do lado de LÁ do adversário — do lado de cá tampavam o Aiku visto de trás)
@@ -6280,18 +6280,20 @@ function E.FlowAiku(ctx)
 		-- olhos: brilho verde (0.45 →) / fogo no olho de lado (2.3-3.95) / olhos do Flow (3.95 →)
 		if head then
 			local o = FlowCenaOlhos(head)
-			local brilho = smooth(phase(t, 0.45, 1.0))
+			-- ⚠️ v126i — PEDIDO: "primeiro aparece o olho verde e depois ele vai se transformando e some
+			-- o olho verde": o brilho verde acende (0.1-0.4) e some enquanto o olho do Flow entra
+			local brilho = smooth(phase(t, 0.1, 0.4))
 			local fogo = smooth(phase(t, ph.Olho[1], ph.Olho[1] + 0.4)) * (1 - smooth(phase(t, ph.Olho[2] - 0.25, ph.Olho[2])))
 			-- ⚠️ v126h — PEDIDO: "enquanto ele estiver correndo e o olho ficando verde, ele vai virando
 			-- lentamente, com uma transição, o olho dele já arregalado, já do Flow". Os olhos do Flow
 			-- surgem DEVAGAR durante a corrida inteira (antes: só no começo das listras, em 4.05s).
-			local flow = smooth(phase(t, 0.1, ph.Avanca[2] + 0.15))
+			local flow = smooth(phase(t, 0.5, ph.Avanca[2] + 0.1))
 			local tam = ndr(0.1, 0.3, brilho) * (1 + 0.5 * fogo)
 			for i, e in ipairs(olhosNeon) do
 				e.Size = V3(tam, tam * 0.55, 0.08)
 				e.CFrame = head.CFrame * CFrame.new(o[i])
 				e.Color = (i == 1) and VERDE or rgb(120, 190, 255)
-				e.Transparency = (t >= 0.45) and (1 - math.max(brilho * 0.9 * (1 - flow), fogo)) or 1
+				e.Transparency = (t >= 0.1) and (1 - math.max(brilho * 0.95 * (1 - flow), fogo)) or 1
 			end
 			for i, f in ipairs(fogoOlho) do
 				f.Rate = (t >= ph.Olho[1] and t < ph.Olho[2]) and 55 * fogo or 0
@@ -6376,7 +6378,7 @@ function E.FlowAiku(ctx)
 		local dk = smooth(phase(t, ph.Domo[1] + 0.05, ph.Domo[1] + 0.55)) * (1 - smooth(phase(t, ph.Domo[2] - 0.1, ph.Domo[2] + 0.2)))
 		local centroDomo = V3(rp.X, chao, rp.Z)
 		if dk > 0.01 then
-			local diam = 9.6 * dk
+			local diam = 10.6 * dk
 			domo.Size = Vector3.one * diam
 			domo.CFrame = CFrame.new(centroDomo + U * (diam * 0.5 - 0.2))
 			domo.Transparency = 0.35 + 0.1 * math.sin(t * 5)
@@ -6549,13 +6551,16 @@ function E.FlowAiku(ctx)
 			local u = smooth(phase(t, ph.Split[1], ph.Split[2]))
 			-- (do lado DIREITO dele: do esquerdo a câmera caía dentro do adversário; mira mais pra
 			-- cima pra pegar o céu atrás dele)
-			return cam(V3(raiz.X, chao + 0.25, raiz.Z) + R * ndr(5.2, 4.4, u) + F * ndr(1.2, 0.7, u), raiz + U * ndr(1.8, 2.2, u), ndr(62, 56, u))
+			-- (v126i: agora ele sai correndo com a bola pra esquerda do caído — câmera baixa do lado
+			-- esquerdo, o adversário caindo atrás dele)
+			return cam(V3(raiz.X, chao + 0.5, raiz.Z) - R * ndr(5.6, 5.0, u) + F * ndr(2.0, 1.4, u), raiz + U * ndr(1.2, 1.0, u), ndr(60, 56, u))
 		elseif t < ph.Olho2[1] then
 			-- Volta (rápida, sem câmera lenta): aberta, de lado e um pouco alta — os dois inteiros,
 			-- ele contornando o adversário e pegando a bola
 			local u = smooth(phase(t, ph.Volta[1], ph.Volta[2]))
 			local meioDois = (raiz + rp) / 2
-			return cam(meioDois + R * ndr(11, 10, u) + U * ndr(3.6, 3.0, u) - F * ndr(1.0, 2.0, u), meioDois + U * 0.6, ndr(56, 52, u))
+			-- (v126i) aberta e de lado: ele se afastando do caído com a bola
+			return cam(meioDois - R * ndr(11, 13, u) + U * ndr(3.4, 3.8, u) - F * ndr(1.0, 0.0, u), meioDois + U * 0.6, ndr(56, 58, u))
 		end
 		-- Olho2 (61.8-65s): o sorriso (cabeça e ombros) e então chega nos OLHOS DO FLOW (o verde do
 		-- lado esquerdo dele um pouco mais no centro) — perto, mas a cabeça inteira no quadro

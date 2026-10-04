@@ -3661,7 +3661,7 @@ do
 	FA.Phases = {
 		Avanca = { 0, 1.0 }, Radar = { 1.0, 2.25 }, Olho = { 2.25, 4.05 }, Listras = { 4.05, 7.15 },
 		Bola = { 7.15, 9.25 }, Domo = { 9.25, 14.0 }, Rosto = { 14.0, 14.9 }, Setas = { 14.9, 17.3 },
-		Dash = { 17.3, 18.0 }, Bota = { 18.0, 18.6 }, Split = { 18.6, 19.7 }, Volta = { 19.7, 21.0 },
+		Dash = { 17.3, 18.0 }, Bota = { 18.0, 18.6 }, Split = { 18.6, 19.2 }, Volta = { 19.2, 21.0 }, -- (v126i: sem câmera lenta)
 		Olho2 = { 21.0, 22.6 },
 		Kick = { 18.0, FA.ImpactTime }, Impact = { FA.ImpactTime, FA.Duration },
 	}
@@ -3670,17 +3670,23 @@ do
 	-- ===== o ADVERSÁRIO (o Rin do vídeo): o carregador da bola, copiado do jogador de verdade =====
 	-- (x, z) do quadril dele, de frente pro Aiku (yaw 180). Vem driblando, para, e no fim
 	-- cambaleia (perdeu a bola).
+	-- ⚠️ v126i — PEDIDOS: "a cutscene dos painéis, do radar, tá um pouco perto demais — faz as
+	-- coisas acontecerem um pouco mais longe" (o adversário fica ~6 studs do Aiku, não 4.4);
+	-- "coloca pra ele fazer um drible de verdade: o inimigo vai tentar passar a bola por ele, a bola
+	-- vai mexer junto com o pé do cara, pela DIREITA, e aí ele dá o dash e pega a bola; o outro cai
+	-- no chão" (cai de costas e fica desnorteado, v126h); "caiu no chão, ele volta a correr e se
+	-- distancia — ele derruba o cara e para atrás dele; e pode fazer um pouco mais rápido".
+	-- (DIREITA = a do Aiku, +X — o lado da seta de 70%)
 	local FA_RIN = {
-		{ 0, V3(0.9, 0, -14.5) }, { 1, V3(0.9, 0, -11) }, { 2.25, V3(0.8, 0, -8.4) }, { 4.05, V3(0.7, 0, -7.7) },
-		-- ⚠️ v126g — PEDIDO: "quando falar DASH, o inimigo tem que tentar driblar ele pra esquerda,
-		-- que é o dash que o cara selecionou" (o Aiku lê e chega antes)
-		{ 9.2, V3(0.7, 0, -7.4) }, { 17.3, V3(0.7, 0, -7.4) }, { 17.7, V3(-0.4, 0, -7.2) }, { 18, V3(-1.0, 0, -7.0) },
-		-- ⚠️ v126h — PEDIDO: "o cara tá caindo reto, em T-pose, com o braço aberto. Tem que cair e
-		-- ficar ali embaixo, como ragdoll, deitado no chão: perdeu a bola, caiu e ficou desnorteado"
-		{ 18.55, V3(-1.0, -0.2, -6.9) }, { 18.95, V3(-1.1, -2.2, -7.4) }, { 19.1, V3(-1.1, -1.9, -7.5) },
-		{ 19.3, V3(-1.1, -2.45, -7.55) }, { 22.6, V3(-1.1, -2.45, -7.55) },
+		{ 0, V3(0.9, 0, -14.5) }, { 1, V3(0.9, 0, -11.5) }, { 2.25, V3(0.8, 0, -9.6) }, { 4.05, V3(0.7, 0, -9.2) },
+		{ 9.2, V3(0.7, 0, -9.0) }, { 17.3, V3(0.7, 0, -9.0) },
+		-- o drible: arranca pela direita do Aiku, empurrando a bola com o pé
+		{ 17.7, V3(1.5, 0, -8.2) }, { 18.1, V3(2.3, 0, -7.3) }, { 18.25, V3(2.6, 0, -6.9) },
+		-- perdeu a bola: tropeça, cai de costas e fica no chão
+		{ 18.55, V3(2.8, -0.2, -6.9) }, { 18.95, V3(2.9, -2.2, -7.3) }, { 19.1, V3(2.9, -1.9, -7.4) },
+		{ 19.3, V3(2.9, -2.45, -7.45) }, { 22.6, V3(2.9, -2.45, -7.45) },
 	}
-	local FA_RIN_YAW = { { 0, 180 }, { 18, 180 }, { 19.0, 196 }, { 22.6, 200 } }
+	local FA_RIN_YAW = { { 0, 180 }, { 17.3, 180 }, { 17.7, 212 }, { 18.25, 218 }, { 19.0, 226 }, { 22.6, 228 } }
 	-- (v126h) cai DE COSTAS (pitch positivo no corpo = a cabeça vai pra trás, longe do Aiku), quica e fica deitado
 	local FA_RIN_PITCH = { { 0, 0 }, { 18.25, 0 }, { 18.55, 22 }, { 18.95, 84 }, { 19.1, 74 }, { 19.3, 88 }, { 22.6, 88 } }
 	local FA_RIN_ROLL = { { 0, 0 }, { 18.25, 0 }, { 18.95, 14 }, { 19.3, 10 }, { 22.6, 10 } }
@@ -3691,48 +3697,54 @@ do
 		-- ⚠️ v126g — PEDIDO: "no início faz ele estar mais longe do atacante, porque ele está
 		-- correndo pra se aproximar" (começa 6 studs mais atrás)
 		{ 0, V3(0, 0, 6) }, { 0.5, V3(0.05, 0, 1.6) }, { 1, V3(0.1, 0, -2.2) }, { 2.25, V3(0.2, 0, -2.7) }, { 4.05, V3(0.2, -0.1, -2.75) },
-		{ 7.15, V3(0.4, 0, -3.4) }, { 9.25, V3(0.3, -0.3, -3.0) }, { 17.3, V3(0.3, -0.3, -3.0) },
-		-- (v126g: o bote vai pra ESQUERDA, onde o adversário levou a bola; a volta é mais rápida —
-		-- PEDIDO: "acelera um pouco mais essa pegada de bola pra driblar o cara")
-		{ 17.6, V3(0.1, -0.5, -3.6) }, { 18, V3(-1.1, -0.2, -5.3) }, { 18.6, V3(-1.0, -0.35, -5.7) },
-		{ 19.2, V3(1.0, -1.7, -6.8) }, { 19.6, V3(2.2, -1.6, -7.4) }, { 19.85, V3(2.9, -0.4, -8.3) },
-		{ 20.1, V3(2.0, 0, -9.7) }, { 20.35, V3(0.9, 0, -9.6) }, { 22.6, V3(0.9, 0, -9.6) },
+		{ 7.15, V3(0.4, 0, -3.2) }, { 9.25, V3(0.3, -0.3, -3.0) }, { 17.3, V3(0.3, -0.3, -3.0) },
+		-- (v126i) o DASH pra direita, a chuteira na bola, e corre com ela PRA LONGE do caído
+		{ 17.6, V3(1.1, -0.5, -3.6) }, { 18.0, V3(2.5, -0.3, -4.3) }, { 18.25, V3(3.0, -0.3, -4.6) },
+		{ 18.6, V3(2.2, 0, -5.8) }, { 19.0, V3(0.6, 0, -7.6) }, { 19.4, V3(0.1, 0, -9.9) },
+		{ 20.0, V3(0.4, 0, -13.0) }, { 20.6, V3(0.8, 0, -16.0) }, { 21.0, V3(0.9, 0, -17.1) }, { 22.6, V3(0.9, 0, -17.5) },
 	}
 	local FA_YAW = {
-		{ 0, 0 }, { 18.6, 0 }, { 19.2, -40 }, { 19.6, -22 }, { 19.85, -10 }, { 20.1, 45 }, { 20.35, 12 }, { 20.6, 0 }, { 22.6, 0 },
+		{ 0, 0 }, { 17.3, 0 }, { 17.6, -32 }, { 18.25, -36 }, { 18.6, 18 }, { 19.0, 34 }, { 19.4, 10 }, { 19.8, 0 }, { 22.6, 0 },
 	}
-	-- o split: o corpo cai pra trás (pitch) enquanto desliza
-	local FA_PITCH = { { 0, 0 }, { 18.6, 0 }, { 19.05, 36 }, { 19.7, 28 }, { 20.15, 0 }, { 22.6, 0 } }
 	function FA.RootPosition(t) return sampleFluido(FA_POS, t) end
 	function FA.RootCFrame(t)
 		local pos = FA.RootPosition(t)
-		return CFrame.new(pos) * CFrame.Angles(rad(sample(FA_PITCH, t)), rad(sample(FA_YAW, t)), 0)
+		return CFrame.new(pos) * CFrame.Angles(0, rad(sample(FA_YAW, t)), 0)
 	end
 
-	-- a bola: vem no pé do adversário; fica parada na frente dele; a bota arranca (sobe devagar,
-	-- por cima dele) e cai no pé do Aiku, que deu a volta
+	-- a bola: no pé do adversário; no drible ele empurra pela direita (a bola vai com o pé); a
+	-- chuteira do Aiku tira (ImpactTime) e ela fica no pé do Aiku, que sai correndo conduzindo
 	local function bolaChao() return CAL.Chao + CAL.Raio end
-	function FA.BallPosition(t, _s)
-		local g = bolaChao()
-		local rp = rinPos(math.min(t, 18))
-		if t < 18 then
-			-- no pé do adversário (um passo à frente dele, de lado, como no vídeo)
+	local function bolaDoRin(t, g)
+		local rp = rinPos(math.min(t, FA.ImpactTime))
+		if t < 17.3 then
 			local quica = (t < 4.05) and math.abs(math.sin(t * 5)) * 0.18 or 0
 			return V3(rp.X - 0.25, g + quica, rp.Z + 1.05)
-		elseif t < FA.ImpactTime then
-			return V3(rinPos(18).X - 0.25, g, rinPos(18).Z + 1.05)
-		elseif t < 19.1 then
-			-- a bota arranca: sobe devagar (câmera lenta) por cima do adversário
-			local u = smooth(phase(t, FA.ImpactTime, 19.1))
-			return V3(rinPos(18).X - 0.25, g, rinPos(18).Z + 1.05):Lerp(V3(1.9, g + 3.4, -8.1), u)
-		elseif t < 20.15 then
-			local u = easeOut(phase(t, 19.1, 20.15))
-			return V3(1.9, g + 3.4, -8.1):Lerp(V3(0.9, g, -10.1), u) + V3(0, math.sin(u * math.pi) * 0.9, 0)
 		end
-		return V3(0.9, g, -10.5) -- no pé dele, na frente (rumo ao gol adversário)
+		-- o drible: a bola sai pro lado (direita do Aiku) e vai tocada junto com o pé
+		local k = smooth(phase(t, 17.3, 17.65))
+		local toque = math.abs(math.sin((t - 17.3) * 9)) * 0.35
+		return V3(rp.X - 0.25 + (1.15 + toque) * k, g, rp.Z + 1.05 - 0.05 * k)
+	end
+	local function bolaDoAiku(t, g)
+		local r = FA.RootPosition(t)
+		local y = rad(sample(FA_YAW, t))
+		local dir = V3(-math.sin(y), 0, -math.cos(y))
+		local toque = (t > 18.7) and math.abs(math.sin((t - 18.7) * 6)) * 0.5 or 0
+		return V3(r.X, g, r.Z) + dir * (1.7 + toque) + V3(0.25, 0, 0)
+	end
+	function FA.BallPosition(t, _s)
+		local g = bolaChao()
+		if t < FA.ImpactTime then
+			return bolaDoRin(t, g)
+		elseif t < 18.55 then
+			local u = smooth(phase(t, FA.ImpactTime, 18.55))
+			return bolaDoRin(FA.ImpactTime, g):Lerp(bolaDoAiku(t, g), u)
+		end
+		return bolaDoAiku(math.min(t, 21.0), g)
 	end
 	function FA.BallVisible(_t) return true end
-	function FA.BallSpin(t) return (t >= FA.ImpactTime and t < 20.15) and 4 or 1.5 end
+	function FA.BallSpin(t) return (t >= FA.ImpactTime and t < 21) and 4 or 1.5 end
 
 	-- poses do Aiku (R6: braço/perna RETOS; |rz| >= 40 em movimento; Root rx+ inclina pra trás)
 	local FA_POSE = {
@@ -3757,13 +3769,9 @@ do
 		-- Dash e Bota: perna direita ESTICADA pra frente, a chuteira por baixo da bola
 		{ 18, { Root = { -34, 0, 0 }, Neck = { 18, 0, 0 }, RHip = { 62, 0, 6 }, LHip = { -42, 0, -6 }, RShoulder = { -70, 0, 36 }, LShoulder = { 56, 0, -36 } } },
 		{ 18.3, { Root = { -22, 0, 0 }, Neck = { 22, 0, 0 }, RHip = { 84, 0, -4 }, LHip = { -34, 0, -8 }, RShoulder = { -50, 0, 46 }, LShoulder = { 40, 0, -50 } } },
-		-- Split: aberto, braços pra fora (EXAGERADO), bem devagar
-		{ 18.6, { Root = { -4, 0, 0 }, Neck = { 6, 0, 0 }, RHip = { 40, 0, 40 }, LHip = { 10, 0, -50 }, RShoulder = { 0, 0, 80 }, LShoulder = { 0, 0, -80 } } },
-		{ 19.2, { Root = { 10, 0, 0 }, Neck = { -6, 0, 0 }, RHip = { 14, 0, 70 }, LHip = { 8, 0, -74 }, RShoulder = { 10, 0, 104 }, LShoulder = { 10, 0, -104 } } },
-		{ 19.7, { Root = { 12, 0, 0 }, Neck = { -4, 0, 0 }, RHip = { 14, 0, 72 }, LHip = { 8, 0, -76 }, RShoulder = { 12, 0, 106 }, LShoulder = { 12, 0, -106 } } },
-		-- Volta: levanta e corre em arco (ciclo por cima)
-		{ 19.85, { Root = { -22, 0, 0 }, Neck = { 14, 0, 0 }, RHip = { 40, 0, 10 }, LHip = { -26, 0, -10 }, RShoulder = { -40, 0, 40 }, LShoulder = { 34, 0, -40 } } },
-		{ 20.4, { Root = { -14, 0, 0 }, Neck = { 12, 0, 0 }, RHip = { 30, 0, 10 }, LHip = { -12, 0, -10 }, RShoulder = { -26, 0, 36 }, LShoulder = { 22, 0, -36 } } },
+		-- (v126i) puxa a bola e sai correndo com ela, inclinado, pra longe do caído (ciclo por cima)
+		{ 18.6, { Root = { -26, 0, 0 }, Neck = { 18, 0, 0 }, RHip = { 30, 0, 8 }, LHip = { -20, 0, -8 }, RShoulder = { -44, 0, 44 }, LShoulder = { 36, 0, -44 } } },
+		{ 20.6, { Root = { -20, 0, 0 }, Neck = { 14, 0, 0 }, RHip = { 22, 0, 8 }, LHip = { -10, 0, -8 }, RShoulder = { -30, 0, 38 }, LShoulder = { 26, 0, -38 } } },
 		-- Olho2: de pé, a bola no pé, sorrindo, cabeça erguida
 		{ 21.32, { Root = { -4, 0, 0 }, Neck = { 12, 0, 0 }, RHip = { 8, 0, 8 }, LHip = { 2, 0, -8 }, RShoulder = { -8, 0, 30 }, LShoulder = { -8, 0, -30 } } },
 		{ 22.6, { Root = { -3, 0, 0 }, Neck = { 14, 0, 0 }, RHip = { 8, 0, 8 }, LHip = { 2, 0, -8 }, RShoulder = { -8, 0, 32 }, LShoulder = { -8, 0, -32 } } },
@@ -3776,8 +3784,8 @@ do
 			corre = 1
 		-- (⚠️ v126h — PEDIDO: "ainda tem cenas que ele corre onde não precisava; faz ele correr só
 		-- uma vez": nas listras ele fica firme, agachado, as listras é que passam)
-		elseif t >= 19.75 and t < 20.65 then
-			corre = smooth(phase(t, 19.75, 19.9)) * (1 - smooth(phase(t, 20.3, 20.65)))
+		elseif t >= 18.5 and t < 21.05 then
+			corre = smooth(phase(t, 18.5, 18.7)) * (1 - smooth(phase(t, 20.6, 21.05)))
 		end
 		if corre > 0 then
 			local s = math.sin(t * 13)
@@ -3820,9 +3828,12 @@ do
 					LHip = { 10 * q + 35 * c, 0, -4 - 10 * c },
 				}
 			end
-			if t >= 18 then
-				return { Root = { -10, 0, 0 }, Neck = { 10, 0, 0 }, RHip = { 20, 0, 8 }, LHip = { -10, 0, -8 },
-					RShoulder = { 20, 0, 40 }, LShoulder = { 20, 0, -40 } }
+			if t >= 17.3 then
+				-- (v126i) o drible: arranca pela direita do Aiku tocando a bola com o pé direito
+				local d = math.sin(t * 14)
+				return { Root = { -16, 0, 0 }, Neck = { 12, 0, 0 },
+					RHip = { 10 + 42 * d, 0, 10 }, LHip = { 10 - 42 * d, 0, -8 },
+					RShoulder = { -38 * d, 0, 44 }, LShoulder = { 38 * d, 0, -44 } }
 			end
 			return { Root = { -8, 0, 0 }, Neck = { 6, 0, 0 },
 				RHip = { 34 * s * anda + 8 * toque, 0, 5 }, LHip = { -34 * s * anda - 8 * toque, 0, -5 },
