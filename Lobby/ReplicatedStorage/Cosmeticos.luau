@@ -480,7 +480,7 @@ C.Flow = {
 		Atributos = { Kick = 25, Physical = 15 },
 		Tema = { Cor = rgb(255, 205, 60), Cor2 = rgb(30, 20, 10), Motivo = "Coroa" } },
 	{ Id = "Flow_Shidou", Nome = "Flow do Shidou", Raridade = "Legendary", Personagem = "Shidou Ryusei",
-		Descricao = "Big Bang Drive: ativar o Flow é CHUTAR — com a bola, a cena sai pra onde você mira (voleio de bicicleta, chute explosivo). Chute e Velocidade sobem.",
+		Descricao = "Big Bang Drive: ativar o Flow é CHUTAR — com a bola NO AR em cima de você, ele salta e dá a bicicleta pra onde você mira. Chute e Velocidade sobem.",
 		Atributos = { Kick = 20, Speed = 10 },
 		Tema = { Cor = rgb(255, 110, 190), Cor2 = rgb(255, 240, 120), Motivo = "Explosao" },
 		-- ⚠️ v125 — PEDIDO: "nem a música e nem o áudio de nada foi incluído... eu vou colocar".
