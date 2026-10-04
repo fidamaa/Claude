@@ -477,6 +477,12 @@ C.Flow = {
 		-- ⚠️ v125 — PEDIDO: a trilha "Oliver Aiku Theme" + as falas dele + efeitos, num áudio só (50s,
 		-- falas reordenadas pra manter o sentido): docs/audio/Flow_Aiku_Cena.mp3 (gerado por
 		-- .claude/skills/flow-cutscene/mixar_cena_aiku.py) — subido pelo usuário (v126d):
+		-- ⚠️ v126j — o áudio v2 (71383766467419) foi RESTRITO pelo Roblox (tinha a OST oficial).
+		-- Duas versões pra o usuário escolher (docs/audio, .claude/skills/flow-cutscene/mixar_cena_aiku_ab.py):
+		--   A) Flow_Aiku_A_cover.mp3 (cover do tema): Musica = { Id = "<id A>", Volume = 1.3, Duracao = 50 }
+		--   B) Flow_Aiku_B_falas.mp3 (só falas/efeitos) + faixa LICENCIADA tocando junto:
+		--      Musica = { Id = "<id B>", Volume = 1.3, Duracao = 50,
+		--                 Fundo = { Id = "rbxassetid://9045142177", Volume = 0.6, Inicio = 0 } }
 		Musica = { Id = "rbxassetid://71383766467419", Volume = 1.3, Duracao = 50 },
 		-- verde (olho esquerdo) e azul (olho direito) do Aiku
 		Tema = { Cor = rgb(60, 255, 120), Cor2 = rgb(80, 150, 255), Motivo = "Fantasma" } },

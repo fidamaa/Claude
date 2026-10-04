@@ -350,6 +350,7 @@ local Cosmeticos = nil
 pcall(function() Cosmeticos = require(ReplicatedStorage:WaitForChild("Cosmeticos", 10)) end)
 flowTocando = false
 local musicaFlow = nil
+local fundoFlow = nil -- (v126j) faixa licenciada tocando junto (Musica.Fundo)
 local geracaoFlow = 0
 local FADE_FLOW = 1.2
 local entrarNaProrrogacaoFn -- (definida mais acima; ligada no fim do arquivo)
@@ -360,9 +361,11 @@ local function pararMusicaFlow()
 	geracaoFlow += 1
 	local som = musicaFlow
 	musicaFlow = nil
-	if som then
-		TweenService:Create(som, TweenInfo.new(FADE_FLOW, Enum.EasingStyle.Linear), { Volume = 0 }):Play()
-		task.delay(FADE_FLOW + 0.05, function() som:Destroy() end)
+	local fundo = fundoFlow
+	fundoFlow = nil
+	for _, s in pairs({ som, fundo }) do
+		TweenService:Create(s, TweenInfo.new(FADE_FLOW, Enum.EasingStyle.Linear), { Volume = 0 }):Play()
+		task.delay(FADE_FLOW + 0.05, function() s:Destroy() end)
 	end
 	-- a música de fundo volta de onde parou, com fade
 	if prorrogacaoPendente and entrarNaProrrogacaoFn then
@@ -407,6 +410,23 @@ local function tocarMusicaFlow(item, quem, horario, duracaoCena)
 	if atraso > 0.05 then som.TimePosition = atraso end
 	TweenService:Create(som, TweenInfo.new(0.5, Enum.EasingStyle.Linear), { Volume = alvo }):Play()
 	som:SetAttribute("VolumeAlvo", alvo)
+	-- ⚠️ v126j — Musica.Fundo = { Id, Volume, Inicio }: uma faixa LICENCIADA do Roblox (Creator
+	-- Store, nunca é restringida) tocando junto do áudio das falas/efeitos. PEDIDO: "o áudio
+	-- deu como restrito" (a trilha oficial dentro do nosso áudio é que fazia o Roblox restringir)
+	local fundoCfg = musica.Fundo
+	if typeof(fundoCfg) == "table" and typeof(fundoCfg.Id) == "string" and fundoCfg.Id ~= "" then
+		local fundo = Instance.new("Sound")
+		fundo.Name = "FundoDoFlow"
+		fundo.SoundId = fundoCfg.Id
+		fundo.Volume = 0
+		fundo.Parent = SoundService
+		fundoFlow = fundo
+		fundo:Play()
+		fundo.TimePosition = (fundoCfg.Inicio or 0) + (atraso > 0.05 and atraso or 0)
+		local alvoFundo = fundoCfg.Volume or 0.5
+		TweenService:Create(fundo, TweenInfo.new(0.5, Enum.EasingStyle.Linear), { Volume = alvoFundo }):Play()
+		fundo:SetAttribute("VolumeAlvo", alvoFundo)
+	end
 	-- fim: quando o Flow do jogador acabar (FlowAtivo some depois de ter aparecido)
 	if typeof(quem) == "Instance" and quem:IsA("Player") then
 		local viuAtivo = false
@@ -440,16 +460,16 @@ end
 
 -- na comemoração do gol a música do Flow abaixa um pouco e volta
 local function duckMusicaFlowParaGol()
-	local som = musicaFlow
-	if not som then return end
-	local alvo = som:GetAttribute("VolumeAlvo") or 0.6
 	local duration = Config.GOAL_MUSIC_DURATION or 5
-	TweenService:Create(som, TweenInfo.new(0.6, Enum.EasingStyle.Linear), { Volume = alvo * 0.55 }):Play()
-	task.delay(duration, function()
-		if musicaFlow == som then
-			TweenService:Create(som, TweenInfo.new(1.2, Enum.EasingStyle.Linear), { Volume = alvo }):Play()
-		end
-	end)
+	for _, som in pairs({ musicaFlow, fundoFlow }) do
+		local alvo = som:GetAttribute("VolumeAlvo") or 0.6
+		TweenService:Create(som, TweenInfo.new(0.6, Enum.EasingStyle.Linear), { Volume = alvo * 0.55 }):Play()
+		task.delay(duration, function()
+			if som.Parent and (musicaFlow == som or fundoFlow == som) then
+				TweenService:Create(som, TweenInfo.new(1.2, Enum.EasingStyle.Linear), { Volume = alvo }):Play()
+			end
+		end)
+	end
 end
 
 local function duckSecondaryMusicForGoal()
