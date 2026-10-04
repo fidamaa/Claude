@@ -477,7 +477,7 @@ C.Flow = {
 		-- ⚠️ v125 — PEDIDO: a trilha "Oliver Aiku Theme" + as falas dele + efeitos, num áudio só (50s,
 		-- falas reordenadas pra manter o sentido): docs/audio/Flow_Aiku_Cena.mp3 (gerado por
 		-- .claude/skills/flow-cutscene/mixar_cena_aiku.py) — subido pelo usuário (v126d):
-		Musica = { Id = "rbxassetid://102455762519003", Volume = 1.3, Duracao = 50 },
+		Musica = { Id = "rbxassetid://71383766467419", Volume = 1.3, Duracao = 50 },
 		-- verde (olho esquerdo) e azul (olho direito) do Aiku
 		Tema = { Cor = rgb(60, 255, 120), Cor2 = rgb(80, 150, 255), Motivo = "Fantasma" } },
 	{ Id = "Flow_Barou", Nome = "Flow do Barou", Raridade = "Legendary", Personagem = "Barou Shoei",
