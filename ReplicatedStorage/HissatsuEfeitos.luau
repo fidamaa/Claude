@@ -5616,66 +5616,892 @@ function E.FlowReo(ctx)
 end
 
 
--- 👻 FLOW DO AIKU (⚠️ v113): névoa rente ao chão, o atacante vermelho com uma
--- bola de cena, ele fica quase invisível no sumiço (rastros de imagem são as
--- sombras 2-4), rouba a bola; olhos claros.
+-- ============================================================
+-- 👁️ FLOW DO AIKU (⚠️ v125) — ver a coreografia Flow_Aiku (tabela de planos lá)
+-- ============================================================
+-- Texturas (docs/texturas/aiku_olho_verde.png e aiku_olho_azul.png): enquanto o ID não
+-- é colado aqui, a íris é DESENHADA com Frames (círculos + riscos), igual à da imagem.
+local TEX_AIKU = {
+	OlhoVerde = "", -- ⚠️ falta subir: íris VERDE (olho ESQUERDO)
+	OlhoAzul = "", -- ⚠️ falta subir: íris AZUL (olho DIREITO) — o mesmo desenho com o matiz girado
+}
+E.TEX_AIKU = TEX_AIKU
+
+local AIKU_VERDE, AIKU_VERDE_CLARO, AIKU_AZUL = rgb(60, 255, 120), rgb(190, 255, 215), rgb(80, 150, 255)
+
+local function aikuCirculo(pai, tam, cor, z)
+	local f = Instance.new("Frame")
+	f.AnchorPoint = Vector2.new(0.5, 0.5)
+	f.Position = UDim2.fromScale(0.5, 0.5)
+	f.Size = UDim2.fromScale(tam, tam)
+	f.BackgroundColor3 = cor
+	f.BorderSizePixel = 0
+	f.ZIndex = z
+	local c = Instance.new("UICorner")
+	c.CornerRadius = UDim.new(0.5, 0)
+	c.Parent = f
+	f.Parent = pai
+	return f
+end
+
+-- a íris do Flow do Aiku (vídeo 1:02-1:03): disco verde/azul com riscos escuros radiais, anel
+-- claro em volta do miolo e um miolo branco com anel turquesa. `azul` = o olho DIREITO.
+local function aikuIris(sg, gx, W, H, diam, azul)
+	local raiz = Instance.new("CanvasGroup") -- (GroupTransparency apaga a íris inteira de uma vez)
+	raiz.BackgroundTransparency = 1
+	raiz.AnchorPoint = Vector2.new(0.5, 0.5)
+	raiz.Position = UDim2.fromScale(gx, 0.5)
+	raiz.Size = UDim2.fromScale(diam / W, diam / H)
+	raiz.ZIndex = 2
+	raiz.GroupTransparency = 1
+	raiz.Parent = sg
+	local id = azul and TEX_AIKU.OlhoAzul or TEX_AIKU.OlhoVerde
+	if id ~= "" then
+		local im = Instance.new("ImageLabel")
+		im.BackgroundTransparency = 1
+		im.Image = id
+		im.Size = UDim2.fromScale(1, 1)
+		im.ZIndex = 2
+		im.Parent = raiz
+		return raiz
+	end
+	local base = azul and rgb(85, 145, 235) or rgb(110, 205, 70)
+	local claro = azul and rgb(232, 242, 255) or rgb(225, 255, 225)
+	local anel = azul and rgb(125, 160, 245) or rgb(105, 205, 185)
+	local risco = azul and rgb(20, 35, 95) or rgb(22, 70, 25)
+	aikuCirculo(raiz, 1, base, 2)
+	local rng = Random.new(azul and 7 or 3)
+	for i = 1, 30 do
+		local suporte = Instance.new("Frame")
+		suporte.BackgroundTransparency = 1
+		suporte.AnchorPoint = Vector2.new(0.5, 0.5)
+		suporte.Position = UDim2.fromScale(0.5, 0.5)
+		suporte.Size = UDim2.fromScale(1, 1)
+		suporte.Rotation = (i / 30) * 360 + rng:NextNumber(-5, 5)
+		suporte.ZIndex = 3
+		suporte.Parent = raiz
+		local l = Instance.new("Frame")
+		l.BorderSizePixel = 0
+		l.BackgroundColor3 = risco
+		l.AnchorPoint = Vector2.new(0.5, 0)
+		local comp = rng:NextNumber(0.1, 0.2)
+		l.Position = UDim2.fromScale(0.5, rng:NextNumber(0.01, 0.06))
+		l.Size = UDim2.fromScale(0.012, comp)
+		l.ZIndex = 3
+		l.Parent = suporte
+	end
+	aikuCirculo(raiz, 0.55, claro, 4)
+	aikuCirculo(raiz, 0.28, anel, 5)
+	aikuCirculo(raiz, 0.2, rgb(255, 255, 255), 6)
+	return raiz
+end
+
+-- OS OLHOS DO FLOW DO AIKU, NO ROSTO (esquerdo VERDE, direito AZUL) — mesma placa colada na
+-- cabeça do E.OlhosFlow (a franja passa na frente). Devolve { Parte, Locais, Diametro,
+-- Mundo(i), Definir(nivel 0-1) } ([1] = olho ESQUERDO do personagem = −X = verde).
+function E.OlhosFlowAiku(character)
+	local head = character and character:FindFirstChild("Head")
+	if not head or not head:IsA("BasePart") then return nil end
+	local s = head.Size
+	local frente = s.Z * 0.5
+	local malha = head:FindFirstChildOfClass("SpecialMesh")
+	if malha and malha.MeshType == Enum.MeshType.Head then frente = s.Z * 0.5 * malha.Scale.Z end
+	local yOlho = s.Y * 0.08
+	local zPlaca = -(frente + 0.03)
+	local placa = Instance.new("Part")
+	placa.Name = "OlhosFlowAiku"
+	placa.Size = V3(s.X * 0.62, s.Y * 0.5, 0.05)
+	placa.Transparency = 1
+	placa.CanCollide = false
+	placa.CanQuery = false
+	placa.CanTouch = false
+	placa.CastShadow = false
+	placa.Massless = true
+	placa.Anchored = false
+	placa.CFrame = head.CFrame * CFrame.new(0, yOlho, zPlaca)
+	local solda = Instance.new("WeldConstraint")
+	solda.Part0 = head
+	solda.Part1 = placa
+	solda.Parent = placa
+	placa.Parent = character
+	local sg = Instance.new("SurfaceGui")
+	sg.Face = Enum.NormalId.Front
+	sg.LightInfluence = 0
+	sg.Brightness = 1.8
+	sg.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+	sg.PixelsPerStud = 400
+	sg.Adornee = placa
+	sg.Parent = placa
+	local diam = math.clamp(s.X * 0.16, 0.22, 0.4)
+	local W, H = placa.Size.X, placa.Size.Y
+	local xs = { -s.X * 0.1, s.X * 0.1 } -- [1] = ESQUERDO do personagem (−X): verde; [2] = DIREITO: azul
+	local imagens, locais = {}, {}
+	for i, x in ipairs(xs) do
+		local gx = 0.5 - x / W -- (na face Front a direita da tela é o −X da peça)
+		local brilho = Instance.new("ImageLabel")
+		brilho.BackgroundTransparency = 1
+		brilho.Image = TEX_FLOW.Brilho
+		brilho.ImageColor3 = (i == 1) and AIKU_VERDE_CLARO or rgb(170, 205, 255)
+		brilho.AnchorPoint = Vector2.new(0.5, 0.5)
+		brilho.Position = UDim2.fromScale(gx, 0.5)
+		brilho.Size = UDim2.fromScale(diam * 1.9 / W, diam * 1.9 / H)
+		brilho.ZIndex = 1
+		brilho.Parent = sg
+		local iris = aikuIris(sg, gx, W, H, diam, i == 2)
+		imagens[i] = { Iris = iris, Brilho = brilho }
+		locais[i] = V3(x, yOlho, zPlaca - 0.03)
+	end
+	-- a íris gira devagar (um olho pra cada lado) e o brilho respira, igual ao do Isagi
+	local conexaoGiro
+	conexaoGiro = RunService.RenderStepped:Connect(function(dt)
+		if not placa.Parent then
+			conexaoGiro:Disconnect()
+			return
+		end
+		if not sg.Enabled then return end
+		local agora = os.clock()
+		for i, im in ipairs(imagens) do
+			im.Iris.Rotation = (im.Iris.Rotation + dt * 40 * (i == 1 and 1 or -1)) % 360
+			local k = diam * (1.9 + 0.12 * math.sin(agora * 2.4 + i))
+			im.Brilho.Size = UDim2.fromScale(k / W, k / H)
+		end
+	end)
+	local obj = { Parte = placa, Locais = locais, Diametro = diam }
+	function obj.Mundo(i) return head.CFrame:PointToWorldSpace(locais[i] or locais[1]) end
+	function obj.Definir(nivel)
+		nivel = math.clamp(nivel or 0, 0, 1)
+		sg.Enabled = nivel > 0.01
+		for _, im in ipairs(imagens) do
+			im.Brilho.ImageTransparency = 1 - 0.6 * nivel
+			im.Iris.GroupTransparency = 1 - nivel
+		end
+	end
+	return obj
+end
+
+-- A AURA do Flow do Aiku: bolhas de luz verde (bokeh) e faíscas ciano EM VOLTA do corpo todo,
+-- presas ao corpo (andam junto). Devolve a lista de emissores (liga/desliga pela Rate/Enabled).
+function E.AuraAiku(character, taxa)
+	local lista = {}
+	for _, nome in ipairs(PARTES_CORPO) do
+		local p = character:FindFirstChild(nome)
+		if p and p:IsA("BasePart") then
+			local bokeh = emissor(p, {
+				Textura = TEX_FLOW.Brilho, Cor = cores({ { 0, AIKU_VERDE_CLARO }, { 1, AIKU_VERDE } }), Brilho = 0.9,
+				Tamanho = numeros({ { 0, 0 }, { 0.3, 1.0 }, { 1, 0 } }), Transp = numeros({ { 0, 0.5 }, { 0.3, 0.2 }, { 1, 1 } }),
+				Vida = { 0.5, 1.0 }, Vel = { 1, 4 }, Spread = 180, Travado = true,
+				Forma = Enum.ParticleEmitterShape.Box, Estilo = Enum.ParticleEmitterShapeStyle.Volume,
+			})
+			bokeh.Rate = (taxa or 1) * 3
+			table.insert(lista, bokeh)
+			local faisca = emissor(p, {
+				Textura = TEX.Faisca, Cor = cores({ { 0, rgb(255, 255, 255) }, { 0.5, rgb(130, 255, 230) }, { 1, AIKU_VERDE } }), Brilho = 1,
+				Tamanho = numeros({ { 0, 0.22 }, { 1, 0 } }), Vida = { 0.3, 0.6 }, Vel = { 2, 6 }, Spread = 180, Travado = true, RotVel = 300,
+				Forma = Enum.ParticleEmitterShape.Box, Estilo = Enum.ParticleEmitterShapeStyle.Volume,
+			})
+			faisca.Rate = (taxa or 1) * 2
+			table.insert(lista, faisca)
+		end
+	end
+	return lista
+end
+
 function E.FlowAiku(ctx)
-	local pasta, spec = ctx.Pasta, ctx.Spec
-	local CINZA, CLARO = rgb(170, 180, 215), rgb(235, 240, 255)
-	local base = flowBase(ctx, {
-		Sala = rgb(16, 17, 24), Contorno = CINZA, ContornoDe = 0, Olhos = CLARO, OlhosDe = 2.6,
-		Aura = { CLARO, CINZA, rgb(40, 40, 60) }, AuraDe = 8.5, Rosto = { { 2, 3.5 }, { 8.5, 12 } },
-	})
-	-- névoa rente ao chão
-	local chao = parte(pasta, "NevoaAiku")
-	chao.Size = V3(40, 1, 40)
-	chao.CFrame = ctx.Inicio * CFrame.new(0, ctx.ChaoY + 0.6, -6)
-	local nevoa = emissor(chao, {
-		Textura = TEX.Fumaca, Cor = rgb(170, 175, 200), Brilho = 0.1, Tamanho = numeros({ { 0, 5 }, { 1, 10 } }),
-		Transp = numeros({ { 0, 1 }, { 0.3, 0.75 }, { 1, 1 } }), Vida = { 2, 3 }, Vel = { 0.3, 1 }, Taxa = 14,
+	local pasta, spec, inicio = ctx.Pasta, ctx.Spec, ctx.Inicio
+	local ph = spec.Phases
+	local BRANCO = rgb(255, 255, 255)
+	local VERDE, VERDE_CLARO, AZUL = AIKU_VERDE, AIKU_VERDE_CLARO, AIKU_AZUL
+	local character = ctx.Character
+	local head = character:FindFirstChild("Head")
+	local peD = character:FindFirstChild("Right Leg") or character:FindFirstChild("RightFoot")
+	local F, R, U = inicio.LookVector, inicio.RightVector, Vector3.yAxis
+	local rin = ctx.Clones and ctx.Clones[1]
+	local camera = workspace.CurrentCamera
+	local function gy() return ctx.Mundo(V3(0, ctx.ChaoY, 0)).Y end -- altura do gramado no mundo
+	local function ndr(a, b, k) return a + (b - a) * k end
+
+	local noCorpo = {}
+	local function prender(x) table.insert(noCorpo, x) return x end
+	pasta.Destroying:Connect(function()
+		for _, x in ipairs(noCorpo) do if x.Parent then x:Destroy() end end
+	end)
+
+	-- ===== cor da cena + palco escuro =====
+	local cc = prender(Instance.new("ColorCorrectionEffect"))
+	cc.Name = "FlowAikuCor"
+	cc.Parent = camera
+	local sala = salaEscura(pasta, "SalaFlowAiku", rgb(2, 10, 6), inicio * CFrame.new(0, 20, -8), 150, ctx.ChaoY + 0.25 - 20)
+	sala.Transparency = 1
+
+	-- grade de luz verde no chão (o "radar" do vídeo): linhas neon que surgem do centro pra fora
+	local linhasGrade = {}
+	do
+		local y = ctx.ChaoY + 0.42
+		for k = -8, 8 do
+			local a = parte(pasta, "GradeZ" .. k, { Color = VERDE, Size = V3(0.09, 0.05, 110) })
+			a.CFrame = inicio * CFrame.new(k * 4, y, -12)
+			table.insert(linhasGrade, { Parte = a, Dist = math.abs(k) * 4 })
+			local b = parte(pasta, "GradeX" .. k, { Color = VERDE, Size = V3(70, 0.05, 0.09) })
+			b.CFrame = inicio * CFrame.new(0, y, -12 + k * 4)
+			table.insert(linhasGrade, { Parte = b, Dist = math.abs(k) * 4 })
+		end
+	end
+	-- linhas de radar saindo da bola (câmera no chão)
+	local raiosRadar = {}
+	for i = 1, 12 do raiosRadar[i] = parte(pasta, "RaioRadar" .. i, { Color = VERDE }) end
+
+	-- ===== olhos: brilho verde (acendendo) → olhos do Flow (verde/azul) =====
+	local olhosNeon = { esfera(pasta, "OlhoAikuL", VERDE), esfera(pasta, "OlhoAikuR", VERDE) }
+	local olhosFlow = E.OlhosFlowAiku(character)
+	if olhosFlow then
+		prender(olhosFlow.Parte)
+		olhosFlow.Definir(0)
+	end
+	-- fogo verde-amarelo no olho (close de lado) — âncoras presas na cabeça
+	local fogoOlho = {}
+	if head then
+		local o = FlowCenaOlhos(head)
+		for i = 1, 2 do
+			local a = prender(Instance.new("Attachment"))
+			a.Position = o[i] + V3(0, 0, -0.05)
+			a.Parent = head
+			local e = prender(emissor(a, {
+				Textura = TEX.Fogo, Cor = cores({ { 0, rgb(255, 255, 150) }, { 0.45, rgb(150, 255, 90) }, { 1, rgb(10, 120, 40) } }), Brilho = 1,
+				Tamanho = numeros({ { 0, 0.7 }, { 0.5, 1.1 }, { 1, 0.1 } }), Transp = numeros({ { 0, 0.15 }, { 1, 1 } }),
+				Vida = { 0.3, 0.55 }, Vel = { 0.5, 2 }, Spread = 40, Direcao = Enum.NormalId.Front, Travado = true,
+			}))
+			e.Rate = 0
+			e.Enabled = true
+			fogoOlho[i] = e
+		end
+	end
+	local cabelos = {}
+	for _, a in ipairs(character:GetChildren()) do
+		if a:IsA("Accessory") then
+			local h = a:FindFirstChild("Handle")
+			if h then table.insert(cabelos, h) end
+		end
+	end
+	local function cabeloTransp(v)
+		for _, h in ipairs(cabelos) do h.LocalTransparencyModifier = v end
+	end
+	pasta.Destroying:Connect(function() cabeloTransp(0) end)
+
+	-- aura verde em volta do corpo (D em diante)
+	local aura = E.AuraAiku(character, 1)
+	for _, e in ipairs(aura) do prender(e); e.Enabled = true end
+	local function taxaAura(k)
+		for i, e in ipairs(aura) do e.Rate = (i % 2 == 1 and 9 or 6) * k end
+	end
+	taxaAura(0)
+	-- suor (rosto tenso)
+	local suor
+	if head then
+		local queixo = prender(Instance.new("Attachment"))
+		queixo.Position = V3(head.Size.X * 0.06, -head.Size.Y * 0.48, -head.Size.Z * 0.38)
+		queixo.Parent = head
+		suor = prender(emissor(queixo, {
+			Textura = TEX_FLOW.Gota, Cor = rgb(215, 235, 255), Brilho = 0.5, Tamanho = numeros({ { 0, 0.12 }, { 1, 0.1 } }),
+			Transp = numeros({ { 0, 0.1 }, { 1, 0.4 } }), Vida = { 0.6, 0.6 }, Vel = { 0, 0.3 }, Acel = V3(0, -30, 0), Spread = 5,
+		}))
+		suor.Rate = 0
+		suor.Enabled = true
+	end
+
+	-- ===== D: listras de luz verde (em volta, atrás e direto na câmera) =====
+	local listras = {}
+	do
+		local rng = Random.new(25)
+		for i = 1, 18 do
+			local p = parte(pasta, "Listra" .. i, { Color = (i % 3 == 0) and VERDE_CLARO or VERDE })
+			listras[i] = {
+				Parte = p, X = rng:NextNumber(-7, 7), Y = rng:NextNumber(-1.8, 3.2), Fase = rng:NextNumber(0, 60),
+				Vel = rng:NextNumber(55, 95), Comp = rng:NextNumber(5, 15), Esp = rng:NextNumber(0.07, 0.2),
+			}
+		end
+	end
+	local bokehCam = parte(pasta, "BokehCamera")
+	local bokehNaCamera = prender(emissor(bokehCam, {
+		Textura = TEX_FLOW.Brilho, Cor = cores({ { 0, VERDE_CLARO }, { 1, VERDE } }), Brilho = 0.9,
+		Tamanho = numeros({ { 0, 0.3 }, { 0.5, 1.6 }, { 1, 2.4 } }), Transp = numeros({ { 0, 0.7 }, { 0.5, 0.35 }, { 1, 1 } }),
+		Vida = { 0.5, 0.9 }, Vel = { 0, 0 }, Spread = 40, Drag = 0,
+		Forma = Enum.ParticleEmitterShape.Box, Estilo = Enum.ParticleEmitterShapeStyle.Volume,
+	}))
+	bokehCam.Size = V3(9, 5, 2)
+	bokehNaCamera.Rate = 0
+	bokehNaCamera.Enabled = true
+	local bokehCorpo = parte(pasta, "BokehCorpo", { Size = V3(16, 7, 16) })
+	local bokehEmCorpo = emissor(bokehCorpo, {
+		Textura = TEX_FLOW.Brilho, Cor = cores({ { 0, VERDE_CLARO }, { 1, VERDE } }), Brilho = 0.9,
+		Tamanho = numeros({ { 0, 0 }, { 0.4, 1.4 }, { 1, 0 } }), Transp = numeros({ { 0, 0.6 }, { 0.4, 0.25 }, { 1, 1 } }),
+		Vida = { 0.5, 0.9 }, Vel = { 4, 10 }, Spread = 20, Direcao = Enum.NormalId.Back,
 		Forma = Enum.ParticleEmitterShape.Box, Estilo = Enum.ParticleEmitterShapeStyle.Volume,
 	})
-	-- o atacante é vermelho escuro
-	local atacante = ctx.Clones and ctx.Clones[1]
-	if atacante and atacante.Modelo and not atacante.Real then
-		for _, d in ipairs(atacante.Modelo:GetDescendants()) do
-			if d:IsA("BasePart") then d.Color = rgb(90, 15, 20)
-			elseif d:IsA("Highlight") then d.FillColor = rgb(200, 40, 50); d.OutlineColor = rgb(255, 140, 140) end
-		end
-	end
-	local bola = bolaDeCena(ctx)
-	-- ele some (só pra este cliente; volta no fim)
-	local partesDele = {}
-	for _, d in ipairs(ctx.Character:GetDescendants()) do
-		if d:IsA("BasePart") and d.Name ~= "HumanoidRootPart" then table.insert(partesDele, d) end
-	end
-	pasta.Destroying:Connect(function()
-		for _, p in ipairs(partesDele) do if p.Parent then p.LocalTransparencyModifier = 0 end end
-	end)
-	local sumiu = false
-	local efeitos = {}
-	function efeitos.Quadro(t, _dt, s)
-		base.Atualizar(t)
-		local some = smooth(phase(t, 5.2, 5.45)) * (1 - smooth(phase(t, 6.1, 6.35)))
-		for _, p in ipairs(partesDele) do p.LocalTransparencyModifier = 0.85 * some end
-		if not sumiu and t >= 5.2 then
-			sumiu = true
-			anelVazado(pasta, ctx.Root.Position, Vector3.yAxis, CINZA, 1, 10, 0.4, 0.25)
-		end
-		-- a bola: no pé do atacante até o bote, depois no pé dele
-		local pos
-		local at = atacante and atacante.Root
-		if t < 7.0 and at then
-			pos = at.CFrame:PointToWorldSpace(V3(0.3, -2.3 + (ctx.TamanhoBola or 1.7) / 2 - 0.55, -1.4))
+	bokehEmCorpo.Rate = 0
+
+	-- ===== E/F: painéis de dados e o domo de projeção =====
+	local function novoPainel(tipo, nome)
+		local p = parte(pasta, nome, { Size = V3(2.8, 1.7, 0.05) })
+		local sg = Instance.new("SurfaceGui")
+		sg.Face = Enum.NormalId.Front
+		sg.LightInfluence = 0
+		sg.Brightness = 1.7
+		sg.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+		sg.PixelsPerStud = 60
+		sg.Adornee = p
+		sg.Enabled = false
+		sg.Parent = p
+		local raiz = Instance.new("Frame")
+		raiz.AnchorPoint = Vector2.new(0.5, 0.5)
+		raiz.Position = UDim2.fromScale(0.5, 0.5)
+		raiz.Size = UDim2.fromScale(1, 1)
+		raiz.BackgroundColor3 = rgb(8, 40, 90)
+		raiz.BackgroundTransparency = 0.3
+		raiz.BorderSizePixel = 0
+		raiz.Parent = sg
+		local cant = Instance.new("UICorner")
+		cant.CornerRadius = UDim.new(0, 8)
+		cant.Parent = raiz
+		local borda = Instance.new("UIStroke")
+		borda.Color = rgb(235, 245, 255)
+		borda.Thickness = 2
+		borda.Parent = raiz
+		local painel = { Parte = p, Gui = sg, Raiz = raiz, Tipo = tipo, Itens = {} }
+		if tipo == 1 then
+			for i = 1, 10 do
+				local b = Instance.new("Frame")
+				b.BorderSizePixel = 0
+				b.BackgroundColor3 = rgb(150, 230, 255)
+				b.AnchorPoint = Vector2.new(0, 1)
+				b.Position = UDim2.fromScale(0.06 + (i - 1) * 0.088, 0.9)
+				b.Size = UDim2.fromScale(0.06, 0.3)
+				b.Parent = raiz
+				table.insert(painel.Itens, b)
+			end
+		elseif tipo == 2 then
+			for _, k in ipairs({ 0.8, 0.5, 0.2 }) do
+				local c = aikuCirculo(raiz, k, rgb(8, 40, 90), 1)
+				c.BackgroundTransparency = 1
+				local st = Instance.new("UIStroke")
+				st.Color = rgb(150, 230, 255)
+				st.Thickness = 1.5
+				st.Parent = c
+			end
+			local suporte = Instance.new("Frame")
+			suporte.BackgroundTransparency = 1
+			suporte.AnchorPoint = Vector2.new(0.5, 0.5)
+			suporte.Position = UDim2.fromScale(0.5, 0.5)
+			suporte.Size = UDim2.fromScale(0.8, 0.8)
+			suporte.Parent = raiz
+			local l = Instance.new("Frame")
+			l.BorderSizePixel = 0
+			l.BackgroundColor3 = VERDE
+			l.AnchorPoint = Vector2.new(0.5, 1)
+			l.Position = UDim2.fromScale(0.5, 0.5)
+			l.Size = UDim2.new(0, 2, 0.5, 0)
+			l.Parent = suporte
+			painel.Giro = suporte
 		else
-			pos = ctx.Mundo(s.RootLocal + V3(0.4, ctx.ChaoY - s.RootLocal.Y + (ctx.TamanhoBola or 1.7) / 2, -1.5))
+			for i = 1, 5 do
+				local fundo = Instance.new("Frame")
+				fundo.BackgroundColor3 = rgb(20, 70, 140)
+				fundo.BorderSizePixel = 0
+				fundo.Position = UDim2.fromScale(0.08, 0.1 + (i - 1) * 0.17)
+				fundo.Size = UDim2.fromScale(0.84, 0.1)
+				fundo.Parent = raiz
+				local cheio = Instance.new("Frame")
+				cheio.BorderSizePixel = 0
+				cheio.BackgroundColor3 = rgb(150, 230, 255)
+				cheio.Size = UDim2.fromScale(0.3, 1)
+				cheio.Parent = fundo
+				table.insert(painel.Itens, cheio)
+			end
 		end
-		bola.CFrame = CFrame.new(pos) * CFrame.Angles(t * 5, 0, 0)
-		bola.Transparency = (t >= 3.5) and 0 or 1
+		return painel
 	end
-	function efeitos.Impacto(_s)
-		ctx.Flash(CLARO, 0.25, 0.4)
+	local paineis = {}
+	local function addPainel(tipo, aparece, posFn)
+		local p = novoPainel(tipo, "PainelAiku" .. (#paineis + 1))
+		p.Aparece = aparece
+		p.Pos = posFn
+		table.insert(paineis, p)
 	end
+	-- E (6.95-9.05): os dois painéis perto da bola (a onda e o radar)
+	addPainel(1, ph.Bola[1] + 0.15, function(bola) return bola + R * -1.9 + U * 1.0 - F * 0.2 end)
+	addPainel(2, ph.Bola[1] + 0.35, function(bola) return bola + R * 2.0 + U * 0.6 + F * 0.7 end)
+	-- F (9.05-13.55): ele "enxerga" o adversário: os painéis se multiplicam em volta do domo
+	do
+		local rng = Random.new(77)
+		for i = 1, 12 do
+			local ang = (i / 12) * math.pi * 1.7 - math.pi * 0.85
+			local raio = 4.8 + rng:NextNumber(-0.4, 1.4)
+			local alt = rng:NextNumber(-0.2, 3.2)
+			addPainel((i % 3) + 1, ph.Domo[1] + 0.3 + (i - 1) * 0.38, function(_bola, rp)
+				return rp + (R * math.sin(ang) - F * math.cos(ang)) * raio * 1.1 + U * alt
+			end)
+		end
+	end
+	local domo = parte(pasta, "DomoAiku", { Shape = Enum.PartType.Ball, Material = Enum.Material.ForceField, Color = rgb(60, 170, 255) })
+	local domoBase = parte(pasta, "DomoBaseAiku", { Shape = Enum.PartType.Cylinder, Color = rgb(100, 255, 170) })
+	local energiaChao = parte(pasta, "EnergiaDomo", { Size = V3(8, 1, 8) })
+	local energia = emissor(energiaChao, {
+		Textura = TEX_FLOW.Brilho, Cor = cores({ { 0, rgb(200, 255, 190) }, { 1, VERDE } }), Brilho = 1,
+		Tamanho = numeros({ { 0, 0.5 }, { 1, 0 } }), Vida = { 0.5, 1 }, Vel = { 1, 4 }, Spread = 25, Direcao = Enum.NormalId.Top,
+		Forma = Enum.ParticleEmitterShape.Cylinder, Estilo = Enum.ParticleEmitterShapeStyle.Surface,
+	})
+	energia.Rate = 0
+	local destaqueRin = nil
+	if rin and rin.Modelo then
+		destaqueRin = Instance.new("Highlight")
+		destaqueRin.Adornee = rin.Modelo
+		destaqueRin.FillColor = rgb(60, 140, 255)
+		destaqueRin.FillTransparency = 0.5
+		destaqueRin.OutlineColor = rgb(200, 235, 255)
+		destaqueRin.OutlineTransparency = 0.1
+		destaqueRin.DepthMode = Enum.HighlightDepthMode.Occluded
+		destaqueRin.Enabled = false
+		destaqueRin.Parent = pasta
+	end
+
+	-- ===== Setas 30% / 70%, "DASH!" e flashes: TELA (ScreenGui) =====
+	local playerGui = Players.LocalPlayer and Players.LocalPlayer:FindFirstChildOfClass("PlayerGui")
+	local tela = prender(Instance.new("ScreenGui"))
+	tela.Name = "FlowAikuTela"
+	tela.IgnoreGuiInset = true
+	tela.ResetOnSpawn = false
+	tela.DisplayOrder = 40
+	tela:SetAttribute("VisivelNaCutscene", true) -- (o motor esconde toda GUI sem isso)
+	tela.Parent = playerGui
+	local function linhaUI(pai, x1, y1, x2, y2, esp, z)
+		local dx, dy = x2 - x1, y2 - y1
+		local f = Instance.new("Frame")
+		f.BorderSizePixel = 0
+		f.BackgroundColor3 = BRANCO
+		f.AnchorPoint = Vector2.new(0.5, 0.5)
+		f.Position = UDim2.fromOffset((x1 + x2) / 2, (y1 + y2) / 2)
+		f.Size = UDim2.fromOffset(math.sqrt(dx * dx + dy * dy) + esp, esp)
+		f.Rotation = math.deg(math.atan2(dy, dx))
+		f.ZIndex = z
+		f.Parent = pai
+		return f
+	end
+	local function novaSeta(lado, texto)
+		local W, H = 330, 210
+		local raiz = Instance.new("Frame")
+		raiz.BackgroundTransparency = 1
+		raiz.AnchorPoint = Vector2.new(0.5, 0.5)
+		raiz.Size = UDim2.fromOffset(W, H)
+		raiz.Visible = false
+		raiz.Parent = tela
+		local escala = Instance.new("UIScale")
+		escala.Parent = raiz
+		local pts = { { 0, 105 }, { 105, 0 }, { 105, 45 }, { W, 45 }, { W, 165 }, { 105, 165 }, { 105, H } }
+		if lado > 0 then
+			for _, p in ipairs(pts) do p[1] = W - p[1] end
+		end
+		local ls = {}
+		for i = 1, #pts do
+			local a, b = pts[i], pts[i % #pts + 1]
+			ls[i] = linhaUI(raiz, a[1], a[2], b[1], b[2], 6, 3)
+		end
+		local t = Instance.new("TextLabel")
+		t.BackgroundTransparency = 1
+		t.Size = UDim2.fromOffset(225, 120)
+		t.Position = UDim2.fromOffset(lado < 0 and 105 or 0, 45)
+		t.Font = Enum.Font.GothamBlack
+		t.Text = texto
+		t.TextSize = 92
+		t.TextColor3 = BRANCO
+		t.TextTransparency = 1
+		t.ZIndex = 4
+		t.Parent = raiz
+		local st = Instance.new("UIStroke")
+		st.Color = rgb(0, 40, 20)
+		st.Thickness = 3
+		st.Parent = t
+		return { Raiz = raiz, Linhas = ls, Texto = t, Escala = escala }
+	end
+	local setaE, setaD = novaSeta(-1, "30%"), novaSeta(1, "70%")
+	local dash = Instance.new("TextLabel")
+	dash.BackgroundTransparency = 1
+	dash.AnchorPoint = Vector2.new(0.5, 0.5)
+	dash.Position = UDim2.fromScale(0.3, 0.5)
+	dash.Size = UDim2.fromOffset(760, 220)
+	dash.Font = Enum.Font.GothamBlack
+	dash.Text = ""
+	dash.TextSize = 190
+	dash.TextColor3 = BRANCO
+	dash.ZIndex = 6
+	dash.Parent = tela
+	local dashEscala = Instance.new("UIScale")
+	dashEscala.Parent = dash
+	local dashBorda = Instance.new("UIStroke")
+	dashBorda.Color = rgb(0, 50, 25)
+	dashBorda.Thickness = 6
+	dashBorda.Parent = dash
+	local vinheta = Instance.new("ImageLabel")
+	vinheta.BackgroundTransparency = 1
+	vinheta.Image = TEX_FLOW.Vinheta
+	vinheta.ImageColor3 = Color3.new(0, 0, 0)
+	vinheta.ImageTransparency = 1
+	vinheta.AnchorPoint = Vector2.new(0.5, 0.5)
+	vinheta.Position = UDim2.fromScale(0.5, 0.5)
+	vinheta.SizeConstraint = Enum.SizeConstraint.RelativeXY
+	vinheta.Size = UDim2.fromScale(1.05, 1.05)
+	vinheta.ZIndex = 1
+	vinheta.Parent = tela
+
+	-- ===== o roubo: faíscas na bola, anéis e a cauda de luz na câmera lenta =====
+	local ancBola = parte(pasta, "FaiscasBola")
+	local faiscasBola = emissor(ancBola, {
+		Textura = TEX.Faisca, Cor = cores({ { 0, BRANCO }, { 0.5, VERDE_CLARO }, { 1, VERDE } }), Brilho = 1,
+		Tamanho = numeros({ { 0, 0.8 }, { 1, 0 } }), Vida = { 0.5, 1.1 }, Vel = { 14, 34 }, Spread = 180, RotVel = 400, Drag = 3,
+	})
+	local ancCauda = parte(pasta, "CaudaBolaAiku")
+	local caudaBola = emissor(ancCauda, {
+		Textura = TEX_FLOW.Brilho, Cor = cores({ { 0, BRANCO }, { 0.4, VERDE_CLARO }, { 1, VERDE } }), Brilho = 0.9,
+		Tamanho = numeros({ { 0, 1.0 }, { 1, 0.1 } }), Transp = numeros({ { 0, 0.2 }, { 1, 1 } }), Vida = { 0.5, 0.9 }, Vel = { 0, 1 }, Spread = 60,
+	})
+	caudaBola.Rate = 0
+	local destaqueBola = nil
+	if ctx.Ball then
+		destaqueBola = Instance.new("Highlight")
+		destaqueBola.Adornee = ctx.Ball
+		destaqueBola.FillColor = VERDE
+		destaqueBola.OutlineColor = BRANCO
+		destaqueBola.FillTransparency = 0.6
+		destaqueBola.OutlineTransparency = 0.15
+		destaqueBola.DepthMode = Enum.HighlightDepthMode.Occluded
+		destaqueBola.Enabled = false
+		destaqueBola.Parent = pasta
+	end
+	local rastroPe = peD and rastroDuplo(peD, 0.7, VERDE, BRANCO, 0.4) or nil
+	if rastroPe then
+		for _, tr in ipairs({ rastroPe.Halo, rastroPe.Miolo }) do
+			prender(tr)
+			prender(tr.Attachment0)
+			prender(tr.Attachment1)
+		end
+	end
+
+	local bolaMundo = nil
+	local proxRadar = 0
+	local jaFlash = {}
+	local function uma(chave, t, quando, fn)
+		if not jaFlash[chave] and t >= quando then
+			jaFlash[chave] = true
+			fn()
+		end
+	end
+	local function rinMundo()
+		if rin and rin.Root and rin.Root.Parent then return rin.Root.Position end
+		return ctx.Mundo(V3(0.7, 0, -7.4))
+	end
+	local function posNaTela(p)
+		local v = camera:WorldToViewportPoint(p)
+		return v.X, v.Y, v.Z > 0
+	end
+
+	local efeitos = {}
+	function efeitos.Quadro(t, dt, s)
+		bolaMundo = s.BolaMundo
+		local raiz = ctx.Root.Position
+		local rp = rinMundo()
+		local chao = gy()
+		local noPalco = (t >= 0.45 and t < ph.Rosto[1]) or (t >= ph.Setas[1] and t < ph.Bota[1])
+		local dia = (t < 0.45) or (t >= ph.Rosto[1] and t < ph.Setas[1]) or (t >= ph.Bota[1] and t < ph.Olho2[1])
+
+		-- cor / palco
+		if dia then
+			cc.TintColor, cc.Saturation, cc.Contrast, cc.Brightness = rgb(240, 255, 245), 0.12, 0.14, 0
+		elseif t < ph.Rosto[1] then
+			cc.TintColor, cc.Saturation, cc.Contrast, cc.Brightness = rgb(200, 255, 220), 0.05, 0.3, -0.04
+		elseif t < ph.Bota[1] then
+			cc.TintColor, cc.Saturation, cc.Contrast, cc.Brightness = rgb(175, 255, 200), 0.05, 0.38, -0.1
+		else
+			cc.TintColor, cc.Saturation, cc.Contrast, cc.Brightness = rgb(205, 255, 225), 0.05, 0.32, -0.06
+		end
+		sala.Transparency = noPalco and 0 or 1
+		for _, l in ipairs(linhasGrade) do
+			local k = smooth(phase(t, 0.6 + l.Dist * 0.05, 0.9 + l.Dist * 0.05))
+			local vis = noPalco and k or 0
+			l.Parte.Transparency = 1 - vis * (0.6 + 0.35 * math.sin(t * 3 + l.Dist))
+		end
+		-- (a cena escurece em 0.45 com o brilho verde — vídeo 12.0s)
+		uma("escurece", t, 0.45, function() ctx.Flash(VERDE_CLARO, 0.55, 0.4) end)
+
+		-- olhos: brilho verde (0.45 →) / fogo no olho de lado (2.3-3.95) / olhos do Flow (3.95 →)
+		if head then
+			local o = FlowCenaOlhos(head)
+			local brilho = smooth(phase(t, 0.45, 1.0))
+			local fogo = smooth(phase(t, ph.Olho[1], ph.Olho[1] + 0.4)) * (1 - smooth(phase(t, ph.Olho[2] - 0.25, ph.Olho[2])))
+			local flow = smooth(phase(t, ph.Listras[1], ph.Listras[1] + 0.4))
+			local tam = ndr(0.1, 0.3, brilho) * (1 + 0.5 * fogo)
+			for i, e in ipairs(olhosNeon) do
+				e.Size = V3(tam, tam * 0.55, 0.08)
+				e.CFrame = head.CFrame * CFrame.new(o[i])
+				e.Color = (i == 1) and VERDE or rgb(120, 190, 255)
+				e.Transparency = (t >= 0.45 and flow < 0.5) and (1 - math.max(brilho * 0.9, fogo)) or 1
+			end
+			for i, f in ipairs(fogoOlho) do
+				f.Rate = (t >= ph.Olho[1] and t < ph.Olho[2]) and 55 * fogo or 0
+			end
+			if t >= ph.Olho[2] - 0.5 and not jaFlash.estouroOlho then
+				jaFlash.estouroOlho = true
+				for _, f in ipairs(fogoOlho) do f:Emit(70) end
+			end
+			if olhosFlow then olhosFlow.Definir(flow) end
+		end
+		cabeloTransp((t >= ph.Olho[1] and t < ph.Olho[2]) and 0.6 or 0)
+
+		-- A-B: anéis de radar e linhas no chão em volta da bola (vídeo 13.0-14.2s)
+		if t >= ph.Radar[1] and t < ph.Olho[1] and t >= proxRadar then
+			proxRadar = t + 0.3
+			local p = V3(s.BolaMundo.X, chao + 0.5, s.BolaMundo.Z)
+			anelVazado(pasta, p, U, VERDE, 1.2, 16, 1.0, 0.18)
+		end
+		uma("flashRadar", t, 1.25, function() ctx.Flash(VERDE, 0.4, 0.3) end)
+		for i, r in ipairs(raiosRadar) do
+			local k = phase(t, ph.Radar[1] + 0.05, ph.Olho[1] - 0.2)
+			if k > 0 and t < ph.Olho[1] then
+				local ang = (i / #raiosRadar) * math.pi * 2
+				local dir = R * math.cos(ang) - F * math.sin(ang)
+				local comp = 11 * easeOut(k)
+				local cb = V3(s.BolaMundo.X, chao + 0.5, s.BolaMundo.Z)
+				r.Size = V3(0.07, 0.05, math.max(comp - 0.6, 0.05))
+				r.CFrame = CFrame.lookAt(cb + dir * (0.6 + comp / 2), cb + dir * (comp + 0.6))
+				r.Transparency = 0.15 + 0.85 * k
+			else
+				r.Transparency = 1
+			end
+		end
+
+		-- D: aura, listras e bolhas de luz (algumas direto na câmera)
+		local dK = smooth(phase(t, ph.Listras[1], ph.Listras[1] + 0.3)) * (1 - smooth(phase(t, ph.Listras[2] - 0.2, ph.Listras[2] + 0.3)))
+		local auraK = (t >= ph.Listras[1]) and 1 or 0
+		taxaAura(auraK * (0.8 + 0.8 * dK))
+		for _, l in ipairs(listras) do
+			if dK > 0.01 then
+				local z = ((l.Fase + t * l.Vel) % 80) - 55 -- vem da frente e passa por trás dele
+				local pos = raiz + R * l.X + U * l.Y + F * (-z)
+				l.Parte.Size = V3(l.Esp, l.Esp, l.Comp)
+				l.Parte.CFrame = CFrame.lookAt(pos, pos + F)
+				l.Parte.Transparency = 1 - dK * 0.9
+			else
+				l.Parte.Transparency = 1
+			end
+		end
+		bokehEmCorpo.Rate = 70 * dK
+		bokehCorpo.CFrame = CFrame.lookAt(raiz + U * 1.0, raiz + U * 1.0 + F)
+		bokehCam.CFrame = camera.CFrame * CFrame.new(0, 0, -2.4)
+		bokehNaCamera.Rate = 38 * dK
+
+		-- E/F: painéis (de frente pra câmera) e o domo
+		for _, p in ipairs(paineis) do
+			local k = smooth(phase(t, p.Aparece, p.Aparece + 0.35))
+			local some = (t >= ph.Rosto[1]) and 1 or 0
+			if k > 0.01 and some == 0 then
+				p.Gui.Enabled = true
+				local pos = p.Pos(s.BolaMundo, rp)
+				p.Parte.CFrame = CFrame.lookAt(pos, camera.CFrame.Position)
+				local esc = 0.15 + 0.85 * easeOut(k)
+				p.Raiz.Size = UDim2.fromScale(esc, esc)
+				p.Raiz.BackgroundTransparency = 1 - 0.7 * k
+				if p.Tipo == 1 then
+					for i, b in ipairs(p.Itens) do
+						b.Size = UDim2.fromScale(0.06, 0.12 + 0.6 * math.abs(math.sin(t * 3 + i * 1.3)))
+					end
+				elseif p.Tipo == 2 then
+					p.Giro.Rotation = (t * 180) % 360
+				else
+					for i, b in ipairs(p.Itens) do
+						b.Size = UDim2.fromScale(0.15 + 0.8 * math.abs(math.sin(t * 1.7 + i * 2.1)), 1)
+					end
+				end
+			else
+				p.Gui.Enabled = false
+			end
+		end
+		local dk = smooth(phase(t, ph.Domo[1] + 0.05, ph.Domo[1] + 0.55)) * (1 - smooth(phase(t, ph.Domo[2] - 0.1, ph.Domo[2] + 0.2)))
+		local centroDomo = V3(rp.X, chao, rp.Z)
+		if dk > 0.01 then
+			local diam = 9.6 * dk
+			domo.Size = Vector3.one * diam
+			domo.CFrame = CFrame.new(centroDomo + U * (diam * 0.5 - 0.2))
+			domo.Transparency = 0.35 + 0.1 * math.sin(t * 5)
+			domoBase.Size = V3(0.12, diam * 1.05, diam * 1.05)
+			domoBase.CFrame = CFrame.lookAt(centroDomo + U * 0.5, centroDomo + U * 1.5) * CFrame.Angles(0, math.rad(90), 0)
+			domoBase.Transparency = 0.45
+			energiaChao.CFrame = CFrame.new(centroDomo + U * 0.5)
+			energia.Rate = 60
+		else
+			domo.Transparency, domoBase.Transparency = 1, 1
+			energia.Rate = 0
+		end
+		if destaqueRin then destaqueRin.Enabled = dk > 0.5 end
+		uma("domoFim", t, ph.Domo[2], function()
+			ctx.Flash(rgb(190, 235, 255), 0.35, 0.3)
+		end)
+		if dk > 0.5 and t >= proxRadar then
+			proxRadar = t + 0.9
+			anelVazado(pasta, centroDomo + U * 0.5, U, rgb(120, 255, 190), 2, 13, 0.9, 0.18)
+		end
+
+		-- suor no rosto (13.55-14.35)
+		if suor then suor.Rate = (t >= ph.Rosto[1] and t < ph.Setas[1]) and 14 or 0 end
+
+		-- Setas 30% / 70% (de cima da bola) e DASH!
+		local esc = math.max(camera.ViewportSize.Y / 720, 0.5)
+		dashEscala.Scale = esc
+		local setasK = phase(t, ph.Setas[1] + 0.1, ph.Setas[1] + 0.45)
+		local textoK = smooth(phase(t, ph.Setas[1] + 0.5, ph.Setas[1] + 0.8))
+		local setasOn = t >= ph.Setas[1] and t < ph.Dash[1] + 0.35
+		local bx, by, vis = posNaTela(s.BolaMundo)
+		for lado, seta in pairs({ [-1] = setaE, [1] = setaD }) do
+			seta.Raiz.Visible = setasOn and vis
+			if setasOn and vis then
+				seta.Escala.Scale = esc
+				seta.Raiz.Position = UDim2.fromOffset(bx + lado * 330 * 0.9 * esc, by)
+				for _, ln in ipairs(seta.Linhas) do ln.BackgroundTransparency = 1 - setasK end
+				seta.Texto.TextTransparency = 1 - textoK
+			end
+		end
+		local nLetras = math.floor(phase(t, ph.Dash[1] + 0.1, ph.Dash[1] + 0.4) * 5 + 0.5)
+		dash.Text = (t >= ph.Dash[1] and t < ph.Dash[2]) and ("DASH!"):sub(1, nLetras) or ""
+		dash.Rotation = -4
+		uma("dashBatida", t, ph.Dash[1], function()
+			ctx.Flash(VERDE_CLARO, 0.1, 0.3)
+			ctx.Tremer(1.0, 0.35)
+		end)
+		-- o fim: tela escurecendo nas bordas (olho final)
+		vinheta.ImageTransparency = 1 - 0.8 * smooth(phase(t, ph.Olho2[1], ph.Olho2[1] + 0.4))
+
+		-- a bola: destaque verde, cauda de luz na câmera lenta, faíscas
+		local bolaViva = t >= ph.Dash[1]
+		if destaqueBola then destaqueBola.Enabled = bolaViva end
+		ancBola.CFrame = CFrame.new(s.BolaMundo)
+		ancCauda.CFrame = CFrame.new(s.BolaMundo)
+		caudaBola.Rate = (t >= spec.ImpactTime and t < ph.Volta[1] + 0.8) and 70 or 0
+		if rastroPe then rastroPe.Ligar(t >= ph.Bota[1] - 0.2 and t < ph.Split[1] + 0.2) end
+		-- a volta: o Aiku deixa a aura mais forte na corrida
+		uma("volta", t, ph.Volta[1], function() ctx.Flash(VERDE_CLARO, 0.55, 0.25) end)
+		uma("pegou", t, ph.Volta[1] + 0.8, function()
+			faiscasBola:Emit(40)
+			onda(pasta, s.BolaMundo, U, VERDE, 14, 0.3, 0.2)
+		end)
+	end
+
+	function efeitos.Impacto(s)
+		ctx.Flash(rgb(215, 255, 230), 0.05, 0.4)
+		ctx.Tremer(1.5, 0.5)
+		faiscasBola:Emit(120)
+		local p = s.BolaMundo
+		onda(pasta, p, U, VERDE, 30, 0.4, 0.3)
+		onda(pasta, p, F, BRANCO, 20, 0.3, 0.2)
+		anelVazado(pasta, p, F, VERDE_CLARO, 2, 26, 0.55, 0.3)
+		anelVazado(pasta, p, R, VERDE, 2, 20, 0.5, 0.25)
+	end
+
+	-- depois da cena o Aiku já está com a bola (servidor): ela segue com um rastro verde no chão
+	function efeitos.Voo(ball, duracao)
+		efeitoDeVoo(ball, duracao, function(a, coisas)
+			emissor(a, {
+				Textura = TEX_FLOW.Brilho, Cor = cores({ { 0, BRANCO }, { 1, VERDE } }), Brilho = 0.9,
+				Tamanho = numeros({ { 0, 0.9 }, { 1, 0.1 } }), Transp = numeros({ { 0, 0.3 }, { 1, 1 } }), Vida = { 0.3, 0.6 }, Vel = { 0, 1 }, Spread = 60, Taxa = 40,
+			})
+			table.insert(coisas, destaque(ball, VERDE, BRANCO, 0.6))
+		end)
+	end
+
+	-- CÂMERA em coordenadas de MUNDO (segue o corpo, a bola e o adversário de verdade)
+	local function cam(pos, alvo, fov) return CFrame.lookAt(pos, alvo), fov end
+	function efeitos.CameraMundo(t)
+		if not head then return nil end
+		local raiz = ctx.Root.Position
+		local bola = bolaMundo or (raiz + F * 6)
+		local rp = rinMundo()
+		local chao = gy()
+		local hp = head.Position
+		local Lh = head.CFrame.LookVector
+		local o = FlowCenaOlhos(head)
+		local olhoE = head.CFrame:PointToWorldSpace(o[1]) -- esquerdo (verde)
+		local olhoD = head.CFrame:PointToWorldSpace(o[2]) -- direito (azul)
+		local meio = (olhoE + olhoD) / 2
+		local rasante = V3(bola.X, chao + 0.5, bola.Z)
+
+		if t < ph.Avanca[2] then
+			-- A: perfil dele correndo (câmera acompanha pelo lado direito)
+			local u = smooth(phase(t, 0, ph.Avanca[2]))
+			return cam(raiz + R * ndr(5.4, 4.2, u) + U * 0.3 - F * 0.4, raiz + U * 0.5 + F * 1.6, ndr(46, 52, u))
+		elseif t < ph.Olho[1] then
+			-- B: no chão, de lado: o pé dele à esquerda, as pernas do adversário à direita e a bola
+			local u = smooth(phase(t, ph.Radar[1], ph.Radar[2]))
+			return cam(rasante + R * ndr(3.4, 2.6, u), rasante + U * 0.3, ndr(56, 48, u))
+		elseif t < ph.Listras[1] then
+			-- C: close no olho, de LADO (o direito): o fogo verde sobe e estoura
+			local u = smooth(phase(t, ph.Olho[1], ph.Listras[1]))
+			return cam(olhoD + R * ndr(1.7, 1.15, u) + F * 0.12, olhoD, ndr(30, 24, u))
+		elseif t < ph.Bola[1] then
+			-- D: de perfil/frente-direita, correndo: as listras passam em volta e pela câmera
+			local u = smooth(phase(t, ph.Listras[1], ph.Listras[2]))
+			return cam(raiz + R * ndr(3.6, 3.0, u) + F * ndr(2.8, 2.2, u) + U * 0.2, raiz + U * 0.45 - F * 0.2, ndr(52, 58, u))
+		elseif t < ph.Domo[1] then
+			-- E: por cima do ombro dele, olhando a bola no pé do adversário (o braço dele na frente)
+			local u = smooth(phase(t, ph.Bola[1], ph.Bola[2]))
+			return cam(raiz - R * 0.55 + U * ndr(2.5, 2.1, u) - F * ndr(0.6, 0.2, u), bola + U * 0.1, ndr(56, 50, u))
+		elseif t < ph.Rosto[1] then
+			-- F1: de trás e do lado dele: o domo ao redor do adversário; gira devagar
+			-- F2 (corte): bem perto, por cima do ombro direito, empurrando pro domo enquanto
+			-- os painéis se multiplicam
+			local corte = ph.Domo[1] + 2.4
+			if t < corte then
+				local u = smooth(phase(t, ph.Domo[1], corte))
+				local v0 = (raiz - R * 1.9 - F * 4.2 + U * 0.6) - rp
+				local giro = CFrame.fromAxisAngle(U, math.rad(-30 * u))
+				return cam(rp + giro:VectorToWorldSpace(v0) * ndr(1, 0.9, u), rp + U * ndr(1.0, 0.9, u), ndr(54, 50, u))
+			end
+			local u = smooth(phase(t, corte, ph.Domo[2]))
+			return cam(raiz + R * ndr(1.8, 1.4, u) - F * ndr(2.0, 1.2, u) + U * ndr(1.1, 0.9, u), rp + U * ndr(1.0, 1.4, u), ndr(48, 40, u))
+		elseif t < ph.Setas[1] then
+			-- Rosto: de frente, o rosto tenso (de dia)
+			local u = smooth(phase(t, ph.Rosto[1], ph.Setas[1]))
+			return cam(meio + Lh * ndr(2.6, 2.1, u) + R * 0.2 - U * 0.05, meio, ndr(40, 34, u))
+		elseif t < ph.Dash[1] then
+			-- Setas: de cima da bola (a bota do adversário aparece no alto)
+			local u = smooth(phase(t, ph.Setas[1], ph.Setas[2]))
+			return cam(bola + U * ndr(3.9, 3.5, u) - F * 0.7, bola, 46)
+		elseif t < ph.Bota[1] then
+			-- Dash: a câmera cai sobre a bola e a bola foge pro lado
+			local u = smooth(phase(t, ph.Dash[1], ph.Dash[2]))
+			return cam(bola + U * ndr(3.4, 2.4, u) - F * ndr(0.8, 1.6, u), bola, ndr(48, 58, u))
+		elseif t < ph.Split[1] then
+			-- Bota: no chão, de lado: a chuteira dele por baixo da bola, a perna do adversário à direita
+			local u = smooth(phase(t, ph.Bota[1], ph.Bota[2]))
+			local ponto = V3(bola.X, chao + 0.45, bola.Z)
+			return cam(ponto + R * ndr(3.2, 2.5, u), ponto + U * 0.15, ndr(52, 44, u))
+		elseif t < ph.Volta[1] then
+			-- Split (câmera lenta): de baixo, ele aberto no ar, a bola subindo
+			local u = smooth(phase(t, ph.Split[1], ph.Split[2]))
+			return cam(V3(raiz.X, chao + 0.3, raiz.Z) - F * ndr(4.6, 3.6, u) - R * ndr(3.4, 2.2, u), raiz + U * ndr(0.6, 0.9, u), ndr(66, 58, u))
+		elseif t < ph.Olho2[1] then
+			-- Volta (rápido): alta e atrás, acompanha ele dando a volta e pegando a bola
+			local u = smooth(phase(t, ph.Volta[1], ph.Volta[2]))
+			local meioDois = (raiz + rp) / 2
+			return cam(meioDois + R * ndr(2.5, 3.5, u) + U * ndr(4.6, 3.8, u) + F * ndr(5.2, 4.2, u), meioDois + U * 0.8 - F * 0.5, 58)
+		end
+		-- Olho2: o sorriso e depois o OLHO DO FLOW (o esquerdo, verde) em close; a íris gira
+		local u = smooth(phase(t, ph.Olho2[1], ph.Olho2[2]))
+		if t < ph.Olho2[1] + 0.35 then
+			local boca = hp - U * (head.Size.Y * 0.3)
+			return cam(boca + Lh * 1.7 + R * 0.15, boca, 28)
+		end
+		local k = smooth(phase(t, ph.Olho2[1] + 0.35, ph.Olho2[1] + 0.8))
+		local alvo = ndr(1, 0, k)
+		local pos = olhoE + Lh * ndr(1.9, 1.15, u) + R * -0.15
+		local ponto = (hp - U * (head.Size.Y * 0.3)):Lerp(olhoE, 1 - alvo)
+		return cam(pos, ponto, ndr(30, 22, u))
+	end
+
 	return efeitos
 end
 

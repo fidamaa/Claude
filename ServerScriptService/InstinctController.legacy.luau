@@ -621,12 +621,15 @@ Remotes.ActivateInstinctMode.OnServerEvent:Connect(function(player, aimPoint)
 	if FlowsUsados[player] then return end -- ⚠️ v113: 1 Flow por partida
 	-- ⚠️ v124 — FLOW COM CHUTE (Shidou): o Flow é o próprio chute, então precisa da bola.
 	-- Sem ela nada é gasto (o medidor continua cheio) e o jogador é avisado.
-	local exigeBola = _G.FlowExigeBola and _G.FlowExigeBola(player)
-	if exigeBola and not (_G.GetBallOwner and _G.GetBallOwner() == player) then
-		Remotes.InstinctModeFeedback:FireClient(player, "FlowPrecisaBola")
-		return
+	-- (Shidou: com a bola · Aiku: adversário com a bola perto e ele perto da própria área)
+	if _G.FlowCondicao then
+		local okCond, aviso = _G.FlowCondicao(player)
+		if not okCond then
+			Remotes.InstinctModeFeedback:FireClient(player, aviso or "FlowPrecisaBola")
+			return
+		end
 	end
-	if exigeBola and typeof(aimPoint) ~= "Vector3" then aimPoint = nil end -- (sem mira: a cena olha pra frente)
+	if typeof(aimPoint) ~= "Vector3" then aimPoint = nil end -- (sem mira: a cena olha pra frente)
 	-- ⚠️ v120b — PEDIDO: "ninguém pode usar um Flow em cima do outro: quem tiver com
 	-- Flow ativo vai durar a duração do Flow". Com o Flow (ou a cena) de outro
 	-- jogador valendo, o medidor fica cheio e ele tenta de novo depois.

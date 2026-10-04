@@ -264,3 +264,25 @@ Pra um Flow assim (Shidou, e candidatos: Kaiser, Rin, Barou...):
   (`BallVisible`), senão ela tampa a câmera.
 - NUNCA copie do vídeo cenas de óvulo/espermatozoide/biologia (o jogo é Roblox, o usuário
   pediu pra tirar): corte e anote na tabela de planos com ✂️ o intervalo cortado.
+
+## Flow que é um DUELO (padrão do Aiku, v125)
+
+PEDIDO: "a forma de ativar o flow do Aiku é se o inimigo estiver com a posse da bola perto dele
+(ele precisa estar próximo da área)"; a cena é o embate: ele lê o adversário, tenta tirar a bola
+(30%/70%), arranca a bola, dá a volta nele e fica com ela.
+- Coreografia: `Duelo = true` e `Clones` com 1 personagem (o adversário de verdade, copiado pelo
+  motor — o corpo real some durante a cena). `RootPosition`/`Clones.CFrame`/`BallPosition` no FIM
+  são onde o servidor devolve cada um (Aiku, adversário caído, bola no pé do Aiku).
+- Servidor (`PulseController`): `_G.FlowCondicao(player)` decide se pode ativar (adversário JOGADOR
+  com a bola a ≤ 30 studs e o jogador a ≤ 45 studs da PRÓPRIA área; senão avisa
+  `FlowPrecisaAdversario` e não gasta o medidor). `_G.TocarCenaFlow` vira a cena pro adversário e, no
+  último quadro, `SetBallOwnerForced` passa a posse, o adversário fica atordoado 1s e o Flow liga.
+- Olhos: esquerdo VERDE, direito AZUL (o azul é a MESMA íris com o matiz girado). `E.OlhosFlowAiku` e
+  `E.AuraAiku` valem na cena e na partida (`CosmeticosClient`). Texturas em `docs/texturas/` (sem ID,
+  a íris é desenhada com Frames).
+- ÁUDIO que mantém o sentido: o vídeo é cortado no meio, então as falas são REORDENADAS num monólogo
+  só (`mixar_cena_aiku.py`: cada fala com seu trecho do vídeo, ordem lógica, duck da trilha por
+  baixo, a pausa da trilha caindo antes do DASH e a batida no DASH). A duração da cena nasce da soma
+  das falas: ~22,6s. Se precisar encurtar, tire a 2ª e a 4ª fala (sem elas ~19s).
+- Tempos das falas: ache pelo envelope de energia na faixa 500-3500 Hz (picos > -30 dB) cruzado com a
+  legenda do vídeo; some 0,1s de folga e confira que não pegou a fala de outro personagem.

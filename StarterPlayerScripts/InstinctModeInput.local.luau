@@ -42,6 +42,15 @@ InstinctModeFeedback.OnClientEvent:Connect(function(kind, extra)
 				Duration = 2.5,
 			})
 		end)
+	elseif kind == "FlowPrecisaAdversario" then
+		-- ⚠️ v125: o Flow do Aiku é um duelo — só com um adversário com a bola perto
+		pcall(function()
+			StarterGui:SetCore("SendNotification", {
+				Title = "Flow",
+				Text = "Este Flow é um duelo: um adversário com a bola precisa estar perto de você e da sua área.",
+				Duration = 3,
+			})
+		end)
 	elseif kind == "FlowPrecisaBola" then
 		-- ⚠️ v124: o Flow do Shidou é o próprio chute (Big Bang Drive) — só com a bola
 		pcall(function()

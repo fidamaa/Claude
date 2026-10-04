@@ -2025,10 +2025,38 @@ pcall(function() CosmeticosFlow = require(ReplicatedStorage:WaitForChild("Cosmet
 -- ativar o flow ao mesmo tempo". Uma cena com ChuteNoFlow precisa da bola (o
 -- InstinctController confere antes de gastar o medidor); ela olha pra mira, e no último
 -- quadro a bola sai (Big Bang Drive) e o Flow começa no mesmo instante.
-_G.FlowExigeBola = function(player)
+-- ⚠️ v125 — FLOW DO AIKU. PEDIDO: "a forma de ativar o flow do Aiku é se o inimigo estiver
+-- com a posse da bola perto dele (ele precisa estar próximo da área pra poder ativar)".
+-- Cena com `Duelo`: precisa de um ADVERSÁRIO (jogador) com a bola a até FLOW_DUELO_RAIO studs
+-- e do Aiku a até FLOW_DUELO_AREA studs da PRÓPRIA área. Devolve true, ou false + o aviso
+-- que o cliente mostra (FlowPrecisaBola / FlowPrecisaAdversario). Nada é gasto se falhar.
+local FLOW_DUELO_RAIO = 30
+local FLOW_DUELO_AREA = 45
+local function donoDaBolaJogador()
+	local dono = _G.GetBallOwner and _G.GetBallOwner()
+	if typeof(dono) == "Instance" and dono:IsA("Player") then return dono end
+	return nil
+end
+_G.FlowCondicao = function(player)
 	local item = CosmeticosFlow and (CosmeticosFlow.Equipado(player, "Flow") or CosmeticosFlow.Item("Flow_Isagi"))
 	local spec = item and HissatsuCutscenes[item.Id]
-	return spec ~= nil and spec.ChuteNoFlow == true
+	if not spec then return true end
+	if spec.ChuteNoFlow and donoDaBolaJogador() ~= player then
+		return false, "FlowPrecisaBola" -- (o Flow do Shidou é o próprio chute)
+	end
+	if spec.Duelo then
+		local dono = donoDaBolaJogador()
+		local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+		local donoRoot = dono and dono.Character and dono.Character:FindFirstChild("HumanoidRootPart")
+		if not root or not donoRoot or dono == player then return false, "FlowPrecisaAdversario" end
+		if player.Team and dono.Team and player.Team == dono.Team then return false, "FlowPrecisaAdversario" end
+		if (root.Position - donoRoot.Position).Magnitude > FLOW_DUELO_RAIO then return false, "FlowPrecisaAdversario" end
+		local time = player.Team and player.Team.Name
+		if time and not GKAreaUtil.IsPositionInArea(time, root.Position, true, FLOW_DUELO_AREA) then
+			return false, "FlowPrecisaAdversario"
+		end
+	end
+	return true
 end
 
 -- aimPoint (opcional) = onde ele mirava ao apertar; aoFim (opcional) = o que ativa o Flow,
@@ -2049,6 +2077,17 @@ _G.TocarCenaFlow = function(player, aimPoint, aoFim)
 		LastAimPoint[player] = aimPoint
 	end
 	local alvo = chute and LastAimPoint[player] or nil
+	-- ⚠️ v125 — Flow do Aiku (Duelo): a cena olha pro adversário que está com a bola (que vira
+	-- o personagem extra do duelo); no fim a posse passa pro Aiku
+	local carregador = nil
+	if spec.Duelo == true and ball ~= nil then
+		carregador = donoDaBolaJogador()
+		local cRoot = carregador and carregador.Character and carregador.Character:FindFirstChild("HumanoidRootPart")
+		if not cRoot or carregador == player then
+			return 0 -- sem adversário com a bola: sem cena (o InstinctController nem deixa chegar aqui)
+		end
+		alvo = cRoot.Position
+	end
 	local flat = alvo and Vector3.new(alvo.X - root.Position.X, 0, alvo.Z - root.Position.Z) or nil
 	if not flat or flat.Magnitude < 0.5 then
 		flat = Vector3.new(root.CFrame.LookVector.X, 0, root.CFrame.LookVector.Z)
@@ -2083,7 +2122,9 @@ _G.TocarCenaFlow = function(player, aimPoint, aoFim)
 	-- que pede (CompanheiroAleatorio) recebe um companheiro de time sorteado; sem
 	-- ninguém no time, o cliente usa a sombra.
 	local extras = nil
-	if spec.CompanheiroAleatorio then
+	if carregador then
+		extras = { Companheiros = { carregador } }
+	elseif spec.CompanheiroAleatorio then
 		local mates = {}
 		for _, other in ipairs(Players:GetPlayers()) do
 			if other ~= player and other.Team and other.Team == player.Team
@@ -2127,8 +2168,20 @@ _G.TocarCenaFlow = function(player, aimPoint, aoFim)
 			end
 			root.AssemblyLinearVelocity = Vector3.zero
 		end
-		if chute and ball and ball.Parent then
+		if (chute or carregador) and ball and ball.Parent then
 			ball.CFrame = CFrame.new(startCFrame:PointToWorldSpace(spec.BallPosition(duration, ballLocal)))
+		end
+		-- Duelo: o Aiku termina onde a coreografia termina e o adversário cai onde o dele caiu
+		if carregador and root.Parent then
+			local fim = spec.RootPosition(duration)
+			root.CFrame = startCFrame * CFrame.new(fim.X, math.max(fim.Y, 0), fim.Z)
+			local cRoot = carregador.Character and carregador.Character:FindFirstChild("HumanoidRootPart")
+			if cRoot and cRoot.Parent and spec.Clones then
+				local cf = startCFrame * spec.Clones.CFrame(1, duration)
+				local ponto = Vector3.new(cf.Position.X, startCFrame.Position.Y, cf.Position.Z)
+				cRoot.CFrame = CFrame.lookAt(ponto, Vector3.new(root.Position.X, ponto.Y, root.Position.Z))
+				cRoot.AssemblyLinearVelocity = Vector3.zero
+			end
 		end
 		if ball and ball.Parent then
 			if congelouBola and _G.ReleaseBallFromQTE then
@@ -2138,6 +2191,16 @@ _G.TocarCenaFlow = function(player, aimPoint, aoFim)
 			end
 		end
 		_G.HissatsuCutsceneActive = nil
+		if carregador then
+			-- ⚠️ v125: ele tirou a bola do pé do adversário (que fica atordoado) e deu a volta nele
+			if _G.SetBallOwnerForced then _G.SetBallOwnerForced(player) end
+			if _G.StunPlayer then _G.StunPlayer(carregador, 1.0) end
+			if _G.RegisterTackle then pcall(_G.RegisterTackle, player, carregador) end
+			if aoFim then
+				local okFim, erroFim = pcall(aoFim)
+				if not okFim then warn("[Flow] ativar o Flow no fim da cena falhou: " .. tostring(erroFim)) end
+			end
+		end
 		if chute then
 			-- ⚠️ v124: o Flow começa e o chute sai NO MESMO INSTANTE (o Flow primeiro: os
 			-- atributos dele — Chute +20 — já valem na força do Big Bang Drive)
@@ -2151,7 +2214,7 @@ _G.TocarCenaFlow = function(player, aimPoint, aoFim)
 			if not okChute then warn("[Flow] o chute do Big Bang Drive falhou: " .. tostring(erroChute)) end
 		end
 	end)
-	return duration, chute
+	return duration, chute or carregador ~= nil
 end
 
 -- ⚠️ v103 — CUTSCENE DE DEFESA. PEDIDO: "a Hissatsu de GK e de defensor
