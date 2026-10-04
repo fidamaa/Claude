@@ -6282,13 +6282,16 @@ function E.FlowAiku(ctx)
 			local o = FlowCenaOlhos(head)
 			local brilho = smooth(phase(t, 0.45, 1.0))
 			local fogo = smooth(phase(t, ph.Olho[1], ph.Olho[1] + 0.4)) * (1 - smooth(phase(t, ph.Olho[2] - 0.25, ph.Olho[2])))
-			local flow = smooth(phase(t, ph.Listras[1], ph.Listras[1] + 0.4))
+			-- ⚠️ v126h — PEDIDO: "enquanto ele estiver correndo e o olho ficando verde, ele vai virando
+			-- lentamente, com uma transição, o olho dele já arregalado, já do Flow". Os olhos do Flow
+			-- surgem DEVAGAR durante a corrida inteira (antes: só no começo das listras, em 4.05s).
+			local flow = smooth(phase(t, 0.1, ph.Avanca[2] + 0.15))
 			local tam = ndr(0.1, 0.3, brilho) * (1 + 0.5 * fogo)
 			for i, e in ipairs(olhosNeon) do
 				e.Size = V3(tam, tam * 0.55, 0.08)
 				e.CFrame = head.CFrame * CFrame.new(o[i])
 				e.Color = (i == 1) and VERDE or rgb(120, 190, 255)
-				e.Transparency = (t >= 0.45 and flow < 0.5) and (1 - math.max(brilho * 0.9, fogo)) or 1
+				e.Transparency = (t >= 0.45) and (1 - math.max(brilho * 0.9 * (1 - flow), fogo)) or 1
 			end
 			for i, f in ipairs(fogoOlho) do
 				f.Rate = (t >= ph.Olho[1] and t < ph.Olho[2]) and 55 * fogo or 0

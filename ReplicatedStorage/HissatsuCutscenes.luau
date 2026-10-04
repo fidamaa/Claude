@@ -3675,9 +3675,15 @@ do
 		-- ⚠️ v126g — PEDIDO: "quando falar DASH, o inimigo tem que tentar driblar ele pra esquerda,
 		-- que é o dash que o cara selecionou" (o Aiku lê e chega antes)
 		{ 9.2, V3(0.7, 0, -7.4) }, { 17.3, V3(0.7, 0, -7.4) }, { 17.7, V3(-0.4, 0, -7.2) }, { 18, V3(-1.0, 0, -7.0) },
-		{ 18.7, V3(-0.9, -0.1, -6.6) }, { 19.7, V3(0.2, -0.7, -6.0) }, { 21, V3(0.1, -0.9, -6.2) }, { 22.6, V3(0.1, -0.9, -6.2) },
+		-- ⚠️ v126h — PEDIDO: "o cara tá caindo reto, em T-pose, com o braço aberto. Tem que cair e
+		-- ficar ali embaixo, como ragdoll, deitado no chão: perdeu a bola, caiu e ficou desnorteado"
+		{ 18.55, V3(-1.0, -0.2, -6.9) }, { 18.95, V3(-1.1, -2.2, -7.4) }, { 19.1, V3(-1.1, -1.9, -7.5) },
+		{ 19.3, V3(-1.1, -2.45, -7.55) }, { 22.6, V3(-1.1, -2.45, -7.55) },
 	}
-	local FA_RIN_YAW = { { 0, 180 }, { 18, 180 }, { 19.7, 215 }, { 21, 245 }, { 22.6, 245 } }
+	local FA_RIN_YAW = { { 0, 180 }, { 18, 180 }, { 19.0, 196 }, { 22.6, 200 } }
+	-- (v126h) cai DE COSTAS (pitch positivo no corpo = a cabeça vai pra trás, longe do Aiku), quica e fica deitado
+	local FA_RIN_PITCH = { { 0, 0 }, { 18.25, 0 }, { 18.55, 22 }, { 18.95, 84 }, { 19.1, 74 }, { 19.3, 88 }, { 22.6, 88 } }
+	local FA_RIN_ROLL = { { 0, 0 }, { 18.25, 0 }, { 18.95, 14 }, { 19.3, 10 }, { 22.6, 10 } }
 	local function rinPos(t) return sampleFluido(FA_RIN, t) end
 
 	-- ===== o AIKU =====
@@ -3737,8 +3743,8 @@ do
 		{ 2.25, { Root = { -14, 0, 0 }, Neck = { 20, 0, 0 }, RHip = { 36, 0, 14 }, LHip = { -8, 0, -16 }, RShoulder = { -28, 0, 52 }, LShoulder = { -28, 0, -52 } } },
 		{ 4.05, { Root = { -12, 0, 0 }, Neck = { 22, 0, 0 }, RHip = { 34, 0, 14 }, LHip = { -6, 0, -16 }, RShoulder = { -26, 0, 54 }, LShoulder = { -26, 0, -54 } } },
 		-- Listras: correndo de perfil (ciclo por cima)
-		{ 4.51, { Root = { -26, 0, 0 }, Neck = { 18, 0, 0 }, RHip = { 14, 0, 6 }, LHip = { 8, 0, -6 }, RShoulder = { -30, 0, 28 }, LShoulder = { 20, 0, -28 } } },
-		{ 6.69, { Root = { -28, 0, 0 }, Neck = { 18, 0, 0 }, RHip = { 14, 0, 6 }, LHip = { 8, 0, -6 }, RShoulder = { -30, 0, 28 }, LShoulder = { 20, 0, -28 } } },
+		{ 4.51, { Root = { -16, 0, 0 }, Neck = { 22, 0, 0 }, RHip = { 34, 0, 16 }, LHip = { -6, 0, -18 }, RShoulder = { -26, 0, 56 }, LShoulder = { -26, 0, -56 } } },
+		{ 6.69, { Root = { -18, 0, 0 }, Neck = { 22, 0, 0 }, RHip = { 36, 0, 16 }, LHip = { -6, 0, -18 }, RShoulder = { -26, 0, 58 }, LShoulder = { -26, 0, -58 } } },
 		-- Bola: agacha e estica o braço (a manopla preta) em direção à bola
 		{ 7.6, { Root = { -20, 0, 0 }, Neck = { 28, 0, 0 }, RHip = { 34, 0, 18 }, LHip = { 20, 0, -18 }, RShoulder = { 80, 0, 12 }, LShoulder = { -34, 0, -55 } } },
 		{ 9.25, { Root = { -18, 0, 0 }, Neck = { 26, 0, 0 }, RHip = { 34, 0, 18 }, LHip = { 20, 0, -18 }, RShoulder = { 84, 0, 10 }, LShoulder = { -34, 0, -56 } } },
@@ -3768,8 +3774,8 @@ do
 		local corre = 0
 		if t < 1 then
 			corre = 1
-		elseif t >= 4.05 and t < 7.15 then
-			corre = smooth(phase(t, 4.05, 4.41)) * (1 - smooth(phase(t, 6.79, 7.15)))
+		-- (⚠️ v126h — PEDIDO: "ainda tem cenas que ele corre onde não precisava; faz ele correr só
+		-- uma vez": nas listras ele fica firme, agachado, as listras é que passam)
 		elseif t >= 19.75 and t < 20.65 then
 			corre = smooth(phase(t, 19.75, 19.9)) * (1 - smooth(phase(t, 20.3, 20.65)))
 		end
@@ -3791,17 +3797,32 @@ do
 		Contorno = { Fill = 1, Outline = rgb(120, 190, 255), OutlineTransp = 0.75 },
 		CFrame = function(_i, t)
 			local pos = rinPos(t)
-			return CFrame.new(pos) * CFrame.Angles(rad(sample({ { 0, 0 }, { 18, 0 }, { 18.7, 18 }, { 19.7, 42 }, { 22.6, 48 } }, t)), rad(sample(FA_RIN_YAW, t)), 0)
+			return CFrame.new(pos) * CFrame.Angles(0, rad(sample(FA_RIN_YAW, t)), 0)
+				* CFrame.Angles(rad(sample(FA_RIN_PITCH, t)), 0, rad(sample(FA_RIN_ROLL, t)))
 		end,
 		Pose = function(_i, t)
 			local anda = (t < 2.25) and 1 or ((t < 4.05) and (1 - smooth(phase(t, 2.25, 4.05))) or 0)
 			local s = math.sin(t * 9)
 			local toque = (t >= 4.05 and t < 18) and math.sin(t * 2.2) or 0
+			if t >= 18.25 then
+				-- (v126h) perdeu a bola: os braços sobem na queda (sem T-pose), bate de costas e fica
+				-- largado no chão feito ragdoll — pernas tortas, um braço caído pro lado, a cabeça
+				-- balançando devagar (desnorteado)
+				local q = smooth(phase(t, 18.25, 18.9))
+				local c = smooth(phase(t, 18.9, 19.3))
+				local tonto = (t >= 19.3) and math.sin(t * 2.6) or 0
+				return {
+					Root = { 0, 0, 0 },
+					Neck = { -12 * c, 20 * c + 14 * tonto, 6 * tonto },
+					RShoulder = { 110 * q - 70 * c, 0, 25 * q + 35 * c },
+					LShoulder = { 140 * q - 120 * c, 0, -20 * q - 10 * c },
+					RHip = { 35 * q - 15 * c, 0, 6 + 14 * c },
+					LHip = { 10 * q + 35 * c, 0, -4 - 10 * c },
+				}
+			end
 			if t >= 18 then
-				-- perdeu a bola: tropeça, braços abertos, vai ao chão de joelhos
-				local u = smooth(phase(t, 18.25, 19.7))
-				return { Root = { -10 - 25 * u, 0, 0 }, Neck = { 10, 0, 0 }, RHip = { 20 + 60 * u, 0, 8 }, LHip = { -10 + 50 * u, 0, -8 },
-					RShoulder = { 20, 0, 60 + 40 * u }, LShoulder = { 20, 0, -60 - 40 * u } }
+				return { Root = { -10, 0, 0 }, Neck = { 10, 0, 0 }, RHip = { 20, 0, 8 }, LHip = { -10, 0, -8 },
+					RShoulder = { 20, 0, 40 }, LShoulder = { 20, 0, -40 } }
 			end
 			return { Root = { -8, 0, 0 }, Neck = { 6, 0, 0 },
 				RHip = { 34 * s * anda + 8 * toque, 0, 5 }, LHip = { -34 * s * anda - 8 * toque, 0, -5 },
