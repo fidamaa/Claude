@@ -3672,22 +3672,28 @@ do
 	-- cambaleia (perdeu a bola).
 	local FA_RIN = {
 		{ 0, V3(0.9, 0, -14.5) }, { 1, V3(0.9, 0, -11) }, { 2.25, V3(0.8, 0, -8.4) }, { 4.05, V3(0.7, 0, -7.7) },
-		{ 9.2, V3(0.7, 0, -7.4) }, { 17.3, V3(0.7, 0, -7.4) }, { 18, V3(0.7, 0, -7.3) },
-		{ 18.7, V3(0.6, -0.1, -6.8) }, { 19.7, V3(0.2, -0.7, -6.0) }, { 21, V3(0.1, -0.9, -6.2) }, { 22.6, V3(0.1, -0.9, -6.2) },
+		-- ⚠️ v126g — PEDIDO: "quando falar DASH, o inimigo tem que tentar driblar ele pra esquerda,
+		-- que é o dash que o cara selecionou" (o Aiku lê e chega antes)
+		{ 9.2, V3(0.7, 0, -7.4) }, { 17.3, V3(0.7, 0, -7.4) }, { 17.7, V3(-0.4, 0, -7.2) }, { 18, V3(-1.0, 0, -7.0) },
+		{ 18.7, V3(-0.9, -0.1, -6.6) }, { 19.7, V3(0.2, -0.7, -6.0) }, { 21, V3(0.1, -0.9, -6.2) }, { 22.6, V3(0.1, -0.9, -6.2) },
 	}
 	local FA_RIN_YAW = { { 0, 180 }, { 18, 180 }, { 19.7, 215 }, { 21, 245 }, { 22.6, 245 } }
 	local function rinPos(t) return sampleFluido(FA_RIN, t) end
 
 	-- ===== o AIKU =====
 	local FA_POS = {
-		{ 0, V3(0, 0, 0) }, { 1, V3(0.1, 0, -2.2) }, { 2.25, V3(0.2, 0, -2.7) }, { 4.05, V3(0.2, -0.1, -2.75) },
+		-- ⚠️ v126g — PEDIDO: "no início faz ele estar mais longe do atacante, porque ele está
+		-- correndo pra se aproximar" (começa 6 studs mais atrás)
+		{ 0, V3(0, 0, 6) }, { 0.5, V3(0.05, 0, 1.6) }, { 1, V3(0.1, 0, -2.2) }, { 2.25, V3(0.2, 0, -2.7) }, { 4.05, V3(0.2, -0.1, -2.75) },
 		{ 7.15, V3(0.4, 0, -3.4) }, { 9.25, V3(0.3, -0.3, -3.0) }, { 17.3, V3(0.3, -0.3, -3.0) },
-		{ 17.6, V3(0.5, -0.5, -3.5) }, { 18, V3(0.9, -0.2, -5.5) }, { 18.6, V3(0.9, -0.35, -5.9) },
-		{ 19.2, V3(1.9, -1.7, -6.9) }, { 19.7, V3(2.4, -1.6, -7.4) }, { 20, V3(2.9, -0.4, -8.3) },
-		{ 20.4, V3(2.0, 0, -9.7) }, { 20.8, V3(0.9, 0, -9.6) }, { 22.6, V3(0.9, 0, -9.6) },
+		-- (v126g: o bote vai pra ESQUERDA, onde o adversário levou a bola; a volta é mais rápida —
+		-- PEDIDO: "acelera um pouco mais essa pegada de bola pra driblar o cara")
+		{ 17.6, V3(0.1, -0.5, -3.6) }, { 18, V3(-1.1, -0.2, -5.3) }, { 18.6, V3(-1.0, -0.35, -5.7) },
+		{ 19.2, V3(1.0, -1.7, -6.8) }, { 19.6, V3(2.2, -1.6, -7.4) }, { 19.85, V3(2.9, -0.4, -8.3) },
+		{ 20.1, V3(2.0, 0, -9.7) }, { 20.35, V3(0.9, 0, -9.6) }, { 22.6, V3(0.9, 0, -9.6) },
 	}
 	local FA_YAW = {
-		{ 0, 0 }, { 18.6, 0 }, { 19.2, -40 }, { 19.7, -22 }, { 20, -10 }, { 20.4, 45 }, { 20.8, 12 }, { 21.11, 0 }, { 22.6, 0 },
+		{ 0, 0 }, { 18.6, 0 }, { 19.2, -40 }, { 19.6, -22 }, { 19.85, -10 }, { 20.1, 45 }, { 20.35, 12 }, { 20.6, 0 }, { 22.6, 0 },
 	}
 	-- o split: o corpo cai pra trás (pitch) enquanto desliza
 	local FA_PITCH = { { 0, 0 }, { 18.6, 0 }, { 19.05, 36 }, { 19.7, 28 }, { 20.15, 0 }, { 22.6, 0 } }
@@ -3708,19 +3714,19 @@ do
 			local quica = (t < 4.05) and math.abs(math.sin(t * 5)) * 0.18 or 0
 			return V3(rp.X - 0.25, g + quica, rp.Z + 1.05)
 		elseif t < FA.ImpactTime then
-			return V3(0.45, g, rinPos(18).Z + 1.1)
+			return V3(rinPos(18).X - 0.25, g, rinPos(18).Z + 1.05)
 		elseif t < 19.1 then
 			-- a bota arranca: sobe devagar (câmera lenta) por cima do adversário
 			local u = smooth(phase(t, FA.ImpactTime, 19.1))
-			return V3(0.45, g, rinPos(18).Z + 1.1):Lerp(V3(1.9, g + 3.4, -8.1), u)
-		elseif t < 20.45 then
-			local u = easeOut(phase(t, 19.1, 20.45))
+			return V3(rinPos(18).X - 0.25, g, rinPos(18).Z + 1.05):Lerp(V3(1.9, g + 3.4, -8.1), u)
+		elseif t < 20.15 then
+			local u = easeOut(phase(t, 19.1, 20.15))
 			return V3(1.9, g + 3.4, -8.1):Lerp(V3(0.9, g, -10.1), u) + V3(0, math.sin(u * math.pi) * 0.9, 0)
 		end
 		return V3(0.9, g, -10.5) -- no pé dele, na frente (rumo ao gol adversário)
 	end
 	function FA.BallVisible(_t) return true end
-	function FA.BallSpin(t) return (t >= FA.ImpactTime and t < 20.45) and 4 or 1.5 end
+	function FA.BallSpin(t) return (t >= FA.ImpactTime and t < 20.15) and 4 or 1.5 end
 
 	-- poses do Aiku (R6: braço/perna RETOS; |rz| >= 40 em movimento; Root rx+ inclina pra trás)
 	local FA_POSE = {
@@ -3750,8 +3756,8 @@ do
 		{ 19.2, { Root = { 10, 0, 0 }, Neck = { -6, 0, 0 }, RHip = { 14, 0, 70 }, LHip = { 8, 0, -74 }, RShoulder = { 10, 0, 104 }, LShoulder = { 10, 0, -104 } } },
 		{ 19.7, { Root = { 12, 0, 0 }, Neck = { -4, 0, 0 }, RHip = { 14, 0, 72 }, LHip = { 8, 0, -76 }, RShoulder = { 12, 0, 106 }, LShoulder = { 12, 0, -106 } } },
 		-- Volta: levanta e corre em arco (ciclo por cima)
-		{ 20.05, { Root = { -22, 0, 0 }, Neck = { 14, 0, 0 }, RHip = { 40, 0, 10 }, LHip = { -26, 0, -10 }, RShoulder = { -40, 0, 40 }, LShoulder = { 34, 0, -40 } } },
-		{ 20.8, { Root = { -14, 0, 0 }, Neck = { 12, 0, 0 }, RHip = { 30, 0, 10 }, LHip = { -12, 0, -10 }, RShoulder = { -26, 0, 36 }, LShoulder = { 22, 0, -36 } } },
+		{ 19.85, { Root = { -22, 0, 0 }, Neck = { 14, 0, 0 }, RHip = { 40, 0, 10 }, LHip = { -26, 0, -10 }, RShoulder = { -40, 0, 40 }, LShoulder = { 34, 0, -40 } } },
+		{ 20.4, { Root = { -14, 0, 0 }, Neck = { 12, 0, 0 }, RHip = { 30, 0, 10 }, LHip = { -12, 0, -10 }, RShoulder = { -26, 0, 36 }, LShoulder = { 22, 0, -36 } } },
 		-- Olho2: de pé, a bola no pé, sorrindo, cabeça erguida
 		{ 21.32, { Root = { -4, 0, 0 }, Neck = { 12, 0, 0 }, RHip = { 8, 0, 8 }, LHip = { 2, 0, -8 }, RShoulder = { -8, 0, 30 }, LShoulder = { -8, 0, -30 } } },
 		{ 22.6, { Root = { -3, 0, 0 }, Neck = { 14, 0, 0 }, RHip = { 8, 0, 8 }, LHip = { 2, 0, -8 }, RShoulder = { -8, 0, 32 }, LShoulder = { -8, 0, -32 } } },
@@ -3764,8 +3770,8 @@ do
 			corre = 1
 		elseif t >= 4.05 and t < 7.15 then
 			corre = smooth(phase(t, 4.05, 4.41)) * (1 - smooth(phase(t, 6.79, 7.15)))
-		elseif t >= 20 and t < 21 then
-			corre = smooth(phase(t, 20, 20.2)) * (1 - smooth(phase(t, 20.6, 21)))
+		elseif t >= 19.75 and t < 20.65 then
+			corre = smooth(phase(t, 19.75, 19.9)) * (1 - smooth(phase(t, 20.3, 20.65)))
 		end
 		if corre > 0 then
 			local s = math.sin(t * 13)
