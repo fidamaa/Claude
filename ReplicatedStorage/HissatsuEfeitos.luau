@@ -5911,7 +5911,8 @@ function E.FlowAiku(ctx)
 			a.Parent = head
 			local e = prender(emissor(a, {
 				Textura = TEX.Fogo, Cor = cores({ { 0, rgb(255, 255, 150) }, { 0.45, rgb(150, 255, 90) }, { 1, rgb(10, 120, 40) } }), Brilho = 1,
-				Tamanho = numeros({ { 0, 0.7 }, { 0.5, 1.1 }, { 1, 0.1 } }), Transp = numeros({ { 0, 0.15 }, { 1, 1 } }),
+				-- (v126f: menor — com a câmera a ~4 studs o fogo de 1.1 cobria o rosto inteiro)
+				Tamanho = numeros({ { 0, 0.3 }, { 0.5, 0.5 }, { 1, 0.05 } }), Transp = numeros({ { 0, 0.15 }, { 1, 1 } }),
 				Vida = { 0.3, 0.55 }, Vel = { 0.5, 2 }, Spread = 40, Direcao = Enum.NormalId.Front, Travado = true,
 			}))
 			e.Rate = 0
@@ -6071,8 +6072,9 @@ function E.FlowAiku(ctx)
 		table.insert(paineis, p)
 	end
 	-- E (6.95-9.05): os dois painéis perto da bola (a onda e o radar)
-	addPainel(1, ph.Bola[1] + 0.15, function(bola) return bola + R * -1.9 + U * 1.0 - F * 0.2 end)
-	addPainel(2, ph.Bola[1] + 0.35, function(bola) return bola + R * 2.0 + U * 0.6 + F * 0.7 end)
+	-- (v126f: em cima da bola, um de cada lado — na frente da câmera eles tampavam a bola)
+	addPainel(1, ph.Bola[1] + 0.15, function(bola) return bola - F * 1.0 + U * 2.3 - R * 0.4 end)
+	addPainel(2, ph.Bola[1] + 0.35, function(bola) return bola + F * 1.6 + U * 2.1 - R * 0.4 end)
 	-- F (9.05-13.55): ele "enxerga" o adversário: os painéis se multiplicam em volta do domo
 	do
 		local rng = Random.new(77)
@@ -6081,7 +6083,8 @@ function E.FlowAiku(ctx)
 			local raio = 4.8 + rng:NextNumber(-0.4, 1.4)
 			local alt = rng:NextNumber(-0.2, 3.2)
 			addPainel((i % 3) + 1, ph.Domo[1] + 0.3 + (i - 1) * 0.38, function(_bola, rp)
-				return rp + (R * math.sin(ang) - F * math.cos(ang)) * raio * 1.1 + U * alt
+				-- (v126f: do lado de LÁ do adversário — do lado de cá tampavam o Aiku visto de trás)
+				return rp + (R * math.sin(ang) + F * math.cos(ang)) * raio * 1.1 + U * alt
 			end)
 		end
 	end
@@ -6292,11 +6295,12 @@ function E.FlowAiku(ctx)
 			end
 			if t >= ph.Olho[2] - 0.5 and not jaFlash.estouroOlho then
 				jaFlash.estouroOlho = true
-				for _, f in ipairs(fogoOlho) do f:Emit(70) end
+				for _, f in ipairs(fogoOlho) do f:Emit(35) end
 			end
 			if olhosFlow then olhosFlow.Definir(flow) end
 		end
-		cabeloTransp((t >= ph.Olho[1] and t < ph.Olho[2]) and 0.6 or 0)
+		-- (v126f: só um pouco — a franja não esconde o olho nos dois closes, mas o cabelo continua lá)
+		cabeloTransp(((t >= ph.Olho[1] and t < ph.Olho[2]) or t >= ph.Olho2[1]) and 0.3 or 0)
 
 		-- A-B: anéis de radar e linhas no chão em volta da bola (vídeo 13.0-14.2s)
 		if t >= ph.Radar[1] and t < ph.Olho[1] and t >= proxRadar then
@@ -6459,6 +6463,12 @@ function E.FlowAiku(ctx)
 
 	-- CÂMERA em coordenadas de MUNDO (segue o corpo, a bola e o adversário de verdade)
 	local function cam(pos, alvo, fov) return CFrame.lookAt(pos, alvo), fov end
+	-- ⚠️ v126f — PEDIDO: "tem uns closes meio estranhos que a gente já tinha desfeito nas outras
+	-- coisas... lembra dos padrões que a gente fez". A versão da nuvem punha a câmera a 1.5-2
+	-- studs do corpo (no R6 o braço enchia a tela e o close do olho ficava DENTRO do cabelo).
+	-- Padrão das outras cenas: corpo inteiro ~10 studs, plano médio ~6, rosto ~4 (FOV 30-34);
+	-- nada de câmera colada no olho. Os planos seguem o vídeo (12s, 13s, 14.4s, 17s, 32s, 33s,
+	-- 56s, 57s, 58.4s, 59.4s, 60s, 62s).
 	function efeitos.CameraMundo(t)
 		if not head then return nil end
 		local raiz = ctx.Root.Position
@@ -6467,6 +6477,7 @@ function E.FlowAiku(ctx)
 		local chao = gy()
 		local hp = head.Position
 		local Lh = head.CFrame.LookVector
+		local Rh = head.CFrame.RightVector
 		local o = FlowCenaOlhos(head)
 		local olhoE = head.CFrame:PointToWorldSpace(o[1]) -- esquerdo (verde)
 		local olhoD = head.CFrame:PointToWorldSpace(o[2]) -- direito (azul)
@@ -6474,76 +6485,81 @@ function E.FlowAiku(ctx)
 		local rasante = V3(bola.X, chao + 0.5, bola.Z)
 
 		if t < ph.Avanca[2] then
-			-- A: perfil dele correndo (câmera acompanha pelo lado direito)
+			-- A (vídeo 12.0s): 3/4 de frente, baixa: ele vem agachado na direção da câmera e o
+			-- olho começa a ficar verde; a câmera recua junto (corpo inteiro)
 			local u = smooth(phase(t, 0, ph.Avanca[2]))
-			return cam(raiz + R * ndr(5.4, 4.2, u) + U * 0.3 - F * 0.4, raiz + U * 0.5 + F * 1.6, ndr(46, 52, u))
+			return cam(raiz + F * ndr(8.5, 7.0, u) + R * 4.2 + U * 0.2, raiz + U * ndr(0.4, 0.9, u), ndr(50, 44, u))
 		elseif t < ph.Olho[1] then
-			-- B: no chão, de lado: o pé dele à esquerda, as pernas do adversário à direita e a bola
+			-- B (13.0-14.2s): rente ao chão, de lado: o pé dele à esquerda, as pernas do adversário
+			-- à direita, a bola no meio e os anéis de radar abrindo no gramado
 			local u = smooth(phase(t, ph.Radar[1], ph.Radar[2]))
-			return cam(rasante + R * ndr(3.4, 2.6, u), rasante + U * 0.3, ndr(56, 48, u))
+			return cam(rasante + R * ndr(6.5, 5.6, u) - F * 0.6 + U * 0.25, rasante + U * 0.5 - F * 0.4, ndr(58, 52, u))
 		elseif t < ph.Listras[1] then
-			-- C: close no olho, de LADO (o direito): o fogo verde sobe e estoura
+			-- C (14.4-17.0s): o rosto DE PERFIL (lado direito), cabeça e ombro no quadro; o fogo
+			-- verde no olho sobe e estoura. Aproxima devagar, sem colar.
 			local u = smooth(phase(t, ph.Olho[1], ph.Listras[1]))
-			return cam(olhoD + R * ndr(1.7, 1.15, u) + F * 0.12, olhoD, ndr(30, 24, u))
+			local alvo = hp + Lh * 0.35 + U * 0.05
+			return cam(alvo + Rh * ndr(2.7, 2.3, u) + Lh * ndr(2.9, 2.5, u) + U * 0.3, alvo, ndr(34, 30, u))
 		elseif t < ph.Bola[1] then
-			-- D: de perfil/frente-direita, correndo: as listras passam em volta e pela câmera
+			-- D (17.2-19.0s): de perfil, correndo, peito pra cima: as listras de luz passam em
+			-- volta dele (atrás e na frente da câmera) e os olhos do Flow acendem
 			local u = smooth(phase(t, ph.Listras[1], ph.Listras[2]))
-			return cam(raiz + R * ndr(3.6, 3.0, u) + F * ndr(2.8, 2.2, u) + U * 0.2, raiz + U * 0.45 - F * 0.2, ndr(52, 58, u))
+			return cam(raiz + R * ndr(6.2, 5.0, u) + F * ndr(1.6, 1.0, u) + U * 1.0, raiz + U * 1.0 + F * 0.4, ndr(50, 46, u))
 		elseif t < ph.Domo[1] then
-			-- E: por cima do ombro dele, olhando a bola no pé do adversário (o braço dele na frente)
+			-- E (32.2-32.8s): a bola no pé do adversário, os painéis de dados dos dois lados.
+			-- Do lado dele, um pouco acima, olhando a bola e as pernas do adversário.
 			local u = smooth(phase(t, ph.Bola[1], ph.Bola[2]))
-			return cam(raiz - R * 0.55 + U * ndr(2.5, 2.1, u) - F * ndr(0.6, 0.2, u), bola + U * 0.1, ndr(56, 50, u))
+			-- (de lado e baixo, longe dos dois: por cima do ombro o braço dele e a perna do adversário
+			-- enchiam a tela; os painéis ficam EM CIMA da bola)
+			return cam(bola + R * ndr(7.6, 6.8, u) + U * ndr(1.6, 1.3, u) - F * 0.4, bola + U * 1.1 + F * 0.2, ndr(52, 48, u))
 		elseif t < ph.Rosto[1] then
-			-- F1: de trás e do lado dele: o domo ao redor do adversário; gira devagar
-			-- F2 (corte): bem perto, por cima do ombro direito, empurrando pro domo enquanto
-			-- os painéis se multiplicam
-			local corte = ph.Domo[1] + 2.4
-			if t < corte then
-				local u = smooth(phase(t, ph.Domo[1], corte))
-				local v0 = (raiz - R * 1.9 - F * 4.2 + U * 0.6) - rp
-				local giro = CFrame.fromAxisAngle(U, math.rad(-30 * u))
-				return cam(rp + giro:VectorToWorldSpace(v0) * ndr(1, 0.9, u), rp + U * ndr(1.0, 0.9, u), ndr(54, 50, u))
-			end
-			local u = smooth(phase(t, corte, ph.Domo[2]))
-			return cam(raiz + R * ndr(1.8, 1.4, u) - F * ndr(2.0, 1.2, u) + U * ndr(1.1, 0.9, u), rp + U * ndr(1.0, 1.4, u), ndr(48, 40, u))
+			-- F (33.0-37s): de TRÁS dele, agachado: o domo azul em volta do adversário e os
+			-- painéis se multiplicando. Gira devagar pro lado; depois chega por cima do ombro.
+			-- (um plano só, empurrando devagar: o corte por cima do ombro ficava atrás dos painéis)
+			local u = smooth(phase(t, ph.Domo[1], ph.Domo[2]))
+			local giro = CFrame.fromAxisAngle(U, math.rad(ndr(-16, 12, u)))
+			local v0 = (-F * 7.5 + R * 2.4 + U * 2.8) * ndr(1, 0.8, u)
+			return cam(raiz + giro:VectorToWorldSpace(v0), rp + U * 1.6, ndr(58, 52, u))
 		elseif t < ph.Setas[1] then
-			-- Rosto: de frente, o rosto tenso (de dia)
+			-- Rosto (56.0-56.5s): de frente, cabeça e ombros, tenso e suando (de dia)
 			local u = smooth(phase(t, ph.Rosto[1], ph.Setas[1]))
-			return cam(meio + Lh * ndr(2.6, 2.1, u) + R * 0.2 - U * 0.05, meio, ndr(40, 34, u))
+			-- (3/4 e a ~3.3 studs: de frente e mais longe a câmera caía dentro do adversário)
+			return cam(meio + Lh * ndr(2.8, 2.5, u) + Rh * ndr(1.9, 1.6, u) - U * 0.1, meio - U * 0.25, ndr(36, 33, u))
 		elseif t < ph.Dash[1] then
-			-- Setas: de cima da bola (a bota do adversário aparece no alto)
+			-- Setas (57-58.2s): de cima da bola, alto o bastante pra ver os pés dos dois em volta
 			local u = smooth(phase(t, ph.Setas[1], ph.Setas[2]))
-			return cam(bola + U * ndr(3.9, 3.5, u) - F * 0.7, bola, 46)
+			return cam(bola + U * ndr(7.0, 6.2, u) - F * 1.2, bola, 50)
 		elseif t < ph.Bota[1] then
-			-- Dash: a câmera cai sobre a bola e a bola foge pro lado
+			-- Dash (58.4-59.2s): de lado e baixa, ele dispara pra bola (por cima a câmera caía na
+			-- cabeça do adversário)
 			local u = smooth(phase(t, ph.Dash[1], ph.Dash[2]))
-			return cam(bola + U * ndr(3.4, 2.4, u) - F * ndr(0.8, 1.6, u), bola, ndr(48, 58, u))
+			local meioDash = (raiz + bola) / 2
+			return cam(meioDash + R * ndr(8.0, 6.8, u) + U * 1.2 - F * 0.6, meioDash + U * 0.5, ndr(54, 60, u))
 		elseif t < ph.Split[1] then
-			-- Bota: no chão, de lado: a chuteira dele por baixo da bola, a perna do adversário à direita
+			-- Bota (59.4-59.8s): rente ao chão, de lado: a chuteira dele por baixo da bola e a perna
+			-- do adversário (perto, mas sem o pé encher a tela)
 			local u = smooth(phase(t, ph.Bota[1], ph.Bota[2]))
-			local ponto = V3(bola.X, chao + 0.45, bola.Z)
-			return cam(ponto + R * ndr(3.2, 2.5, u), ponto + U * 0.15, ndr(52, 44, u))
+			local ponto = V3(bola.X, chao + 0.5, bola.Z)
+			return cam(ponto + R * ndr(7.2, 6.4, u) - F * 0.8 + U * 0.35, ponto + U * 0.7, ndr(50, 44, u))
 		elseif t < ph.Volta[1] then
-			-- Split (câmera lenta): de baixo, ele aberto no ar, a bola subindo
+			-- Split (CÂMERA LENTA, 60.0-61.8s): de baixo e de lado, ele aberto no ar e a bola subindo
 			local u = smooth(phase(t, ph.Split[1], ph.Split[2]))
-			return cam(V3(raiz.X, chao + 0.3, raiz.Z) - F * ndr(4.6, 3.6, u) - R * ndr(3.4, 2.2, u), raiz + U * ndr(0.6, 0.9, u), ndr(66, 58, u))
+			-- (do lado DIREITO dele: do esquerdo a câmera caía dentro do adversário; mira mais pra
+			-- cima pra pegar o céu atrás dele)
+			return cam(V3(raiz.X, chao + 0.25, raiz.Z) + R * ndr(5.2, 4.4, u) + F * ndr(1.2, 0.7, u), raiz + U * ndr(1.8, 2.2, u), ndr(62, 56, u))
 		elseif t < ph.Olho2[1] then
-			-- Volta (rápido): alta e atrás, acompanha ele dando a volta e pegando a bola
+			-- Volta (rápida, sem câmera lenta): aberta, de lado e um pouco alta — os dois inteiros,
+			-- ele contornando o adversário e pegando a bola
 			local u = smooth(phase(t, ph.Volta[1], ph.Volta[2]))
 			local meioDois = (raiz + rp) / 2
-			return cam(meioDois + R * ndr(2.5, 3.5, u) + U * ndr(4.6, 3.8, u) + F * ndr(5.2, 4.2, u), meioDois + U * 0.8 - F * 0.5, 58)
+			return cam(meioDois + R * ndr(11, 10, u) + U * ndr(3.6, 3.0, u) - F * ndr(1.0, 2.0, u), meioDois + U * 0.6, ndr(56, 52, u))
 		end
-		-- Olho2: o sorriso e depois o OLHO DO FLOW (o esquerdo, verde) em close; a íris gira
+		-- Olho2 (61.8-65s): o sorriso (cabeça e ombros) e então chega nos OLHOS DO FLOW (o verde do
+		-- lado esquerdo dele um pouco mais no centro) — perto, mas a cabeça inteira no quadro
 		local u = smooth(phase(t, ph.Olho2[1], ph.Olho2[2]))
-		if t < ph.Olho2[1] + 0.35 then
-			local boca = hp - U * (head.Size.Y * 0.3)
-			return cam(boca + Lh * 1.7 + R * 0.15, boca, 28)
-		end
-		local k = smooth(phase(t, ph.Olho2[1] + 0.35, ph.Olho2[1] + 0.8))
-		local alvo = ndr(1, 0, k)
-		local pos = olhoE + Lh * ndr(1.9, 1.15, u) + R * -0.15
-		local ponto = (hp - U * (head.Size.Y * 0.3)):Lerp(olhoE, 1 - alvo)
-		return cam(pos, ponto, ndr(30, 22, u))
+		local k = smooth(phase(t, ph.Olho2[1] + 0.35, ph.Olho2[1] + 0.9))
+		local alvo = (meio - U * 0.3):Lerp(meio:Lerp(olhoE, 0.35), k)
+		return cam(alvo + Lh * ndr(4.4, 3.2, u) - Rh * 0.25 + U * 0.05, alvo, ndr(34, 27, u))
 	end
 
 	return efeitos

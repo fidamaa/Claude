@@ -676,7 +676,7 @@ local function tocarCutsceneV2(spec, chutador, inicio, bolaLocal, horarioServido
 	end
 
 	-- tremida extra pedida pelos efeitos (ex.: o raio caindo)
-	local tremidaExtra, tremidaFim = 0, 0
+	local tremidaExtra, tremidaFim, tremidaDur = 0, 0, 0
 	local tAtual = 0
 	local ctx = {
 		Spec = spec, Pasta = pasta, Inicio = inicio, Mundo = mundo,
@@ -694,6 +694,7 @@ local function tocarCutsceneV2(spec, chutador, inicio, bolaLocal, horarioServido
 		Tremer = function(forca, duracao)
 			tremidaExtra = forca
 			tremidaFim = tAtual + duracao
+			tremidaDur = duracao
 		end,
 	}
 	local efeitos = nil
@@ -951,7 +952,9 @@ local function tocarCutsceneV2(spec, chutador, inicio, bolaLocal, horarioServido
 		if t >= spec.ImpactTime and not spec.SemTremidaImpacto then
 			forca = 0.7 * (1 - Cutscenes.Phase(t, spec.ImpactTime, spec.Duration))
 		end
-		if t < tremidaFim then
+		-- (v126f: voltar o tempo do debug depois de um Tremer dava tremida de dezenas de studs —
+		-- o que falta nunca passa da duração pedida)
+		if t < tremidaFim and tremidaFim - t <= tremidaDur then
 			forca = math.max(forca, tremidaExtra * (tremidaFim - t) / 0.3)
 		end
 		local tremida = Vector3.zero
