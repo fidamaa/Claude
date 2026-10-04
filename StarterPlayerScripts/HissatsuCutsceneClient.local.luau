@@ -774,6 +774,22 @@ local function tocarCutsceneV2(spec, chutador, inicio, bolaLocal, horarioServido
 			if okFim and typeof(fim) == "Vector3" and fim.Y < 0 then
 				root.CFrame = inicio * CFrame.new(fim.X, 0, fim.Z) * (inicio:Inverse() * root.CFrame).Rotation
 			end
+			-- ⚠️ v126c — "depois do Flow do Shidou o boneco cai no chão, levanta, cai de novo":
+			-- a cena deixa o corpo inclinado (bicicleta) e o Humanoid entrava em FallingDown.
+			-- Termina sempre EM PÉ: só o giro horizontal, e o Humanoid volta a correr.
+			local olhar = Vector3.new(root.CFrame.LookVector.X, 0, root.CFrame.LookVector.Z)
+			if olhar.Magnitude < 0.05 then olhar = Vector3.new(inicio.LookVector.X, 0, inicio.LookVector.Z) end
+			if olhar.Magnitude > 0.05 then
+				root.CFrame = CFrame.lookAt(root.Position, root.Position + olhar.Unit)
+			end
+			root.AssemblyAngularVelocity = Vector3.zero
+			if humanoid and humanoid.Parent and humanoid.Health > 0 and not humanoid.PlatformStand then
+				local estado = humanoid:GetState()
+				if estado == Enum.HumanoidStateType.FallingDown or estado == Enum.HumanoidStateType.Ragdoll
+					or estado == Enum.HumanoidStateType.Physics or estado == Enum.HumanoidStateType.GettingUp then
+					humanoid:ChangeState(Enum.HumanoidStateType.Running)
+				end
+			end
 		end
 		pasta:Destroy()
 		if ball and ball.Parent then

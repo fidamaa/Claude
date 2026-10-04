@@ -990,6 +990,16 @@ local function setOwner(player)
 		pushToucher(player)
 		lastReceiveTime[player] = tick()
 		possessionSince[player] = tick()
+		-- ⚠️ v126c (Flow do Shidou): dominou uma bola que vinha do AR (acima do quadril)? O
+		-- domínio passivo pega bola alta até AERIAL_PICKUP_HEIGHT — sem isso a "bola em cima de
+		-- você" virava "bola no pé" na hora e o Flow recusava (ver _G.FlowBolaEmCima)
+		do
+			local ch = player.Character
+			local r = ch and ch:FindFirstChild("HumanoidRootPart")
+			if r and ball.Position.Y - r.Position.Y > 0.5 then
+				player:SetAttribute("DominioAereoEm", workspace:GetServerTimeNow())
+			end
+		end
 
 		-- ⚠️ Comparação de time feita INLINE de propósito: areOpponents/
 		-- otherTeamName só são declaradas bem mais abaixo neste arquivo, e

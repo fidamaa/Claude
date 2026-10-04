@@ -2031,12 +2031,29 @@ _G.FlowBolaEmCima = function(player)
 	local ball = workspace:FindFirstChild(Config.BALL_NAME)
 	local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
 	if not ball or not root then return false end
-	if _G.GetBallOwner and _G.GetBallOwner() ~= nil then return false end
+	-- (v126c) acabou de DOMINAR uma bola que veio do ar (o domínio passivo pega bola alta):
+	-- ainda vale por FLOW_BOLA_EM_CIMA_GRACA segundos
+	local dono = _G.GetBallOwner and _G.GetBallOwner()
+	if dono == player then
+		local em = player:GetAttribute("DominioAereoEm")
+		return typeof(em) == "number" and workspace:GetServerTimeNow() - em <= (Config.FLOW_BOLA_EM_CIMA_GRACA or 1.5)
+	end
+	if dono ~= nil then return false end
 	local rel = ball.Position - root.Position
 	local horizontal = Vector3.new(rel.X, 0, rel.Z).Magnitude
 	return horizontal <= (Config.FLOW_BOLA_EM_CIMA_RAIO or 10)
 		and rel.Y >= (Config.FLOW_BOLA_EM_CIMA_ALTURA_MIN or 1.5)
 		and rel.Y <= (Config.FLOW_BOLA_EM_CIMA_ALTURA_MAX or 30)
+end
+
+-- ⚠️ v126c — PEDIDO: "volta a duração dos Flows, mas coloca pra durarem enquanto a música
+-- deles durar: acabou a música, acabou o Flow". A música começa junto com a CENA, então o
+-- Flow dura (áudio − cena). Sem música: nil (o InstinctController usa o padrão).
+_G.DuracaoFlowPelaMusica = function(player, duracaoCena)
+	local item = CosmeticosFlow and (CosmeticosFlow.Equipado(player, "Flow") or CosmeticosFlow.Item("Flow_Isagi"))
+	local m = item and item.Musica
+	if type(m) ~= "table" or type(m.Duracao) ~= "number" then return nil end
+	return math.max(m.Duracao - (duracaoCena or 0), 8)
 end
 
 _G.FlowExigeBola = function(player)

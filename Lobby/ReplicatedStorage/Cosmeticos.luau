@@ -450,7 +450,7 @@ C.Flow = {
 		-- batida na pisada 9,55s, o grito do Jin-Woo na levantada, efeitos em cada momento) em
 		-- _upload/Flow_Isagi_Cena.mp3 (gerado por .claude/skills/flow-cutscene/mixar_cena_isagi.py)
 		-- — falta subir e colar o ID.
-		Musica = { Id = "rbxassetid://138043913660792", Volume = 1.3 } }, -- (v120f: "aumenta o som inteiro", era 0.6)
+		Musica = { Id = "rbxassetid://138043913660792", Volume = 1.3, Duracao = 39 } }, -- (v126c: Duracao = segundos do áudio: o Flow acaba junto com a música) -- (v120f: "aumenta o som inteiro", era 0.6)
 	{ Id = "Flow_Bachira", Nome = "Flow do Bachira", Raridade = "Rare", Personagem = "Bachira Meguru",
 		Descricao = "O monstro dentro dele: drible muito maior e mais velocidade com a bola.",
 		Atributos = { DribbleSkill = 25 }, Velocidade = 1.08,
@@ -487,7 +487,7 @@ C.Flow = {
 		-- _upload/Flow_Shidou_Cena.mp3 (39s): falas do vídeo (demucs) nos tempos da cena —
 		-- "Big Bang Drive" em 8.9s — + a trilha com a explosão caindo no chute (10.4s).
 		-- Se mudar FS.ImpactTime, remixar o áudio (a explosão é presa nesse tempo).
-		Musica = { Id = "rbxassetid://134592522690900", Volume = 1.2 } }, -- (v125b: sem a fala com palavrão; o 92767227847282 ficou restrito)
+		Musica = { Id = "rbxassetid://134592522690900", Volume = 1.2, Duracao = 39 } }, -- (v125b: sem a fala com palavrão; o 92767227847282 ficou restrito)
 	{ Id = "Flow_Sae", Nome = "Flow do Sae", Raridade = "Legendary", Personagem = "Itoshi Sae",
 		Descricao = "O prodígio: Técnica altíssima — passe e chute de outro nível.",
 		Atributos = { Technique = 28, Kick = 12 },

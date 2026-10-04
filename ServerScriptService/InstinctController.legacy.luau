@@ -400,9 +400,9 @@ local InstinctModeState = {} -- [player] = { ExpiresAt }
 -- metade disso dobra a quantidade de disparos necessários (10 agora).
 local INSTINCT_CHARGE_PER_TRIGGER = 10 -- flat por enquanto (ver comentário acima) — 10 disparos enchem o medidor
 -- ⚠️ v120b — PEDIDO: "tem que durar o Flow uns 25 segundos" (era 9)
--- ⚠️ v126 — PEDIDO: "coloca pro Flow durar mais, porque tá acabando durante o replay —
--- os Flows durarem um minuto inteiro" (era 25)
-local INSTINCT_MODE_DURATION = 60
+-- ⚠️ v126c — PEDIDO: "volta a duração dos Flows, mas coloca pra durarem enquanto a música
+-- deles durar". 25 é o padrão (Flow sem música); com música, ver _G.DuracaoFlowPelaMusica
+local INSTINCT_MODE_DURATION = 25
 -- ⚠️ v5.6: era 1.75 (bônus ficava +75% maior), depois 1.12 (+12%).
 -- ⚠️ v5.7: PEDIDO — "instinct mode na real é 25% bonus": a PORÇÃO de
 -- bônus (delta acima da baseline) de cada chave do Effect/AtivaEffect
@@ -646,14 +646,15 @@ Remotes.ActivateInstinctMode.OnServerEvent:Connect(function(player, aimPoint)
 	Remotes.InstinctModeFeedback:FireClient(player, "MeterUpdate", 0)
 	-- ⚠️ v113: primeiro a CENA do Flow (congela a partida, ver PulseController
 	-- _G.TocarCenaFlow); os 9s de Flow só começam quando ela acaba
+	local duracaoFlow = INSTINCT_MODE_DURATION -- (v126c: vira a duração da música, logo abaixo)
 	local function comecarFlow()
 		if not player.Parent then return end
-		InstinctModeState[player] = { ExpiresAt = tick() + INSTINCT_MODE_DURATION }
-		Remotes.InstinctModeFeedback:FireClient(player, "ModeActivated", INSTINCT_MODE_DURATION)
+		InstinctModeState[player] = { ExpiresAt = tick() + duracaoFlow }
+		Remotes.InstinctModeFeedback:FireClient(player, "ModeActivated", duracaoFlow)
 		-- ⚠️ v110 — FLOW ESCOLHIDO NA LOJA (Blue Lock): cada Flow soma atributos
 		-- e/ou velocidade enquanto dura + a cena de ativação (ver CosmeticosServer).
-		if _G.AtivarFlow then _G.AtivarFlow(player, INSTINCT_MODE_DURATION) end
-		task.delay(INSTINCT_MODE_DURATION, function()
+		if _G.AtivarFlow then _G.AtivarFlow(player, duracaoFlow) end
+		task.delay(duracaoFlow, function()
 			local state = InstinctModeState[player]
 			if state and tick() >= state.ExpiresAt then
 				InstinctModeState[player] = nil
@@ -668,8 +669,11 @@ Remotes.ActivateInstinctMode.OnServerEvent:Connect(function(player, aimPoint)
 		cena, ligaSozinha = _G.TocarCenaFlow(player, aimPoint, comecarFlow)
 		cena = cena or 0
 	end
+	-- (v126c) acabou a música, acabou o Flow
+	local pelaMusica = _G.DuracaoFlowPelaMusica and _G.DuracaoFlowPelaMusica(player, cena)
+	if pelaMusica then duracaoFlow = pelaMusica end
 	-- trava contra apertar de novo durante a cena
-	InstinctModeState[player] = { ExpiresAt = tick() + cena + INSTINCT_MODE_DURATION }
+	InstinctModeState[player] = { ExpiresAt = tick() + cena + duracaoFlow }
 	if not ligaSozinha then
 		task.delay(cena, comecarFlow)
 	end

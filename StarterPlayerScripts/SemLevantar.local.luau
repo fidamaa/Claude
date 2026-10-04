@@ -74,6 +74,20 @@ local params = RaycastParams.new()
 params.FilterType = Enum.RaycastFilterType.Exclude
 params.RespectCanCollide = false
 
+-- ⚠️ v126c — PEDIDO: "usei o Flow do Shidou e assim que terminei o boneco caiu no chão,
+-- levantou, caiu de novo e ficou bugado no chão, teleportando" (sempre). Conferido no Studio:
+-- a cena inclina o corpo >100° (bicicleta) e o Humanoid do Roblox entende como "tombou" —
+-- quando a cena solta, ele fica em FallingDown ~2s, afundado, e levanta. As quedas do jogo
+-- são o ragdoll próprio (PlatformStand), então o tombo automático do Roblox fica DESLIGADO.
+local function semTombo(char)
+	local hum = char and char:WaitForChild("Humanoid", 10)
+	if not hum then return end
+	hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
+	hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
+end
+if player.Character then task.spawn(semTombo, player.Character) end
+player.CharacterAdded:Connect(semTombo)
+
 -- (v126) caixa dos pés e chão pra trava anti-afundar
 local filtroCaixa = OverlapParams.new()
 filtroCaixa.MaxParts = 40

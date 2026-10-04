@@ -3590,15 +3590,16 @@ end
 -- z na face da PEÇA os olhos ficavam enterrados dentro da cabeça (medido no Studio).
 -- (v126: fx opcional = fração da largura da cabeça pro lado — o Shidou usa olhos mais
 -- separados; os outros Flows continuam no 0.055)
-local function FlowCenaOlhos(head, fx)
+local function FlowCenaOlhos(head, fx, fy)
 	fx = fx or 0.055
+	fy = fy or 0.25 -- (v126c: altura opcional — o Shidou usa um pouco mais baixo)
 	local s = head.Size
 	local malha = head:FindFirstChildOfClass("SpecialMesh")
 	local escalaZ = (malha and malha.MeshType == Enum.MeshType.Head) and malha.Scale.Z or 1
 	-- (v126b — PEDIDO: "distancia um pouquinho o olho da cara, tem caras mais redondas e fica
 	-- estranho": 0.05 → 0.1)
 	local z = -s.Z * 0.5 * escalaZ - 0.1
-	return { V3(-s.X * fx, s.Y * 0.25, z), V3(s.X * fx, s.Y * 0.25, z) }
+	return { V3(-s.X * fx, s.Y * fy, z), V3(s.X * fx, s.Y * fy, z) }
 end
 
 local function lerp(a, b, k) return a + (b - a) * k end
@@ -3861,6 +3862,18 @@ function E.OlhosFlow(character, opcoes)
 		for _, im in ipairs(imagens) do
 			im.Iris.ImageTransparency = 1 - nivel
 			im.Brilho.ImageTransparency = 1 - 0.55 * nivel
+		end
+	end
+	-- (v126c) transição de entrada: k 0→1 = a íris nasce pequena, girando, e cresce até o
+	-- tamanho normal (com Girar = false ela termina parada no ângulo certo)
+	function obj.Transformar(k)
+		k = math.clamp(k or 1, 0, 1)
+		local esc = 0.15 + 0.85 * k
+		for i, im in ipairs(imagens) do
+			im.Iris.Size = UDim2.fromScale(diam * esc / W, diam * esc / H)
+			if opcoes.Girar == false then
+				im.Iris.Rotation = (1 - k) * 240 * (i == 1 and -1 or 1)
+			end
 		end
 	end
 	return obj
@@ -5812,7 +5825,10 @@ end
 -- (v124) o olho do Flow do Shidou — usado na cena e durante o Flow na partida
 -- (v126 — PEDIDO: "os olhos dele precisam ficar um pouco mais separados": X 0.055 → 0.075)
 local OLHO_SHIDOU_X = 0.085 -- (v126b: 0.075 → 0.085, "afasta um pouquinho")
-E.OLHO_SHIDOU = { Imagem = TEX_FLOW.IrisShidou, CorBrilho = rgb(255, 120, 200), Girar = false, X = OLHO_SHIDOU_X, Y = 0.25 }
+-- (v126c — PEDIDO: "abaixe um pouco os olhos do Shidou, estão um pouco pra cima do rosto,
+-- bem pouco mesmo": 0.25 → 0.22)
+local OLHO_SHIDOU_Y = 0.22
+E.OLHO_SHIDOU = { Imagem = TEX_FLOW.IrisShidou, CorBrilho = rgb(255, 120, 200), Girar = false, X = OLHO_SHIDOU_X, Y = OLHO_SHIDOU_Y }
 
 function E.FlowShidou(ctx)
 	local pasta, spec, inicio = ctx.Pasta, ctx.Spec, ctx.Inicio
@@ -6170,6 +6186,7 @@ function E.FlowShidou(ctx)
 	local auraFeita, estourou, bateu = false, false, false
 	local saiu, somSalto = false, false
 	local somAsas1, somAsas2 = false, false
+	local pulsoOlho = false
 	local tImpacto = nil
 	local efeitos = {}
 
@@ -6243,33 +6260,52 @@ function E.FlowShidou(ctx)
 
 		-- olhos: brancos acendendo (4.0-6.3), depois ROSA (Flow) até o fim
 		if head then
-			local o = FlowCenaOlhos(head, OLHO_SHIDOU_X)
+			local o = FlowCenaOlhos(head, OLHO_SHIDOU_X, OLHO_SHIDOU_Y)
 			-- ⚠️ v126b — PEDIDO: "tira o close final nos olhos pra mostrar o olho do Shidou e
 			-- coloca enquanto estiver dando o zoom nos olhos brancos — ativa lá o olho do Shidou
 			-- já". O branco acende no começo do zoom e a ÍRIS do Shidou entra no meio dele.
-			local branco = smooth(phase(t, 4.0, 4.5)) * (1 - smooth(phase(t, 4.75, 5.1)))
-			local rosaN = smooth(phase(t, 4.75, 5.1))
+			-- ⚠️ v126c — PEDIDO: "coloca uma transição: do olho branco pra íris do Shidou tá um
+			-- corte seco". O branco acende, dá um CLARÃO crescendo; no meio dele a íris nasce
+			-- pequena girando e cresce até o tamanho certo, e o branco apaga por baixo.
+			local trans = phase(t, 4.8, 5.35)
+			local branco = smooth(phase(t, 4.0, 4.5)) * (1 - smooth(phase(t, 5.0, 5.4)))
+			local rosaN = smooth(trans)
+			local clarao = math.sin(math.pi * phase(t, 4.7, 5.15))
 			-- (v124: as bolas brancas só no "olho branco"; o rosa é a íris desenhada)
 			local nivel = irisFlow and branco or math.max(branco, rosaN)
-			if irisFlow then irisFlow.Definir(rosaN) end
-			local tam = (t >= ph.Olho[1] and t < ph.Peito[1]) and 0.4 or 0.3
+			if irisFlow then
+				irisFlow.Definir(rosaN)
+				if irisFlow.Transformar then irisFlow.Transformar(easeOut(trans)) end
+			end
+			if not pulsoOlho and t >= 4.95 and t < 5.6 then
+				pulsoOlho = true
+				ctx.Flash(rgb(255, 170, 225), 0.55, 0.3)
+				anelVazado(pasta, head.CFrame:PointToWorldSpace((o[1] + o[2]) / 2), head.CFrame.LookVector, ROSA, 0.5, 6, 0.4, 0.06)
+			end
+			local tam = ((t >= ph.Olho[1] - 0.6 and t < ph.Peito[1]) and 0.4 or 0.3) * (1 + 0.9 * clarao)
 			for i, e in ipairs(olhos) do
 				e.Size = V3(tam, tam * 0.55, 0.08)
 				e.CFrame = head.CFrame * CFrame.new(o[i])
 				e.Color = irisFlow and BRANCO or BRANCO:Lerp(ROSA, rosaN)
 				e.Transparency = nivel > 0.02 and (1 - nivel) or 1
 				brilhosOlho[i].Enabled = nivel > 0.02
+				-- (v126c) o clarão da transição: o brilho cresce e puxa pro rosa
+				if brilhosOlho[i]:IsA("BillboardGui") then
+					local lado = 1.5 * (1 + 1.3 * clarao)
+					brilhosOlho[i].Size = UDim2.fromScale(lado, lado)
+				end
 				for _, g in ipairs(brilhosOlho[i]:GetChildren()) do
 					if g:IsA("ImageLabel") then
-						g.ImageColor3 = irisFlow and BRANCO or BRANCO:Lerp(ROSA, rosaN)
-						g.ImageTransparency = 1 - 0.9 * nivel
+						g.ImageColor3 = irisFlow and BRANCO:Lerp(ROSA, 0.7 * clarao * rosaN + 0.3 * clarao) or BRANCO:Lerp(ROSA, rosaN)
+						g.ImageTransparency = 1 - 0.9 * math.max(nivel, clarao)
 					end
 				end
 			end
 		end
 		-- (v124: desde o close do ROSTO — a franja cobria o rosto inteiro de frente)
+		-- (v126c: plano aberto agora — a franja só um pouco transparente, pra não tampar os olhos)
 		cabeloTransp(math.max(t < ph.Chega[2] and 1 or 0,
-			0.8 * smooth(phase(t, 2.9, 3.2)) * (1 - smooth(phase(t, 5.8, 6.3)))))
+			0.45 * smooth(phase(t, 2.9, 3.2)) * (1 - smooth(phase(t, 5.8, 6.3)))))
 
 		-- tela: preto → o branco do olho cresce → branco total
 		local preta = smooth(phase(t, ph.Tunel[1], ph.Tunel[1] + 0.12)) * (1 - smooth(phase(t, ph.Tunel[2], ph.Tunel[2] + 0.2)))
@@ -6495,9 +6531,12 @@ function E.FlowShidou(ctx)
 		return CFrame.lookAt(pos, alvo), fov
 	end
 	function efeitos.CameraMundo(t)
+		-- (v126c: sem closes no rosto — o trecho dos olhos é o corpo inteiro visto de cima,
+		-- ver FS.Camera; os closes antigos ficam abaixo, desligados)
+		if true then return nil end
 		if not head then return nil end
 		if t < ph.Rosto[1] or t >= ph.Peito[1] then return nil end
-		local o = FlowCenaOlhos(head, OLHO_SHIDOU_X)
+		local o = FlowCenaOlhos(head, OLHO_SHIDOU_X, OLHO_SHIDOU_Y)
 		local meio = head.CFrame:PointToWorldSpace((o[1] + o[2]) / 2)
 		-- ⚠️ v124 (conferido no Studio): pela inclinação da CABEÇA a câmera ia pra cima e
 		-- mostrava só o topo do cabelo. Agora é a frente do CORPO, na horizontal.

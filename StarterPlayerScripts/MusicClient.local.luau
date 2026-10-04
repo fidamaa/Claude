@@ -421,8 +421,8 @@ local function tocarMusicaFlow(item, quem, horario, duracaoCena)
 			end
 		end)
 	end
-	-- teto de segurança: cena + Flow (25s) + folga, ou o fim do próprio áudio
-	task.delay((duracaoCena or 12) + 27, function()
+	-- teto de segurança: o fim do áudio (v126c: o Flow dura a música inteira), ou cena + 25s
+	task.delay(type(musica.Duracao) == "number" and (musica.Duracao + 1) or ((duracaoCena or 12) + 27), function()
 		if geracaoFlow == minha then pararMusicaFlow() end
 	end)
 	som.Ended:Connect(function()

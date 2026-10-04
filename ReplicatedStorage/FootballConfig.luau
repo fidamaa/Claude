@@ -1832,6 +1832,9 @@ Config.FOG_HIDDEN_TRANSPARENCY = 0.85
 Config.FLOW_BOLA_EM_CIMA_RAIO = 10
 Config.FLOW_BOLA_EM_CIMA_ALTURA_MIN = 1.5
 Config.FLOW_BOLA_EM_CIMA_ALTURA_MAX = 30
+-- ⚠️ v126c: o domínio passivo pega bola alta (AERIAL_PICKUP_HEIGHT) — quem ACABOU de dominar
+-- uma bola que veio do ar ainda pode usar o Flow por esses segundos
+Config.FLOW_BOLA_EM_CIMA_GRACA = 1.5
 Config.FLOW_CHARGE_PASS_GIVEN = 6
 Config.FLOW_CHARGE_PASS_RECEIVED = 8
 Config.FLOW_CHARGE_STEAL = 12

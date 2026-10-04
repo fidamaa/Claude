@@ -3590,11 +3590,14 @@ do
 			RShoulder = { 20, 0, 52 }, LShoulder = { -25, 0, -62 } } },
 		{ 3.00, { Root = { 18, 0, 0 }, Neck = { -8, 0, 0 }, RHip = { -20, 0, 12 }, LHip = { -10, 0, -12 },
 			RShoulder = { 22, 0, 55 }, LShoulder = { -28, 0, -65 } } },
-		-- Rosto / Olho: cabeça erguida, braços caídos pra fora
-		{ 4.40, { Root = { 6, 0, 0 }, Neck = { 12, 0, 0 }, RHip = { -6, 0, 8 }, LHip = { -6, 0, -8 },
-			RShoulder = { 0, 0, 40 }, LShoulder = { 0, 0, -40 } } },
-		{ 5.40, { Root = { 4, 0, 0 }, Neck = { 14, 0, 0 }, RHip = { -4, 0, 8 }, LHip = { -4, 0, -8 },
-			RShoulder = { 0, 0, 48 }, LShoulder = { 0, 0, -48 } } },
+		-- Rosto / Olho (v126c): o corpo inteiro visto de cima — tronco jogado pra trás, o rosto
+		-- VIRADO PRA CIMA (pra bola/câmera), um braço aberto pro alto e o outro solto pra fora
+		{ 3.60, { Root = { 14, 0, 0 }, Neck = { 40, 0, 0 }, RHip = { -14, 0, 12 }, LHip = { -10, 0, -12 },
+			RShoulder = { 35, 0, 75 }, LShoulder = { -20, 0, -55 } } },
+		{ 4.40, { Root = { 16, 0, 0 }, Neck = { 48, 0, 0 }, RHip = { -16, 0, 12 }, LHip = { -12, 0, -12 },
+			RShoulder = { 45, 0, 85 }, LShoulder = { -25, 0, -60 } } },
+		{ 5.40, { Root = { 17, 0, 0 }, Neck = { 50, 0, 0 }, RHip = { -17, 0, 12 }, LHip = { -12, 0, -12 },
+			RShoulder = { 50, 0, 90 }, LShoulder = { -28, 0, -62 } } },
 		-- Peito: braços ABERTOS (como no vídeo, de frente)
 		{ 6.30, { Root = { 0, 0, 0 }, Neck = { 20, 0, 0 }, RHip = { 0, 0, 8 }, LHip = { 0, 0, -8 },
 			RShoulder = { -10, 0, 100 }, LShoulder = { -10, 0, -100 } } },
@@ -3661,11 +3664,14 @@ do
 		elseif t < 3.0 then
 			local u = smooth(phase(t, 1.4, 3.0))
 			return V3(3.0, 0.4, -5.2):Lerp(V3(2.4, 0.3, -4.4), u), rootPos + V3(0, 0.3, 0), 50
-		elseif t < 4.4 then
-			local u = smooth(phase(t, 3.0, 4.4))
-			return cabeca + V3(0.3, -0.2, -3.4):Lerp(V3(0.2, -0.15, -2.6), u), cabeca, 38
 		elseif t < 6.3 then
-			return cabeca + V3(0.15, 0, -2.2), cabeca, 32
+			-- ⚠️ v126c — PEDIDO: "a cena que mostra os olhos: não precisa mostrar os olhos de
+			-- perto — mostra o personagem INTEIRO, só mudando os olhos, com uma pose legal,
+			-- olhando pra cima, como se você estivesse olhando de cima (a bola) e o olho mudando".
+			-- Câmera ALTO e na frente (onde a bola está), olhando ele lá embaixo; ele olha pra
+			-- cima, pra câmera, e os olhos acendem/viram a íris do Shidou no rosto.
+			local u = smooth(phase(t, 3.0, 6.3))
+			return rootPos + V3(0.6, 8.0, -5.0):Lerp(V3(0.4, 6.4, -3.7), u), rootPos + V3(0, 0.8, 0), 46 -- (conferido: mais longe ele ficava pequeno)
 		elseif t < 7.5 then
 			-- de frente, na altura do peito, os braços abertos
 			local u = smooth(phase(t, 6.3, 7.5))
