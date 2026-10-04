@@ -1829,12 +1829,12 @@ Config.FOG_HIDDEN_TRANSPARENCY = 0.85
 -- cima de você, numa certa distância. Você não pode estar com a bola, e não pode estar sem
 -- a bola — só sem a bola se ela estiver em cima de você". Bola SEM DONO, no ar, até
 -- RAIO studs na horizontal e entre ALTURA_MIN e ALTURA_MAX acima do quadril.
-Config.FLOW_BOLA_EM_CIMA_RAIO = 10
+Config.FLOW_BOLA_EM_CIMA_RAIO = 14 -- (v126d: "aumenta um pouco a hitbox pra pegar o Flow do Shidou": era 10)
 Config.FLOW_BOLA_EM_CIMA_ALTURA_MIN = 1.5
-Config.FLOW_BOLA_EM_CIMA_ALTURA_MAX = 30
+Config.FLOW_BOLA_EM_CIMA_ALTURA_MAX = 36 -- (v126d: era 30)
 -- ⚠️ v126c: o domínio passivo pega bola alta (AERIAL_PICKUP_HEIGHT) — quem ACABOU de dominar
 -- uma bola que veio do ar ainda pode usar o Flow por esses segundos
-Config.FLOW_BOLA_EM_CIMA_GRACA = 1.5
+Config.FLOW_BOLA_EM_CIMA_GRACA = 2.0 -- (v126d: era 1.5)
 Config.FLOW_CHARGE_PASS_GIVEN = 6
 Config.FLOW_CHARGE_PASS_RECEIVED = 8
 Config.FLOW_CHARGE_STEAL = 12

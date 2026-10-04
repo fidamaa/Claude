@@ -5665,8 +5665,9 @@ end
 -- Texturas (docs/texturas/aiku_olho_verde.png e aiku_olho_azul.png): enquanto o ID não
 -- é colado aqui, a íris é DESENHADA com Frames (círculos + riscos), igual à da imagem.
 local TEX_AIKU = {
-	OlhoVerde = "", -- ⚠️ falta subir: íris VERDE (olho ESQUERDO)
-	OlhoAzul = "", -- ⚠️ falta subir: íris AZUL (olho DIREITO) — o mesmo desenho com o matiz girado
+	-- (v126d: DESENHADAS — docs/texturas/gerar_olho_aiku.py — no lugar do recorte borrado do vídeo)
+	OlhoVerde = "rbxassetid://86995361097888", -- íris VERDE (olho ESQUERDO)
+	OlhoAzul = "rbxassetid://126520926483996", -- íris AZUL (olho DIREITO)
 }
 E.TEX_AIKU = TEX_AIKU
 
