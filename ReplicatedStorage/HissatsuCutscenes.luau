@@ -3251,111 +3251,6 @@ end
 
 
 -- ============================================================
--- 👻 FLOW DO AIKU — cena de ativação (⚠️ v113)
--- ============================================================
--- A melhor cena dele: o FANTASMA da defesa. Na névoa, agachado em guarda de
--- olhos fechados; abre os olhos (claros); um atacante (sombra vermelha) vem
--- conduzindo; ele SOME, deixa rastros de imagem e reaparece do lado, dá o
--- bote e sai com a bola; fecha calmo com a bola no pé.
-local FA = {}
-Cutscenes.Flow_Aiku = FA
-FA.Motor = "V2"
-FA.Efeitos = "FlowAiku"
-FA.KickFoot = "Right"
-FA.Duration = 12
-FA.ImpactTime = 11.3
-FA.ColarNoPe = false
-FA.TitleText = "FLOW · AIKU OLIVER"
-FA.Tema = {
-	Titulo = { rgb(240, 245, 255), rgb(170, 180, 215), rgb(70, 70, 110) },
-	Contorno = rgb(15, 15, 30), Flash = rgb(225, 230, 255),
-	Tint = rgb(235, 238, 250), Saturation = -0.25, Contrast = 0.2, Brightness = -0.02,
-}
-FA.Phases = {
-	Guarda = { 0, 2 }, Olhos = { 2, 3.5 }, Vem = { 3.5, 5.2 }, Some = { 5.2, 6.4 }, Bote = { 6.4, 7.6 },
-	Final = { 8.5, 12 }, Kick = { 11, FA.ImpactTime }, Impact = { FA.ImpactTime, FA.Duration },
-}
-local FA_ROOT = {
-	{ 0, V3(0, -0.7, 0) }, { 3.5, V3(0, -0.7, 0) }, { 5.2, V3(0, -0.7, 0) },
-	{ 6.3, V3(-3.5, -0.4, -5.5) }, -- reaparece do lado do atacante
-	{ 7.0, V3(-1.2, -1.3, -6.8) }, -- bote rasteiro
-	{ 7.6, V3(0, -1.2, -7.8) }, { 8.5, V3(0, 0, -9.5) }, { 12, V3(0, 0, -9.5) },
-}
-local FA_YAW = { { 0, 0 }, { 5.2, 0 }, { 6.3, -60 }, { 7.0, -30 }, { 8.5, 0 }, { 12, 0 } }
-function FA.RootPosition(t) return sample(FA_ROOT, t) end
-function FA.RootCFrame(t) return CFrame.new(FA.RootPosition(t)) * CFrame.Angles(0, rad(sample(FA_YAW, t)), 0) end
-function FA.BallPosition(_t, s) return s or V3(0, -2.3, -1.8) end
-function FA.BallVisible(t) return t < 0.05 end
-function FA.BallSpin() return 0 end
-local FA_GUARDA = { Root = { -25, 0, 0 }, Neck = { 15, 0, 0 }, RHip = { 55, 0, 14 }, LHip = { 55, 0, -14 },
-	RShoulder = { 20, 0, 50 }, LShoulder = { 20, 0, -50 } }
-local FA_CALMO = { Root = { 0, 0, 0 }, Neck = { 6, 0, 0 }, RHip = { 25, 0, 0 }, RShoulder = { -5, 0, 10 }, LShoulder = { -5, 0, -10 } }
-local FA_POSE = {
-	{ 0.00, FA_GUARDA }, { 5.20, FA_GUARDA },
-	{ 6.30, { Root = { -30, 0, 0 }, Neck = { 20, 0, 0 }, RHip = { 45, 0, 10 }, LHip = { 20, 0, -10 },
-		RShoulder = { 30, 0, 60 }, LShoulder = { 30, 0, -60 } } },
-	-- bote: carrinho curto, perna direita esticada
-	{ 7.00, { Root = { 55, 0, 0 }, Neck = { -30, 0, 0 }, RHip = { 40, 0, 0 }, LHip = { 80, 0, 0 },
-		RShoulder = { -20, 0, 40 }, LShoulder = { 80, 0, -30 } } },
-	{ 7.60, { Root = { 20, 0, 0 }, Neck = { -10, 0, 0 }, RHip = { 45, 0, 0 }, LHip = { 50, 0, 0 },
-		RShoulder = { -10, 0, 30 }, LShoulder = { 40, 0, -30 } } },
-	{ 8.50, FA_CALMO }, { 12.00, FA_CALMO },
-}
-function FA.Pose(t) return samplePose(FA_POSE, t) end
--- 1 = o atacante (vermelho, conduzindo); 2-4 = rastros de imagem dele
-FA.Clones = {
-	Quantidade = 4,
-	Cor = rgb(170, 180, 215),
-	CFrame = function(i, t)
-		if i == 1 then
-			local vem = smooth(phase(t, 3.5, 6.8))
-			local p = V3(-2, 0, -14):Lerp(V3(-2, 0, -7), vem)
-			local cai = smooth(phase(t, 7.0, 7.6))
-			return CFrame.new(p + V3(-1.2 * cai, -0.9 * cai, 0)) * CFrame.Angles(0, math.pi, 0) * CFrame.Angles(rad(-35 * cai), 0, rad(30 * cai))
-		end
-		-- rastros: onde ele esteve um pouco antes
-		local atras = (i - 1) * 0.12
-		local tt = math.max(t - atras, 0)
-		return CFrame.new(FA.RootPosition(tt)) * CFrame.Angles(0, rad(sample(FA_YAW, tt)), 0)
-	end,
-	Pose = function(i, t)
-		if i == 1 then
-			local w = math.sin(t * 9)
-			local cai = smooth(phase(t, 7.0, 7.6))
-			return { Root = { -10 * (1 - cai), 0, 0 }, RHip = { 35 * w * (1 - cai), 0, 0 }, LHip = { -35 * w * (1 - cai), 0, 0 },
-				RShoulder = { -30 * w + 60 * cai, 0, 15 + 40 * cai }, LShoulder = { 30 * w + 60 * cai, 0, -15 - 40 * cai } }
-		end
-		return FA.Pose(math.max(t - (i - 1) * 0.12, 0))
-	end,
-	Alpha = function(i, t)
-		if i == 1 then
-			if t < 3.5 then return 0 end
-			if t < 3.8 then return smooth(phase(t, 3.5, 3.8)) end
-			if t < 9 then return 1 end
-			return 1 - smooth(phase(t, 9, 9.4))
-		end
-		-- rastros só no sumiço/bote
-		local a = smooth(phase(t, 5.2, 5.5)) * (1 - smooth(phase(t, 7.4, 7.9)))
-		return a * (0.55 - (i - 2) * 0.15)
-	end,
-}
-function FA.Camera(t, rootPos)
-	local cabeca = rootPos + V3(0, 1.5, 0)
-	if t < 2 then
-		local u = smooth(phase(t, 0, 2))
-		return V3(3, 0.5, -7.5):Lerp(V3(2.4, 0.2, -6.2), u), V3(0, -0.3, 0), 52
-	elseif t < 3.5 then
-		local u = smooth(phase(t, 2, 3.5))
-		return cabeca + V3(0.35, -0.3, -4):Lerp(V3(0.25, -0.25, -3.2), u), cabeca, 38
-	elseif t < 8.5 then
-		-- de lado e aberta: o atacante vindo, ele sumindo e o bote
-		return V3(11, 1.5, -6), V3(-1, 0, -6.5), 55
-	end
-	local u = smooth(phase(t, 8.5, 12))
-	return cabeca + V3(0.8, -0.8, -5.5):Lerp(V3(0.5, -0.6, -4.2), u), cabeca + V3(0, -0.5, 0), 42
-end
-
--- ============================================================
 -- 👑 FLOW DO BAROU — cena de ativação (⚠️ v113)
 -- ============================================================
 -- A melhor cena dele: o REI. Sentado num trono dourado no escuro; a COROA
@@ -3706,6 +3601,218 @@ do
 	end
 end
 
+-- ============================================================
+-- 👁️ FLOW DO AIKU — "O FANTASMA DA DEFESA" (⚠️ v125) — cena de ativação + DUELO PELA BOLA
+-- ============================================================
+-- PEDIDO: Flow do Aiku no padrão do Isagi, quadro a quadro (vídeo "Aiku's Flow State -
+-- Blue Lock S2", 0:12-1:05, cortando o meio) + a trilha "Oliver Aiku Theme" + as falas
+-- dele, "de forma que o áudio mantenha o sentido". Só ativa se um ADVERSÁRIO estiver
+-- com a bola perto dele (e ele perto da própria área); a cena é o duelo: ele lê o
+-- adversário, tenta tirar a bola (30%/70%), arranca o chute da bola do pé dele, dá a
+-- volta nele e fica com a bola (o servidor passa a posse no último quadro).
+-- Olhos: o ESQUERDO é VERDE e o DIREITO é AZUL (o azul é a íris verde com o matiz girado).
+--
+-- TABELA DE PLANOS (tempo no vídeo → cena; ✂️ = cortado; 🔊 = fala, ver o áudio):
+--   Avanca  0-1.0     11.5-12.9s   ele avança agachado; a cena escurece e o olho começa a
+--                                  ficar VERDE (12.0s); 🔊 "My senses are in overdrive!"
+--   Radar   1.0-2.25  12.9-14.2s   câmera no chão: pé dele, as pernas do adversário e a bola,
+--                                  com ANÉIS VERDES de radar e linhas no gramado (flash 13.2s)
+--   Olho    2.25-4.05 14.3-16.9s   close no olho de LADO: fogo verde-amarelo, que estoura no fim;
+--                                  🔊 "I understand it all with my whole body."
+--   Listras 4.05-7.15 17.1-20.7s   de perfil, correndo: listras verdes de luz e partículas em
+--                                  volta, atrás e direto na câmera; os OLHOS DO FLOW acendem
+--                                  (🔊 "When I reach the max of the abilities I've built up so far...")
+--                                  ✂️ 20.8-31.4s (os outros jogadores no holograma)
+--   Bola    7.15-9.25 32.2-33.0s   a bola no pé do adversário e os painéis de dados, em cima;
+--                                  🔊 "There's a world I can see only once I'm there." (✂️ 21.8-23.6s
+--                                  tocam aqui: é a frase que liga "no máximo das habilidades" ao
+--                                  holograma)
+--   Domo    9.25-14.0 33.0-38.1s  de trás dele: o DOMO de projeção em volta do adversário e os
+--                                  painéis se multiplicando; 🔊 "It's the intervening time and
+--                                  space he needs in order to use his abilities."
+--   Rosto   14.0-14.9 56.0-56.5s o rosto dele, tenso, de frente (de dia); 🔊 "That's when I'll
+--                                  hunt him down." (✂️ 38.2-40s, o olho de teia azul)
+--   Setas   14.9-17.3 56.6-58.3s  de cima: a bola e as setas 30% / 70%; 🔊 "I'll crush you all..."
+--   Dash    17.3-18.0 58.3-59.3s   "DASH!" na tela, ele dispara
+--   Bota    18.0-18.6 59.3-59.9s   no chão: a chuteira dele arranca a bola do pé do adversário
+--                                  (ImpactTime, a batida da trilha)
+--   Split   18.6-19.7 60.1-61.7s   CÂMERA LENTA, de baixo: ele aberto no ar, a bola subindo
+--   Volta   19.7-21.0 (sem vídeo)  ele se levanta e DÁ A VOLTA no adversário (rápido) e pega a bola
+--   Olho2   21.0-22.6 61.8-65.0s   o sorriso e o OLHO DO FLOW em close; 🔊 "...so that I can bloom!"
+-- No último quadro o servidor devolve cada um ao lugar, tira o adversário do pé da bola
+-- (ele cai atordoado) e passa a posse pro Aiku (PulseController: Duelo).
+do
+	local FA = {}
+	Cutscenes.Flow_Aiku = FA
+	FA.Motor = "V2"
+	FA.Efeitos = "FlowAiku"
+	FA.KickFoot = "Right"
+	FA.Duration = 22.6
+	FA.ImpactTime = 18.25 -- a bota arranca a bola
+	FA.ColarNoPe = false
+	FA.SemTremidaImpacto = true -- o fim é close no olho: a tremida padrão sacudia a imagem (os efeitos tremem sozinhos)
+	FA.Duelo = true -- ⚠️ v125: precisa de um adversário com a bola; a cena rouba a bola dele
+	FA.TitleText = "FLOW · OLIVER AIKU"
+	FA.Tema = {
+		Titulo = { rgb(235, 255, 240), rgb(70, 255, 130), rgb(20, 130, 90) },
+		Contorno = rgb(0, 30, 15), Flash = rgb(200, 255, 220),
+		Tint = rgb(238, 255, 244), Saturation = 0.1, Contrast = 0.15, Brightness = 0,
+	}
+	FA.Phases = {
+		Avanca = { 0, 1.0 }, Radar = { 1.0, 2.25 }, Olho = { 2.25, 4.05 }, Listras = { 4.05, 7.15 },
+		Bola = { 7.15, 9.25 }, Domo = { 9.25, 14.0 }, Rosto = { 14.0, 14.9 }, Setas = { 14.9, 17.3 },
+		Dash = { 17.3, 18.0 }, Bota = { 18.0, 18.6 }, Split = { 18.6, 19.7 }, Volta = { 19.7, 21.0 },
+		Olho2 = { 21.0, 22.6 },
+		Kick = { 18.0, FA.ImpactTime }, Impact = { FA.ImpactTime, FA.Duration },
+	}
+	FA.DashT = 17.3 -- a batida forte da trilha cai aqui
+
+	-- ===== o ADVERSÁRIO (o Rin do vídeo): o carregador da bola, copiado do jogador de verdade =====
+	-- (x, z) do quadril dele, de frente pro Aiku (yaw 180). Vem driblando, para, e no fim
+	-- cambaleia (perdeu a bola).
+	local FA_RIN = {
+		{ 0, V3(0.9, 0, -14.5) }, { 1, V3(0.9, 0, -11) }, { 2.25, V3(0.8, 0, -8.4) }, { 4.05, V3(0.7, 0, -7.7) },
+		{ 9.2, V3(0.7, 0, -7.4) }, { 17.3, V3(0.7, 0, -7.4) }, { 18, V3(0.7, 0, -7.3) },
+		{ 18.7, V3(0.6, -0.1, -6.8) }, { 19.7, V3(0.2, -0.7, -6.0) }, { 21, V3(0.1, -0.9, -6.2) }, { 22.6, V3(0.1, -0.9, -6.2) },
+	}
+	local FA_RIN_YAW = { { 0, 180 }, { 18, 180 }, { 19.7, 215 }, { 21, 245 }, { 22.6, 245 } }
+	local function rinPos(t) return sampleFluido(FA_RIN, t) end
+
+	-- ===== o AIKU =====
+	local FA_POS = {
+		{ 0, V3(0, 0, 0) }, { 1, V3(0.1, 0, -2.2) }, { 2.25, V3(0.2, 0, -2.7) }, { 4.05, V3(0.2, -0.1, -2.75) },
+		{ 7.15, V3(0.4, 0, -3.4) }, { 9.25, V3(0.3, -0.3, -3.0) }, { 17.3, V3(0.3, -0.3, -3.0) },
+		{ 17.6, V3(0.5, -0.5, -3.5) }, { 18, V3(0.9, -0.2, -5.5) }, { 18.6, V3(0.9, -0.35, -5.9) },
+		{ 19.2, V3(1.9, -1.7, -6.9) }, { 19.7, V3(2.4, -1.6, -7.4) }, { 20, V3(2.9, -0.4, -8.3) },
+		{ 20.4, V3(2.0, 0, -9.7) }, { 20.8, V3(0.9, 0, -9.6) }, { 22.6, V3(0.9, 0, -9.6) },
+	}
+	local FA_YAW = {
+		{ 0, 0 }, { 18.6, 0 }, { 19.2, -40 }, { 19.7, -22 }, { 20, -10 }, { 20.4, 45 }, { 20.8, 12 }, { 21.11, 0 }, { 22.6, 0 },
+	}
+	-- o split: o corpo cai pra trás (pitch) enquanto desliza
+	local FA_PITCH = { { 0, 0 }, { 18.6, 0 }, { 19.05, 36 }, { 19.7, 28 }, { 20.15, 0 }, { 22.6, 0 } }
+	function FA.RootPosition(t) return sampleFluido(FA_POS, t) end
+	function FA.RootCFrame(t)
+		local pos = FA.RootPosition(t)
+		return CFrame.new(pos) * CFrame.Angles(rad(sample(FA_PITCH, t)), rad(sample(FA_YAW, t)), 0)
+	end
+
+	-- a bola: vem no pé do adversário; fica parada na frente dele; a bota arranca (sobe devagar,
+	-- por cima dele) e cai no pé do Aiku, que deu a volta
+	local function bolaChao() return CAL.Chao + CAL.Raio end
+	function FA.BallPosition(t, _s)
+		local g = bolaChao()
+		local rp = rinPos(math.min(t, 18))
+		if t < 18 then
+			-- no pé do adversário (um passo à frente dele, de lado, como no vídeo)
+			local quica = (t < 4.05) and math.abs(math.sin(t * 5)) * 0.18 or 0
+			return V3(rp.X - 0.25, g + quica, rp.Z + 1.05)
+		elseif t < FA.ImpactTime then
+			return V3(0.45, g, rinPos(18).Z + 1.1)
+		elseif t < 19.1 then
+			-- a bota arranca: sobe devagar (câmera lenta) por cima do adversário
+			local u = smooth(phase(t, FA.ImpactTime, 19.1))
+			return V3(0.45, g, rinPos(18).Z + 1.1):Lerp(V3(1.9, g + 3.4, -8.1), u)
+		elseif t < 20.45 then
+			local u = easeOut(phase(t, 19.1, 20.45))
+			return V3(1.9, g + 3.4, -8.1):Lerp(V3(0.9, g, -10.1), u) + V3(0, math.sin(u * math.pi) * 0.9, 0)
+		end
+		return V3(0.9, g, -10.5) -- no pé dele, na frente (rumo ao gol adversário)
+	end
+	function FA.BallVisible(_t) return true end
+	function FA.BallSpin(t) return (t >= FA.ImpactTime and t < 20.45) and 4 or 1.5 end
+
+	-- poses do Aiku (R6: braço/perna RETOS; |rz| >= 40 em movimento; Root rx+ inclina pra trás)
+	local FA_POSE = {
+		-- Avança: corrida baixa (o ciclo de passada é somado por cima)
+		{ 0, { Root = { -24, 0, 0 }, Neck = { 20, 0, 0 }, RHip = { 14, 0, 6 }, LHip = { 8, 0, -6 }, RShoulder = { -30, 0, 28 }, LShoulder = { 20, 0, -28 } } },
+		{ 1, { Root = { -22, 0, 0 }, Neck = { 22, 0, 0 }, RHip = { 40, 0, 8 }, LHip = { -10, 0, -8 }, RShoulder = { -35, 0, 40 }, LShoulder = { 25, 0, -40 } } },
+		-- Radar / Olho: parado, firme, peso na frente
+		{ 2.25, { Root = { -14, 0, 0 }, Neck = { 20, 0, 0 }, RHip = { 36, 0, 14 }, LHip = { -8, 0, -16 }, RShoulder = { -28, 0, 52 }, LShoulder = { -28, 0, -52 } } },
+		{ 4.05, { Root = { -12, 0, 0 }, Neck = { 22, 0, 0 }, RHip = { 34, 0, 14 }, LHip = { -6, 0, -16 }, RShoulder = { -26, 0, 54 }, LShoulder = { -26, 0, -54 } } },
+		-- Listras: correndo de perfil (ciclo por cima)
+		{ 4.51, { Root = { -26, 0, 0 }, Neck = { 18, 0, 0 }, RHip = { 14, 0, 6 }, LHip = { 8, 0, -6 }, RShoulder = { -30, 0, 28 }, LShoulder = { 20, 0, -28 } } },
+		{ 6.69, { Root = { -28, 0, 0 }, Neck = { 18, 0, 0 }, RHip = { 14, 0, 6 }, LHip = { 8, 0, -6 }, RShoulder = { -30, 0, 28 }, LShoulder = { 20, 0, -28 } } },
+		-- Bola: agacha e estica o braço (a manopla preta) em direção à bola
+		{ 7.6, { Root = { -20, 0, 0 }, Neck = { 28, 0, 0 }, RHip = { 34, 0, 18 }, LHip = { 20, 0, -18 }, RShoulder = { 80, 0, 12 }, LShoulder = { -34, 0, -55 } } },
+		{ 9.25, { Root = { -18, 0, 0 }, Neck = { 26, 0, 0 }, RHip = { 34, 0, 18 }, LHip = { 20, 0, -18 }, RShoulder = { 84, 0, 10 }, LShoulder = { -34, 0, -56 } } },
+		-- Domo: defesa aberta, de frente pro adversário
+		{ 10.25, { Root = { -16, 0, 0 }, Neck = { 18, 0, 0 }, RHip = { 30, 0, 22 }, LHip = { 30, 0, -22 }, RShoulder = { -22, 0, 50 }, LShoulder = { -22, 0, -50 } } },
+		{ 14, { Root = { -17, 0, 0 }, Neck = { 18, 0, 0 }, RHip = { 31, 0, 23 }, LHip = { 31, 0, -23 }, RShoulder = { -24, 0, 52 }, LShoulder = { -24, 0, -52 } } },
+		-- Rosto / Setas: se enrola pro bote (pé direito atrás)
+		{ 14.9, { Root = { -22, 0, 0 }, Neck = { 22, 0, 0 }, RHip = { -6, 0, 12 }, LHip = { 40, 0, -14 }, RShoulder = { -40, 0, 45 }, LShoulder = { 30, 0, -45 } } },
+		{ 17.3, { Root = { -30, 0, 0 }, Neck = { 22, 0, 0 }, RHip = { -30, 0, 10 }, LHip = { 56, 0, -8 }, RShoulder = { -62, 0, 32 }, LShoulder = { 50, 0, -40 } } },
+		-- Dash e Bota: perna direita ESTICADA pra frente, a chuteira por baixo da bola
+		{ 18, { Root = { -34, 0, 0 }, Neck = { 18, 0, 0 }, RHip = { 62, 0, 6 }, LHip = { -42, 0, -6 }, RShoulder = { -70, 0, 36 }, LShoulder = { 56, 0, -36 } } },
+		{ 18.3, { Root = { -22, 0, 0 }, Neck = { 22, 0, 0 }, RHip = { 84, 0, -4 }, LHip = { -34, 0, -8 }, RShoulder = { -50, 0, 46 }, LShoulder = { 40, 0, -50 } } },
+		-- Split: aberto, braços pra fora (EXAGERADO), bem devagar
+		{ 18.6, { Root = { -4, 0, 0 }, Neck = { 6, 0, 0 }, RHip = { 40, 0, 40 }, LHip = { 10, 0, -50 }, RShoulder = { 0, 0, 80 }, LShoulder = { 0, 0, -80 } } },
+		{ 19.2, { Root = { 10, 0, 0 }, Neck = { -6, 0, 0 }, RHip = { 14, 0, 70 }, LHip = { 8, 0, -74 }, RShoulder = { 10, 0, 104 }, LShoulder = { 10, 0, -104 } } },
+		{ 19.7, { Root = { 12, 0, 0 }, Neck = { -4, 0, 0 }, RHip = { 14, 0, 72 }, LHip = { 8, 0, -76 }, RShoulder = { 12, 0, 106 }, LShoulder = { 12, 0, -106 } } },
+		-- Volta: levanta e corre em arco (ciclo por cima)
+		{ 20.05, { Root = { -22, 0, 0 }, Neck = { 14, 0, 0 }, RHip = { 40, 0, 10 }, LHip = { -26, 0, -10 }, RShoulder = { -40, 0, 40 }, LShoulder = { 34, 0, -40 } } },
+		{ 20.8, { Root = { -14, 0, 0 }, Neck = { 12, 0, 0 }, RHip = { 30, 0, 10 }, LHip = { -12, 0, -10 }, RShoulder = { -26, 0, 36 }, LShoulder = { 22, 0, -36 } } },
+		-- Olho2: de pé, a bola no pé, sorrindo, cabeça erguida
+		{ 21.32, { Root = { -4, 0, 0 }, Neck = { 12, 0, 0 }, RHip = { 8, 0, 8 }, LHip = { 2, 0, -8 }, RShoulder = { -8, 0, 30 }, LShoulder = { -8, 0, -30 } } },
+		{ 22.6, { Root = { -3, 0, 0 }, Neck = { 14, 0, 0 }, RHip = { 8, 0, 8 }, LHip = { 2, 0, -8 }, RShoulder = { -8, 0, 32 }, LShoulder = { -8, 0, -32 } } },
+	}
+	function FA.Pose(t)
+		local p = samplePoseFluida(FA_POSE, t)
+		-- passada: sobe na corrida (Avança, Listras, Volta)
+		local corre = 0
+		if t < 1 then
+			corre = 1
+		elseif t >= 4.05 and t < 7.15 then
+			corre = smooth(phase(t, 4.05, 4.41)) * (1 - smooth(phase(t, 6.79, 7.15)))
+		elseif t >= 20 and t < 21 then
+			corre = smooth(phase(t, 20, 20.2)) * (1 - smooth(phase(t, 20.6, 21)))
+		end
+		if corre > 0 then
+			local s = math.sin(t * 13)
+			p.RHip[1] += 40 * s * corre
+			p.LHip[1] -= 40 * s * corre
+			p.RShoulder[1] -= 34 * s * corre
+			p.LShoulder[1] += 34 * s * corre
+		end
+		return p
+	end
+
+	-- adversário: dribla correndo e depois só segura; cambaleia quando perde a bola
+	FA.Clones = {
+		Quantidade = 1,
+		Cor = rgb(90, 160, 255),
+		-- (cópia de verdade do jogador que tinha a bola; contorno quase invisível)
+		Contorno = { Fill = 1, Outline = rgb(120, 190, 255), OutlineTransp = 0.75 },
+		CFrame = function(_i, t)
+			local pos = rinPos(t)
+			return CFrame.new(pos) * CFrame.Angles(rad(sample({ { 0, 0 }, { 18, 0 }, { 18.7, 18 }, { 19.7, 42 }, { 22.6, 48 } }, t)), rad(sample(FA_RIN_YAW, t)), 0)
+		end,
+		Pose = function(_i, t)
+			local anda = (t < 2.25) and 1 or ((t < 4.05) and (1 - smooth(phase(t, 2.25, 4.05))) or 0)
+			local s = math.sin(t * 9)
+			local toque = (t >= 4.05 and t < 18) and math.sin(t * 2.2) or 0
+			if t >= 18 then
+				-- perdeu a bola: tropeça, braços abertos, vai ao chão de joelhos
+				local u = smooth(phase(t, 18.25, 19.7))
+				return { Root = { -10 - 25 * u, 0, 0 }, Neck = { 10, 0, 0 }, RHip = { 20 + 60 * u, 0, 8 }, LHip = { -10 + 50 * u, 0, -8 },
+					RShoulder = { 20, 0, 60 + 40 * u }, LShoulder = { 20, 0, -60 - 40 * u } }
+			end
+			return { Root = { -8, 0, 0 }, Neck = { 6, 0, 0 },
+				RHip = { 34 * s * anda + 8 * toque, 0, 5 }, LHip = { -34 * s * anda - 8 * toque, 0, -5 },
+				RShoulder = { -36 * s * anda, 0, 28 }, LShoulder = { 36 * s * anda, 0, -28 } }
+		end,
+		Alpha = function(_i, _t) return 1 end,
+	}
+
+	-- câmera BASE (reserva; os planos de verdade vêm de FlowAiku.CameraMundo, que segue o corpo)
+	function FA.Camera(t, rootPos, ballPos)
+		local alvo = ballPos or (rootPos + V3(0, 0, -4))
+		if t < FA.Phases.Setas[1] then
+			return rootPos + V3(4.2, 0.4, -1.5), rootPos + V3(0, 0.4, -0.5), 52
+		end
+		return alvo + V3(0, 3.8, 0.7), alvo, 46
+	end
+end
 -- ============================================================
 -- 🌹 FLOW DO SAE — cena de ativação (⚠️ v113)
 -- ============================================================

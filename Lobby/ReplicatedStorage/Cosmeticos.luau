@@ -472,9 +472,14 @@ C.Flow = {
 		Atributos = { Kick = 8, DribbleSkill = 8, Speed = 8, Physical = 8, Technique = 8 },
 		Tema = { Cor = rgb(180, 110, 255), Cor2 = rgb(240, 220, 255), Motivo = "Espelhos" } },
 	{ Id = "Flow_Aiku", Nome = "Flow do Aiku", Raridade = "Epic", Personagem = "Aiku Oliver",
-		Descricao = "O fantasma da defesa: corpo e velocidade pra roubar a bola.",
+		Descricao = "O duelo: com um adversário com a bola perto de você (e da sua área), a cena rouba a bola dele e dá a volta. Corpo e velocidade sobem.",
 		Atributos = { Physical = 18, Speed = 12 },
-		Tema = { Cor = rgb(170, 180, 210), Cor2 = rgb(60, 60, 90), Motivo = "Fantasma" } },
+		-- ⚠️ v125 — PEDIDO: a trilha "Oliver Aiku Theme" + as falas dele + efeitos, num áudio só (50s,
+		-- falas reordenadas pra manter o sentido): docs/audio/Flow_Aiku_Cena.mp3 (gerado por
+		-- .claude/skills/flow-cutscene/mixar_cena_aiku.py) — falta subir no Creator Hub e colar aqui:
+		-- Musica = { Id = "rbxassetid://...", Volume = 1.3, Duracao = 50 }
+		-- verde (olho esquerdo) e azul (olho direito) do Aiku
+		Tema = { Cor = rgb(60, 255, 120), Cor2 = rgb(80, 150, 255), Motivo = "Fantasma" } },
 	{ Id = "Flow_Barou", Nome = "Flow do Barou", Raridade = "Legendary", Personagem = "Barou Shoei",
 		Descricao = "O rei: chute devastador e corpo que ninguém tira da bola.",
 		Atributos = { Kick = 25, Physical = 15 },

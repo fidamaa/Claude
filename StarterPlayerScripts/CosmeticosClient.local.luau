@@ -565,6 +565,23 @@ local function ligarFlowNoCorpo(player, item, duracao)
 			table.insert(coisas, faisca)
 		end
 	end
+	-- ⚠️ v125 — FLOW DO AIKU: as bolhas de luz verde em volta do corpo (presas a ele) e os
+	-- olhos do Flow no rosto — o ESQUERDO verde e o DIREITO azul — durante o Flow todo
+	if item.Id == "Flow_Aiku" then
+		local okAi, EfAi = pcall(function() return require(ReplicatedStorage:WaitForChild("HissatsuEfeitos")) end)
+		if okAi and EfAi then
+			if EfAi.AuraAiku then
+				for _, e in ipairs(EfAi.AuraAiku(character, 3)) do table.insert(coisas, e) end
+			end
+			if EfAi.OlhosFlowAiku then
+				local olhosAi = EfAi.OlhosFlowAiku(character)
+				if olhosAi then
+					olhosAi.Definir(1)
+					table.insert(coisas, olhosAi.Parte)
+				end
+			end
+		end
+	end
 	-- ⚠️ v120b — PEDIDO: "às vezes o Flow tá acabando e o cara continua com as
 	-- partículas". Desliga no tempo E na hora em que o servidor encerra o Flow
 	-- (atributo FlowAtivo some) — o que vier primeiro, uma vez só.
