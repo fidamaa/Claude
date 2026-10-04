@@ -47,7 +47,8 @@ InstinctModeFeedback.OnClientEvent:Connect(function(kind, extra)
 		pcall(function()
 			StarterGui:SetCore("SendNotification", {
 				Title = "Flow",
-				Text = "Este Flow é um chute: pegue a bola e mire pra onde quer chutar.",
+				-- (v126: só com a bola no ar em cima de você)
+				Text = "Big Bang Drive: só com a bola NO AR em cima de você (sem estar com ela nos pés). Mire pra onde quer chutar.",
 				Duration = 3,
 			})
 		end)

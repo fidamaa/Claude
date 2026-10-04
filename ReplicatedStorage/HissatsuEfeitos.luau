@@ -3595,7 +3595,9 @@ local function FlowCenaOlhos(head, fx)
 	local s = head.Size
 	local malha = head:FindFirstChildOfClass("SpecialMesh")
 	local escalaZ = (malha and malha.MeshType == Enum.MeshType.Head) and malha.Scale.Z or 1
-	local z = -s.Z * 0.5 * escalaZ - 0.05
+	-- (v126b — PEDIDO: "distancia um pouquinho o olho da cara, tem caras mais redondas e fica
+	-- estranho": 0.05 → 0.1)
+	local z = -s.Z * 0.5 * escalaZ - 0.1
 	return { V3(-s.X * fx, s.Y * 0.25, z), V3(s.X * fx, s.Y * 0.25, z) }
 end
 
@@ -3649,6 +3651,11 @@ local TEX_FLOW = {
 	Pecas = {
 		"rbxassetid://78118904101221", "rbxassetid://105525967568383", "rbxassetid://111438389261843",
 		"rbxassetid://128485843176223", "rbxassetid://86633552604297", "rbxassetid://95574913983821",
+		-- ⚠️ v126b — PEDIDO (Flow do Isagi): "os quebra-cabeças em volta da aura menores, em maior
+		-- quantidade e com peças diferentes, não só uma peça". 6 formatos NOVOS bem diferentes:
+		-- canto, borda, 4 abas, 4 buracos, dupla encaixada, comprida (scratchpad gerar_pecas.py)
+		"rbxassetid://73396430876861", "rbxassetid://74855909781883", "rbxassetid://89792629382347",
+		"rbxassetid://100392504666536", "rbxassetid://118796882348348", "rbxassetid://87847223113305",
 	},
 }
 E.TEX_FLOW = TEX_FLOW
@@ -3770,7 +3777,9 @@ function E.OlhosFlow(character, opcoes)
 		frente = s.Z * 0.5 * malha.Scale.Z
 	end
 	local yOlho = s.Y * (opcoes.Y or 0.08)
-	local zPlaca = -(frente + 0.03)
+	-- (v126b — PEDIDO: "distancia um pouquinho, tipo milímetros, o olho da cara — tem caras
+	-- mais redondas": 0.03 → 0.09)
+	local zPlaca = -(frente + 0.09)
 	local placa = Instance.new("Part")
 	placa.Name = "OlhosFlow"
 	placa.Size = V3(s.X * 0.62, s.Y * 0.5, 0.05)
@@ -3798,7 +3807,8 @@ function E.OlhosFlow(character, opcoes)
 	local diam = math.clamp(s.X * 0.16, 0.22, 0.4) -- do tamanho do olho do rosto
 	local W, H = placa.Size.X, placa.Size.Y
 	local imagens = {}
-	local xs = { -s.X * (opcoes.X or 0.1), s.X * (opcoes.X or 0.1) } -- [1] = ESQUERDO do personagem (−X)
+	-- (v126b — PEDIDO: "afasta um pouquinho os olhos, principalmente o do Isagi": 0.1 → 0.115)
+	local xs = { -s.X * (opcoes.X or 0.115), s.X * (opcoes.X or 0.115) } -- [1] = ESQUERDO do personagem (−X)
 	local locais = {}
 	for i, x in ipairs(xs) do
 		-- (na face Front a direita da tela é o −X da peça)
@@ -4289,7 +4299,7 @@ function E.FlowIsagi(ctx)
 		Textura = TEX_FLOW.Estrela, Cor = cores({ { 0, BRANCO }, { 1, CIANO } }), Brilho = 1, Tamanho = numeros({ { 0, 0.7 }, { 1, 0 } }),
 		Vida = { 0.6, 1.1 }, Vel = { 10, 22 }, Drag = 2, Forma = Enum.ParticleEmitterShape.Box, Estilo = Enum.ParticleEmitterShapeStyle.Volume,
 	}))
-	local pecasCorpo = E.PecasEmVolta(character, rgb(40, 110, 235), CIANO, 4, 0.45)
+	local pecasCorpo = E.PecasEmVolta(character, rgb(40, 110, 235), CIANO, 4, 0.28) -- (v126b: menores; 12 formatos = o dobro de peças)
 	for _, e in ipairs(pecasCorpo) do
 		e.Enabled = false
 		prender(e)
@@ -5801,7 +5811,7 @@ end
 -- `prender` e some junto com a cena.
 -- (v124) o olho do Flow do Shidou — usado na cena e durante o Flow na partida
 -- (v126 — PEDIDO: "os olhos dele precisam ficar um pouco mais separados": X 0.055 → 0.075)
-local OLHO_SHIDOU_X = 0.075
+local OLHO_SHIDOU_X = 0.085 -- (v126b: 0.075 → 0.085, "afasta um pouquinho")
 E.OLHO_SHIDOU = { Imagem = TEX_FLOW.IrisShidou, CorBrilho = rgb(255, 120, 200), Girar = false, X = OLHO_SHIDOU_X, Y = 0.25 }
 
 function E.FlowShidou(ctx)
@@ -6084,6 +6094,13 @@ function E.FlowShidou(ctx)
 		Chute = "rbxassetid://9119327493", -- Config.SOUNDS.Kick
 		Pancada = "rbxassetid://9113570289", -- Boxing Hits 14 (smack/whump/thud)
 		Whoosh = "rbxassetid://9126229267", -- Whoosh By Fast Airy Swooshing 1 (0.7s)
+		-- ⚠️ v126b — PEDIDO: "o barulho do impacto muito mais grave — um chute, só que mais grave,
+		-- mais forte": um baque surdo por baixo do chute (Dinosaur Footsteps Boomy Thumps 2)
+		Boom = "rbxassetid://9114079718",
+		-- ⚠️ v126b — PEDIDO: "só coloca som durante as asas, como se elas estivessem crescendo,
+		-- sendo criadas — são de raio": dois estouros elétricos com estalo e chiado
+		Asas1 = "rbxassetid://9116277954", -- Lightning Flashes Quick Electrical Bursts 32 (2.0s)
+		Asas2 = "rbxassetid://9116279561", -- Lightning Flashes Quick Electrical Bursts 55 (2.0s)
 	}
 	local sonsPre = {}
 	for nome, id in pairs(SOM) do
@@ -6152,6 +6169,7 @@ function E.FlowShidou(ctx)
 
 	local auraFeita, estourou, bateu = false, false, false
 	local saiu, somSalto = false, false
+	local somAsas1, somAsas2 = false, false
 	local tImpacto = nil
 	local efeitos = {}
 
@@ -6226,8 +6244,11 @@ function E.FlowShidou(ctx)
 		-- olhos: brancos acendendo (4.0-6.3), depois ROSA (Flow) até o fim
 		if head then
 			local o = FlowCenaOlhos(head, OLHO_SHIDOU_X)
-			local branco = smooth(phase(t, 4.0, 4.7)) * (1 - smooth(phase(t, 6.3, 6.9)))
-			local rosaN = smooth(phase(t, 6.6, 7.2))
+			-- ⚠️ v126b — PEDIDO: "tira o close final nos olhos pra mostrar o olho do Shidou e
+			-- coloca enquanto estiver dando o zoom nos olhos brancos — ativa lá o olho do Shidou
+			-- já". O branco acende no começo do zoom e a ÍRIS do Shidou entra no meio dele.
+			local branco = smooth(phase(t, 4.0, 4.5)) * (1 - smooth(phase(t, 4.75, 5.1)))
+			local rosaN = smooth(phase(t, 4.75, 5.1))
 			-- (v124: as bolas brancas só no "olho branco"; o rosa é a íris desenhada)
 			local nivel = irisFlow and branco or math.max(branco, rosaN)
 			if irisFlow then irisFlow.Definir(rosaN) end
@@ -6247,8 +6268,7 @@ function E.FlowShidou(ctx)
 			end
 		end
 		-- (v124: desde o close do ROSTO — a franja cobria o rosto inteiro de frente)
-		local closeParada = (t >= ph.Parada[1] and t < ph.Parada[2]) and 0.6 or 0
-		cabeloTransp(math.max(t < ph.Chega[2] and 1 or 0, closeParada,
+		cabeloTransp(math.max(t < ph.Chega[2] and 1 or 0,
 			0.8 * smooth(phase(t, 2.9, 3.2)) * (1 - smooth(phase(t, 5.8, 6.3)))))
 
 		-- tela: preto → o branco do olho cresce → branco total
@@ -6327,16 +6347,22 @@ function E.FlowShidou(ctx)
 		-- (v126) AS ASAS: nascem no estouro do peito; abrem mais no chutão, na bola parada e
 		-- na saída (e voltam ao normal depois)
 		local abre = easeOut(phase(t, 6.9, 7.25))
-		if t >= ph.Kick[1] and t < ph.Parada[1] then
-			abre *= 1.35
-		elseif t >= ph.Parada[1] and t < ph.Parada[2] then
-			-- (conferido no Studio: no close do rosto as asas abertas tampavam tudo)
-			abre *= 0.7
+		if t >= ph.Kick[1] and t < ph.Parada[2] then
+			abre *= 1.35 -- (v126b: o close do rosto na bola parada saiu — as asas ficam abertas)
 		end
 		if t >= ph.Explosao[1] then
 			abre *= 1 + 0.45 * (1 - easeOut(phase(t, ph.Explosao[1], ph.Explosao[1] + 0.7)))
 		end
 		desenharAsas(t, abre)
+		-- (v126b) o som das asas nascendo: estouro elétrico + um segundo crescendo
+		if not somAsas1 and t >= 6.88 and t < 7.6 then
+			somAsas1 = true
+			tocar("Asas1", 1.2, 0.9)
+		end
+		if not somAsas2 and t >= 7.08 and t < 7.8 then
+			somAsas2 = true
+			tocar("Asas2", 0.8, 1.15)
+		end
 
 		-- (v126) o salto (whoosh) e a bola PARADA: energia estalando entre o pé e a bola
 		if not somSalto and t >= 9.08 and t < 9.6 then
@@ -6420,8 +6446,10 @@ function E.FlowShidou(ctx)
 	-- (v126) o CONTATO do chutão: som de chute forte (chute + pancada surda), estalo branco
 	-- e faíscas; a explosão grande é na SAÍDA da bola (Quadro, ph.Explosao)
 	function efeitos.Impacto(s)
-		tocar("Chute", 1.6, 0.85)
-		tocar("Pancada", 1.0, 0.9)
+		-- (v126b: bem mais grave — tudo mais lento/baixo + o baque surdo)
+		tocar("Chute", 2.0, 0.6)
+		tocar("Pancada", 1.6, 0.55)
+		tocar("Boom", 1.4, 0.85)
 		ctx.Flash(rgb(255, 240, 250), 0.35, 0.25)
 		ctx.Tremer(0.9, 0.22)
 		ancImpacto.CFrame = CFrame.new(s.BolaMundo)

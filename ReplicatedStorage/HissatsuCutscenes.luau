@@ -3613,21 +3613,25 @@ do
 		-- agacha pra saltar (peso pra frente, braços atrás)
 		{ 9.06, { Root = { -14, 0, 0 }, Neck = { 32, 0, 0 }, RHip = { 58, 0, 8 }, LHip = { 58, 0, -8 },
 			RShoulder = { -50, 0, 45 }, LShoulder = { -50, 0, -45 } } },
-		-- decola: estica, braços sobem, o joelho esquerdo puxa (tesoura)
-		{ 9.20, { Root = { 0, 0, 0 }, Neck = { 26, 0, 0 }, RHip = { 6, 0, 8 }, LHip = { 35, 0, -8 },
-			RShoulder = { 130, 0, 45 }, LShoulder = { 130, 0, -45 } } },
-		-- câmera lenta no ar: a perna esquerda sobe primeiro, a direita (do chute) fica embaixo
-		{ 9.50, { Root = { 0, 0, 0 }, Neck = { 16, 0, 0 }, RHip = { -8, 0, 8 }, LHip = { 72, 0, -10 },
-			RShoulder = { 25, 0, 76 }, LShoulder = { 25, 0, -76 } } },
-		{ 9.75, { Root = { 0, 0, 0 }, Neck = { 12, 0, 0 }, RHip = { -18, 0, 8 }, LHip = { 82, 0, -10 },
-			RShoulder = { -5, 0, 80 }, LShoulder = { -5, 0, -80 } } },
-		-- CHUTÃO: corpo tombado ~105 (RootCFrame), a direita passa por CIMA da cabeça (105+95 =
-		-- ~200 do "pra baixo" → aponta pra cima e um pouco pro gol); a esquerda desce (tesoura)
-		{ FS.ImpactTime, { Root = { 0, 0, 0 }, Neck = { 12, 0, 0 }, RHip = { 95, 0, 8 }, LHip = { -10, 0, -12 },
-			RShoulder = { -25, 0, 82 }, LShoulder = { -25, 0, -82 } } },
+		-- ⚠️ v126b — PEDIDO: "faça uma animação mais exagerada, o pé mais longe, o braço mais
+		-- pra um lado e pro outro, mais exagerado ainda".
+		-- decola: estica, braços lá em cima, o joelho esquerdo puxa (tesoura)
+		{ 9.20, { Root = { 0, 0, 0 }, Neck = { 26, 0, 0 }, RHip = { 6, 0, 8 }, LHip = { 40, 0, -8 },
+			RShoulder = { 155, 0, 42 }, LShoulder = { 155, 0, -42 } } },
+		-- câmera lenta no ar: a esquerda sobe primeiro, a direita (do chute) vai LÁ ATRÁS; os
+		-- braços abrem cada um pra um lado
+		{ 9.50, { Root = { 0, 0, 0 }, Neck = { 16, 0, 0 }, RHip = { -25, 0, 8 }, LHip = { 85, 0, -10 },
+			RShoulder = { 60, 0, 100 }, LShoulder = { -40, 0, -75 } } },
+		{ 9.75, { Root = { 0, 0, 0 }, Neck = { 12, 0, 0 }, RHip = { -45, 0, 8 }, LHip = { 100, 0, -10 },
+			RShoulder = { -75, 0, 105 }, LShoulder = { 75, 0, -115 } } },
+		-- CHUTÃO: corpo tombado ~105 (RootCFrame), a direita passa BEM por cima da cabeça
+		-- (105+118 = ~223 do "pra baixo": por cima e LONGE, pro lado do gol); a esquerda desce
+		-- forte (tesoura); os braços trocam de lado no tranco
+		{ FS.ImpactTime, { Root = { 0, 0, 0 }, Neck = { 12, 0, 0 }, RHip = { 118, 0, 8 }, LHip = { -32, 0, -12 },
+			RShoulder = { 75, 0, 125 }, LShoulder = { -85, 0, -125 } } },
 		-- suspenso com a bola parada no pé
-		{ FS.Saida, { Root = { 0, 0, 0 }, Neck = { 10, 0, 0 }, RHip = { 98, 0, 8 }, LHip = { -14, 0, -12 },
-			RShoulder = { -28, 0, 84 }, LShoulder = { -28, 0, -84 } } },
+		{ FS.Saida, { Root = { 0, 0, 0 }, Neck = { 10, 0, 0 }, RHip = { 122, 0, 8 }, LHip = { -36, 0, -12 },
+			RShoulder = { 80, 0, 128 }, LShoulder = { -90, 0, -128 } } },
 		-- caindo de costas, pernas descendo, braços abertos pra amortecer
 		{ 10.80, { Root = { 0, 0, 0 }, Neck = { 18, 0, 0 }, RHip = { 45, 0, 10 }, LHip = { 15, 0, -10 },
 			RShoulder = { -40, 0, 80 }, LShoulder = { -40, 0, -80 } } },
@@ -3681,12 +3685,10 @@ do
 			local u = smooth(phase(t, 9.0, FS.ImpactTime))
 			return V3(-10.5, -0.6, 2.5):Lerp(V3(-9.2, 0.9, 1.2), u), V3(0, 1.6, 0):Lerp(V3(0, 4.4, -0.3), u), 60
 		elseif t < FS.Saida then
-			-- a bola PARADA: close no ROSTO (o olho do Flow aceso). Ele está tombado ~107 pra
-			-- trás, o rosto virado pro céu → a câmera fica em cima do rosto olhando pra ele
-			-- (cabeça ≈ quadril + 1.5 girado: (0, 2.6, -2.05); rosto ≈ (0, 0.89, -0.46))
+			-- a bola PARADA na chuteira, de lado (v126b: "tira aquele close final nos olhos" —
+			-- o olho do Shidou já aparece no zoom dos olhos brancos); a câmera chega devagar
 			local u = smooth(phase(t, FS.ImpactTime, FS.Saida))
-			local cab = rootPos + V3(0, -0.44, -1.43)
-			return cab + V3(-1.1, 4.0, -2.0):Lerp(V3(-0.9, 3.5, -1.75), u), cab + V3(0, 0.3, 0), 50
+			return V3(-9.2, 0.9, 1.2):Lerp(V3(-8.0, 1.7, 0.6), u), V3(0, 4.4, -0.3):Lerp(V3(0, 4.9, -0.5), u), 58
 		elseif t < 10.85 then
 			-- a bola SAI: atrás dele, na altura dela — dá pra ver ela indo pro gol
 			local u = smooth(phase(t, FS.Saida, 10.85))

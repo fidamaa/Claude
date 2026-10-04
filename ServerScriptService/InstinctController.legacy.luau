@@ -400,7 +400,9 @@ local InstinctModeState = {} -- [player] = { ExpiresAt }
 -- metade disso dobra a quantidade de disparos necessários (10 agora).
 local INSTINCT_CHARGE_PER_TRIGGER = 10 -- flat por enquanto (ver comentário acima) — 10 disparos enchem o medidor
 -- ⚠️ v120b — PEDIDO: "tem que durar o Flow uns 25 segundos" (era 9)
-local INSTINCT_MODE_DURATION = 25
+-- ⚠️ v126 — PEDIDO: "coloca pro Flow durar mais, porque tá acabando durante o replay —
+-- os Flows durarem um minuto inteiro" (era 25)
+local INSTINCT_MODE_DURATION = 60
 -- ⚠️ v5.6: era 1.75 (bônus ficava +75% maior), depois 1.12 (+12%).
 -- ⚠️ v5.7: PEDIDO — "instinct mode na real é 25% bonus": a PORÇÃO de
 -- bônus (delta acima da baseline) de cada chave do Effect/AtivaEffect
@@ -622,7 +624,8 @@ Remotes.ActivateInstinctMode.OnServerEvent:Connect(function(player, aimPoint)
 	-- ⚠️ v124 — FLOW COM CHUTE (Shidou): o Flow é o próprio chute, então precisa da bola.
 	-- Sem ela nada é gasto (o medidor continua cheio) e o jogador é avisado.
 	local exigeBola = _G.FlowExigeBola and _G.FlowExigeBola(player)
-	if exigeBola and not (_G.GetBallOwner and _G.GetBallOwner() == player) then
+	-- ⚠️ v126: não é mais "com a bola" — é com a bola NO AR EM CIMA dele (ver _G.FlowBolaEmCima)
+	if exigeBola and not (_G.FlowBolaEmCima and _G.FlowBolaEmCima(player)) then
 		Remotes.InstinctModeFeedback:FireClient(player, "FlowPrecisaBola")
 		return
 	end

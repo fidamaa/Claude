@@ -494,7 +494,8 @@ local function ligarFlowNoCorpo(player, item, duracao)
 	if tema.Motivo == "Pecas" then
 		local okEf, Ef = pcall(function() return require(ReplicatedStorage:WaitForChild("HissatsuEfeitos")) end)
 		if okEf and Ef and Ef.PecasEmVolta then
-			for _, e in ipairs(Ef.PecasEmVolta(character, tema.Cor, tema.Cor2, 1.4)) do table.insert(coisas, e) end
+			-- (v126b: "menores e em maior quantidade" — 12 formatos x taxa 1.6, tamanho 0.3 (era 0.55))
+			for _, e in ipairs(Ef.PecasEmVolta(character, tema.Cor, tema.Cor2, 1.6, 0.3)) do table.insert(coisas, e) end
 		end
 		-- ⚠️ v120b — PEDIDO: "o cara se mantém com esse olho (o de quebra-cabeça)
 		-- durante o Flow também, fora da animação": a mesma íris da cena, no rosto
@@ -516,6 +517,52 @@ local function ligarFlowNoCorpo(player, item, duracao)
 				olhosSh.Definir(1)
 				table.insert(coisas, olhosSh.Parte)
 			end
+		end
+		-- ⚠️ v126 — PEDIDO: "coloca uma aura no Shidou, pelo menos uma aurazinha roxa". Fogo
+		-- roxo em volta do corpo INTEIRO (preso a cada parte, sobe e some) + faíscas lilás.
+		local ROXO_CLARO, ROXO, ROXO_ESCURO = Color3.fromRGB(235, 200, 255), Color3.fromRGB(170, 90, 255), Color3.fromRGB(95, 20, 170)
+		for _, nome in ipairs({ "Torso", "Head", "Left Arm", "Right Arm", "Left Leg", "Right Leg" }) do
+			local parte = character:FindFirstChild(nome)
+			if parte and parte:IsA("BasePart") then
+				local fogo = Instance.new("ParticleEmitter")
+				fogo.Name = "AuraRoxaShidou"
+				fogo.Texture = "rbxasset://textures/particles/fire_main.dds"
+				fogo.Color = ColorSequence.new({
+					ColorSequenceKeypoint.new(0, ROXO_CLARO), ColorSequenceKeypoint.new(0.35, ROXO), ColorSequenceKeypoint.new(1, ROXO_ESCURO),
+				})
+				fogo.LightEmission = 0.8
+				fogo.LightInfluence = 0
+				fogo.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.9), NumberSequenceKeypoint.new(1, 0.15) })
+				fogo.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.35), NumberSequenceKeypoint.new(1, 1) })
+				fogo.Lifetime = NumberRange.new(0.35, 0.65)
+				fogo.Speed = NumberRange.new(0.5, 1.8)
+				fogo.SpreadAngle = Vector2.new(180, 180)
+				fogo.Acceleration = Vector3.new(0, 6, 0)
+				fogo.Shape = Enum.ParticleEmitterShape.Box
+				fogo.ShapeStyle = Enum.ParticleEmitterShapeStyle.Volume
+				fogo.LockedToPart = true
+				fogo.Rate = (nome == "Torso") and 16 or 8
+				fogo.Parent = parte
+				table.insert(coisas, fogo)
+			end
+		end
+		local tronco = character:FindFirstChild("Torso")
+		if tronco then
+			local faisca = Instance.new("ParticleEmitter")
+			faisca.Name = "AuraRoxaShidouFaisca"
+			faisca.Texture = "rbxasset://textures/particles/sparkles_main.dds"
+			faisca.Color = ColorSequence.new(ROXO_CLARO, ROXO)
+			faisca.LightEmission = 1
+			faisca.LightInfluence = 0
+			faisca.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.3), NumberSequenceKeypoint.new(1, 0) })
+			faisca.Lifetime = NumberRange.new(0.3, 0.6)
+			faisca.Speed = NumberRange.new(3, 7)
+			faisca.SpreadAngle = Vector2.new(180, 180)
+			faisca.Shape = Enum.ParticleEmitterShape.Box
+			faisca.ShapeStyle = Enum.ParticleEmitterShapeStyle.Volume
+			faisca.Rate = 10
+			faisca.Parent = tronco
+			table.insert(coisas, faisca)
 		end
 	end
 	-- ⚠️ v120b — PEDIDO: "às vezes o Flow tá acabando e o cara continua com as

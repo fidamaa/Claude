@@ -2025,6 +2025,20 @@ pcall(function() CosmeticosFlow = require(ReplicatedStorage:WaitForChild("Cosmet
 -- ativar o flow ao mesmo tempo". Uma cena com ChuteNoFlow precisa da bola (o
 -- InstinctController confere antes de gastar o medidor); ela olha pra mira, e no último
 -- quadro a bola sai (Big Bang Drive) e o Flow começa no mesmo instante.
+-- ⚠️ v126 — Flow do Shidou: a bola tem que estar NO AR EM CIMA dele (sem dono), perto
+-- (ver Config.FLOW_BOLA_EM_CIMA_*) — com a bola nos pés ou sem bola por perto, não ativa
+_G.FlowBolaEmCima = function(player)
+	local ball = workspace:FindFirstChild(Config.BALL_NAME)
+	local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+	if not ball or not root then return false end
+	if _G.GetBallOwner and _G.GetBallOwner() ~= nil then return false end
+	local rel = ball.Position - root.Position
+	local horizontal = Vector3.new(rel.X, 0, rel.Z).Magnitude
+	return horizontal <= (Config.FLOW_BOLA_EM_CIMA_RAIO or 10)
+		and rel.Y >= (Config.FLOW_BOLA_EM_CIMA_ALTURA_MIN or 1.5)
+		and rel.Y <= (Config.FLOW_BOLA_EM_CIMA_ALTURA_MAX or 30)
+end
+
 _G.FlowExigeBola = function(player)
 	local item = CosmeticosFlow and (CosmeticosFlow.Equipado(player, "Flow") or CosmeticosFlow.Item("Flow_Isagi"))
 	local spec = item and HissatsuCutscenes[item.Id]
@@ -2044,7 +2058,8 @@ _G.TocarCenaFlow = function(player, aimPoint, aoFim)
 	local duration = spec.Duration
 	local ball = workspace:FindFirstChild(Config.BALL_NAME)
 	-- Flow com chute: só com a bola; a cena olha pra mira (achatada no chão), igual à Hissatsu
-	local chute = spec.ChuteNoFlow == true and ball ~= nil and _G.GetBallOwner ~= nil and _G.GetBallOwner() == player
+	-- (v126: Flow com chute = a bola NO AR em cima dele, ver _G.FlowBolaEmCima)
+	local chute = spec.ChuteNoFlow == true and ball ~= nil and _G.FlowBolaEmCima(player)
 	if chute and typeof(aimPoint) == "Vector3" then
 		LastAimPoint[player] = aimPoint
 	end
@@ -2150,6 +2165,10 @@ _G.TocarCenaFlow = function(player, aimPoint, aoFim)
 				if not okFim then warn("[Flow] ativar o Flow no fim da cena falhou: " .. tostring(erroFim)) end
 			end
 			local okChute, erroChute = pcall(function()
+				-- (v126: a bola veio do ar, sem dono — o chute é dele: dá a posse antes de chutar)
+				if _G.SetBallOwnerForced and not (_G.GetBallOwner and _G.GetBallOwner() == player) then
+					_G.SetBallOwnerForced(player)
+				end
 				if _G.PulseExecuteShot then _G.PulseExecuteShot(player, FLOW_CHUTE_EFEITO, "Legendary") end
 			end)
 			if not okChute then warn("[Flow] o chute do Big Bang Drive falhou: " .. tostring(erroChute)) end

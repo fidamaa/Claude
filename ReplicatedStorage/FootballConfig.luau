@@ -1825,6 +1825,13 @@ Config.FOG_HIDDEN_TRANSPARENCY = 0.85
 -- ⚠️ v113 — PEDIDO: "deixa o Flow mais difícil" (e só 1 por partida): cargas
 -- ~metade do que eram (11/14/20/50). A carga por ARMA disparando é
 -- Config.FLOW_CHARGE_ARMA.
+-- ⚠️ v126 — PEDIDO (Shidou): "o chute do Shidou você só consegue usar se a bola estiver em
+-- cima de você, numa certa distância. Você não pode estar com a bola, e não pode estar sem
+-- a bola — só sem a bola se ela estiver em cima de você". Bola SEM DONO, no ar, até
+-- RAIO studs na horizontal e entre ALTURA_MIN e ALTURA_MAX acima do quadril.
+Config.FLOW_BOLA_EM_CIMA_RAIO = 10
+Config.FLOW_BOLA_EM_CIMA_ALTURA_MIN = 1.5
+Config.FLOW_BOLA_EM_CIMA_ALTURA_MAX = 30
 Config.FLOW_CHARGE_PASS_GIVEN = 6
 Config.FLOW_CHARGE_PASS_RECEIVED = 8
 Config.FLOW_CHARGE_STEAL = 12
