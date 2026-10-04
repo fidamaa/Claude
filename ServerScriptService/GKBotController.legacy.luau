@@ -2129,6 +2129,7 @@ local function throwBall(teamName, bot)
 	local root = bot.Root
 	-- ⚠️ v21: destrava a bola antes de lançar (ver beginCatch) — anchorada,
 	-- ela ignoraria a velocidade do passe e ficaria parada no ar.
+	if _G.CancelarVooDaBola then _G.CancelarVooDaBola() end -- (v126: ver beginCatch — nada de voo antigo no lançamento)
 	if _G.ReleaseBallFromQTE then
 		_G.ReleaseBallFromQTE()
 	end
@@ -2386,6 +2387,14 @@ local function beginCatch(teamName, bot)
 	if _G.FreezeBallForQTE then
 		_G.FreezeBallForQTE()
 	end
+	-- ⚠️ v126 — BUG: "quando eu chuto no goleiro e ele pega a bola da Hissatsu, na hora de
+	-- passar pra mim a bola fica dando rollback, voltando pra mão dele antes de sair — mesmo
+	-- renascendo a bola ou pegando pelo debug". Na defesa de Hissatsu a GUARDA já congela a
+	-- bola no duelo (de propósito: se ela passar, o voo continua) — aí o FreezeBallForQTE
+	-- acima sai sem parar o voo, e ele ficava só PAUSADO (bola ancorada). No lançamento a
+	-- bola era solta e a MIRA TRAVADA recolocava ela na reta do chute, rumo ao gol = de volta
+	-- pra mão do goleiro, que agarrava de novo... Pegou = o voo da Hissatsu ACABOU.
+	if _G.CancelarVooDaBola then _G.CancelarVooDaBola() end
 
 	-- ⚠️ v26: pegou — a Hissatsu que estava vindo acabou. Sem isso, a
 	-- próxima bola solta nos segundos seguintes ainda seria tratada como

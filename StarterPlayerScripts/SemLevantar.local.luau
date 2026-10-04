@@ -74,11 +74,38 @@ local params = RaycastParams.new()
 params.FilterType = Enum.RaycastFilterType.Exclude
 params.RespectCanCollide = false
 
+-- (v126) caixa dos pés e chão pra trava anti-afundar
+local filtroCaixa = OverlapParams.new()
+filtroCaixa.MaxParts = 40
+local filtroChao = RaycastParams.new()
+filtroChao.FilterType = Enum.RaycastFilterType.Exclude
+filtroChao.RespectCanCollide = true
+local afundadoQuadros = 0
+local function semPersonagens(char)
+	local lista = { char }
+	for _, p in ipairs(Players:GetPlayers()) do
+		if p.Character and p.Character ~= char then table.insert(lista, p.Character) end
+	end
+	for _, m in ipairs(workspace:GetChildren()) do
+		if m:IsA("Model") and m.Name:sub(1, 6) == "GKBot_" then table.insert(lista, m) end
+		if m:IsA("BasePart") and ehBola(m) then table.insert(lista, m) end
+	end
+	return lista
+end
+
 RunService.Heartbeat:Connect(function()
 	local char = player.Character
 	local root = char and char:FindFirstChild("HumanoidRootPart")
 	local agora = tick()
 	if root then
+		local function desligar(p)
+			if desligadas[p] == nil and p.CanCollide then
+				p.CanCollide = false
+				desligadas[p] = agora
+			elseif desligadas[p] then
+				desligadas[p] = agora
+			end
+		end
 		local ignorar = { char }
 		-- olha até 4 coisas empilhadas debaixo do pé (bola em cima de outro, etc.)
 		for _ = 1, 4 do
@@ -87,13 +114,54 @@ RunService.Heartbeat:Connect(function()
 			if not hit then break end
 			local p = hit.Instance
 			if not ehPisavelProibido(p) then break end
-			if desligadas[p] == nil and p.CanCollide then
-				p.CanCollide = false
-				desligadas[p] = agora
-			elseif desligadas[p] then
-				desligadas[p] = agora
-			end
+			desligar(p)
 			table.insert(ignorar, p)
+		end
+		-- ⚠️ v126 — PEDIDO: "quando a bola vai pra trás de mim eu ainda subo em cima dela; o
+		-- código que evita isso resolve a maior parte das vezes — refina". O raio do centro do
+		-- quadril não via a bola chegando por TRÁS/do lado (debaixo do calcanhar). Agora é uma
+		-- CAIXA cobrindo os pés com folga (inclui a bola rolando na direção deles).
+		local caixa = root.CFrame * CFrame.new(0, -2.6, 0)
+		local naCaixa = workspace:GetPartBoundsInBox(caixa, Vector3.new(4.2, 3.2, 4.6), filtroCaixa)
+		for _, p in ipairs(naCaixa) do
+			if p:IsA("BasePart") and not p:IsDescendantOf(char) and ehPisavelProibido(p) then
+				desligar(p)
+			end
+		end
+
+		-- ⚠️ v126 — PEDIDO: "o jogador fica caindo no chão e entrando no chão; parte dele entra
+		-- no chão e fica descendo e subindo" (depois de Hissatsu/derrubada; jogadores R6). Trava
+		-- de segurança: em pé (correndo/parado), fora de ragdoll/cutscene, se o quadril ficar
+		-- abaixo da altura de pé por alguns quadros seguidos, sobe o corpo de volta pro gramado.
+		local hum = char:FindFirstChildOfClass("Humanoid")
+		local estado = hum and hum:GetState()
+		local emPe = hum and hum.Health > 0 and not hum.PlatformStand and not hum.Sit and not root.Anchored
+			and not _G.HissatsuCutsceneLocal
+			and (estado == Enum.HumanoidStateType.Running or estado == Enum.HumanoidStateType.RunningNoPhysics
+				or estado == Enum.HumanoidStateType.Landed or estado == Enum.HumanoidStateType.None)
+		if emPe then
+			local tronco = char:FindFirstChild("Torso") or char:FindFirstChild("UpperTorso")
+			local perna = char:FindFirstChild("Left Leg") or char:FindFirstChild("LeftUpperLeg")
+			local dePe = (hum.HipHeight > 0.1) and (hum.HipHeight + root.Size.Y / 2)
+				or ((tronco and tronco.Size.Y / 2 or 1) + (perna and perna.Size.Y or 2))
+			filtroChao.FilterDescendantsInstances = semPersonagens(char)
+			local chao = workspace:Raycast(root.Position + Vector3.new(0, dePe + 1, 0), Vector3.new(0, -(dePe * 2 + 6), 0), filtroChao)
+			local falta = chao and (chao.Position.Y + dePe - root.Position.Y) or 0
+			if falta > 0.4 then
+				afundadoQuadros += 1
+				-- (conferido no Studio: afundada rápida o próprio Humanoid desfaz sozinho — mexer
+				-- junto passava do ponto; só age quando o corpo FICA afundado, que é o bug)
+				if afundadoQuadros >= 8 then
+					root.CFrame += Vector3.new(0, falta, 0)
+					local v = root.AssemblyLinearVelocity
+					root.AssemblyLinearVelocity = Vector3.new(v.X, 0, v.Z)
+					afundadoQuadros = 0
+				end
+			else
+				afundadoQuadros = 0
+			end
+		else
+			afundadoQuadros = 0
 		end
 	end
 	-- devolve a colisão local quando saiu de baixo do pé há um tempinho

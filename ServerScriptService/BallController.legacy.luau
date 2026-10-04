@@ -1459,12 +1459,14 @@ local pulseFlightDirAnterior = nil
 
 RunService.Heartbeat:Connect(function()
 	if not pulseStraightFlightActive then pulseFlightDirAnterior = nil return end
-	if ball.Anchored then return end
-	local velocidade = ball.AssemblyLinearVelocity
+	-- (v126: o dono vem ANTES do "ancorada" — goleiro que agarra com a bola congelada
+	-- encerrava o voo só depois de soltar, e aí a mira travada puxava a bola de volta)
 	if owner ~= nil then
 		stopPulseStraightFlight()
 		return
 	end
+	if ball.Anchored then return end
+	local velocidade = ball.AssemblyLinearVelocity
 	-- ⚠️ v105: saiu do campo = perde TODA a força (acaba o voo e a bola morre)
 	if foraDoCampoNoVoo() then
 		stopPulseStraightFlight()
@@ -1525,8 +1527,21 @@ RunService.Heartbeat:Connect(function()
 		params.RespectCanCollide = true
 		local ignorar = { ball }
 		for _, plr in ipairs(Players:GetPlayers()) do if plr.Character then table.insert(ignorar, plr.Character) end end
-		params.FilterDescendantsInstances = ignorar
-		local chao = workspace:Raycast(naReta + Vector3.new(0, 30, 0), Vector3.new(0, -60, 0), params)
+		-- ⚠️ v126 — BUG: "a Hissatsu sobe demais: mirei no meio e ela subiu pra fora, por cima
+		-- do travessão; tenho que mirar no chão". Conferido no Studio (chute de 750 studs no
+		-- meio do gol: cruzou a 23.2, travessão a 21): este raio desce de 30 studs ACIMA da bola
+		-- e, com a bola passando DEBAIXO do travessão, batia NO TRAVESSÃO primeiro — achava que
+		-- era o "chão" e teleportava a bola pra cima dele. Dependia de um quadro do voo cair
+		-- debaixo do travessão (por isso às vezes entrava; piorou com o voo 40% mais rápido).
+		-- Agora só vale como chão uma superfície na altura da bola ou abaixo dela.
+		local chao
+		for _ = 1, 6 do
+			params.FilterDescendantsInstances = ignorar
+			chao = workspace:Raycast(naReta + Vector3.new(0, 30, 0), Vector3.new(0, -60, 0), params)
+			if not chao or chao.Position.Y <= naReta.Y + raio + 1.5 then break end
+			table.insert(ignorar, chao.Instance) -- travessão, rede, placa: atravessa e procura o gramado
+			chao = nil
+		end
 		if chao and naReta.Y < chao.Position.Y + raio then
 			naReta = Vector3.new(naReta.X, chao.Position.Y + raio, naReta.Z)
 			local plano = Vector3.new(dir.X, 0, dir.Z)
@@ -1979,7 +1994,6 @@ _G.ClearStun = clearStun
 -- os passos de um QTE marcado assim derruba o próprio jogador em vez de
 -- disparar a ação (ver resolveCombo em PulseController.legacy.luau).
 _G.RagdollPlayer = ragdollPlayer
-
 -- ===== ATRIBUTOS DE JOGADOR =====
 -- REWORK: BallControl foi removido — o controle de bola em curvas
 -- rápidas (o que antes lia BallControl aqui) agora usa o mesmo
@@ -4539,6 +4553,35 @@ RunService.Heartbeat:Connect(function()
 		end
 
 		local newPosition = dash.startPosition:Lerp(dash.endPosition, easedAlpha)
+		-- ⚠️ v126 — PEDIDO: "o jogador fica caindo no chão e entrando no chão — depois de alguma
+		-- Hissatsu que derrube ele pra perto do chão, parte dele entra no chão e fica descendo e
+		-- subindo". O dash (carrinho, investida, dash de Hissatsu, avanço do goleiro) escreve o
+		-- corpo a cada quadro na ALTURA de onde ele estava quando começou — se começou deitado/
+		-- levantando (quadril baixo), arrastava o corpo enterrado o dash inteiro e a física do
+		-- cliente puxava de volta depois. Agora nunca abaixo da altura de pé sobre o gramado.
+		do
+			local ch = root.Parent
+			local tronco = ch and ch:FindFirstChild("Torso")
+			local perna = ch and (ch:FindFirstChild("Left Leg") or ch:FindFirstChild("LeftUpperLeg"))
+			local hum = ch and ch:FindFirstChildOfClass("Humanoid")
+			local dePe = (hum and hum.HipHeight > 0.1) and (hum.HipHeight + root.Size.Y / 2)
+				or ((tronco and tronco.Size.Y / 2 or 1) + (perna and perna.Size.Y or 2))
+			local filtroChao = RaycastParams.new()
+			filtroChao.FilterType = Enum.RaycastFilterType.Exclude
+			filtroChao.RespectCanCollide = true
+			local ignorarChao = { ch, ball }
+			for _, outro in ipairs(Players:GetPlayers()) do
+				if outro.Character then table.insert(ignorarChao, outro.Character) end
+			end
+			for _, m in ipairs(workspace:GetChildren()) do
+				if m:IsA("Model") and m.Name:sub(1, 6) == "GKBot_" then table.insert(ignorarChao, m) end
+			end
+			filtroChao.FilterDescendantsInstances = ignorarChao
+			local chao = workspace:Raycast(newPosition + Vector3.new(0, dePe + 2, 0), Vector3.new(0, -(dePe * 2 + 8), 0), filtroChao)
+			if chao and newPosition.Y < chao.Position.Y + dePe then
+				newPosition = Vector3.new(newPosition.X, chao.Position.Y + dePe, newPosition.Z)
+			end
+		end
 		if dash.arco then -- ⚠️ v110: salto em arco (Anjo da Neve)
 			local uArco = math.clamp((tick() - dash.triggeredAt) / math.max(dash.moveDuration or 1, 0.05), 0, 1)
 			newPosition += Vector3.new(0, 4 * dash.arco * uArco * (1 - uArco), 0)
