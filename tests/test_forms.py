@@ -75,7 +75,7 @@ def test_builder_prefers_owned_forms_and_offers_potential(engine):
             if s["form"] == "hero":
                 assert s["card"] in col_names(cat, col.heroes)
     assert any(s["form"] != "normal" for d in res["decks"] for s in d["analysis"]["slots"])
-    assert 1 <= len(res["potential"]) <= 2
+    assert 1 <= len(res["potential"]) <= 5
     for p in res["potential"]:
         assert p["gain"] > 0 and (p["upgrades"] or p["unlocks"])
 
@@ -95,3 +95,51 @@ def test_model_learns_form_effects(tmp_path, engine):
     used = (m.evo_games > 300)
     assert used.sum() > 0
     assert float(np.mean(m.bt_ev[used])) > 0.1  # efeito real médio ≈ 0.3
+
+
+def test_api_evo_vs_hero_interpretation(engine):
+    from crlab.ingest.official_api import card_forms, collection_from_player, register_catalog
+    register_catalog(engine.catalog)
+    # Cavaleiro tem Evo e Herói: 1 = Evo, 2 = Herói, 3 = ambos
+    assert card_forms({"name": "Knight", "evolutionLevel": 2}) == (False, True)
+    assert card_forms({"name": "Knight", "evolutionLevel": 1}) == (True, False)
+    assert card_forms({"name": "Knight", "evolutionLevel": 3}) == (True, True)
+    # carta só com Herói / só com Evo
+    assert card_forms({"name": "Mini P.E.K.K.A", "evolutionLevel": 1}) == (False, True)
+    assert card_forms({"name": "Skeletons", "evolutionLevel": 1}) == (True, False)
+    col = collection_from_player({"cards": [{"name": "Knight", "level": 14, "maxLevel": 16, "evolutionLevel": 2},
+                                            {"name": "Skeletons", "level": 16, "maxLevel": 16, "evolutionLevel": 1}]})
+    assert col["heroes"] == ["Knight"] and col["evolutions"] == ["Skeletons"]
+
+
+def test_catalog_sync_adds_new_cards(tmp_path, engine):
+    from crlab.catalog import Catalog
+    from crlab.catalog_sync import sync_catalog
+
+    class FakeApi:
+        def _get(self, path):
+            return {"items": [
+                {"name": "Knight", "id": 26000000, "elixirCost": 3, "rarity": "Common",
+                 "iconUrls": {"medium": "u", "evolutionMedium": "e", "heroMedium": "h"}},
+                {"name": "Carta Totalmente Nova", "id": 27000099, "elixirCost": 5, "rarity": "Legendary", "iconUrls": {"medium": "u"}},
+            ]}
+
+    res = sync_catalog(FakeApi(), engine.catalog, tmp_path, log=lambda *_: None)
+    assert res["added"] == ["Carta Totalmente Nova"]
+    cat = Catalog.load(extra_dir=tmp_path)
+    assert cat.n == engine.catalog.n + 1
+    assert cat.by_key["Carta Totalmente Nova"].type == "building"
+    assert cat.meta["ids"]["Knight"] == 26000000
+
+
+def test_builder_forced_form_and_potential_variety(engine):
+    cat = engine.catalog
+    cards = {c.key: 14 for c in cat.cards if c.idx % 3}
+    cards.update({"Ice Golem": 14, "Knight": 14, "Miner": 12, "The Log": 11, "Hog Rider": 12})
+    col = PlayerCollection.from_dict(cat, {"cards": cards, "evolutions": ["Skeletons"], "heroes": ["Knight"], "reference_level": 14})
+    ig = cat.by_key["Ice Golem"].idx
+    res = DeckBuilder(engine).build(BuildRequest(must_include=[ig], forced_forms={ig: HERO}), col)
+    for d in res["decks"]:
+        assert {"card": "Ice Golem", "form": "hero"} in d["analysis"]["slots"]
+    arch = [p["analysis"]["archetype"]["primary"] for p in res["potential"]]
+    assert all(arch.count(a) <= 2 for a in arch)

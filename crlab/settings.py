@@ -86,6 +86,8 @@ DEFAULTS: dict = {
         "top_k": 5,
         "min_distinct_cards": 2,
         "style_penalty": 0.08,
+        # Penalidade por função essencial do Draft ausente (condição de vitória, tanque, feitiço, antiaéreo, distração).
+        "role_penalty": 0.01,
         "seed": 7,
     },
 }

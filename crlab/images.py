@@ -20,12 +20,34 @@ def card_slug(key: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", key.lower().replace(".", "")).strip("-")
 
 
+def _download(url: str) -> bytes | None:
+    try:
+        with urllib.request.urlopen(url, timeout=15) as resp:
+            data = resp.read()
+    except (urllib.error.URLError, TimeoutError, OSError, ValueError):
+        return None
+    return data if data.startswith(b"\x89PNG") else None
+
+
 class CardImages:
     def __init__(self, catalog: Catalog, cache_dir: str | Path):
         self.cache = Path(cache_dir)
+        self.by_slug = {card_slug(c.key): c.key for c in catalog.cards}
+        self.icons = (catalog.meta or {}).get("icons", {})  # arte oficial (API) como reserva
         self.slugs = {card_slug(c.key) for c in catalog.cards}
         self.evo_slugs = {card_slug(c.key) for c in catalog.cards if c.evo}
         self.hero_slugs = {card_slug(c.key) for c in catalog.cards if c.has("hero")}
+
+    def _fetch(self, url: str | None) -> bytes | None:
+        return _download(url) if url else None
+
+    def _official_url(self, name: str) -> str | None:
+        form = "hero" if name.endswith("-hero") else "evo" if name.endswith("-ev1") else "normal"
+        base = name[:-5] if form == "hero" else name[:-4] if form == "evo" else name
+        icons = self.icons.get(self.by_slug.get(base, ""), {})
+        if form == "hero":
+            return next((v for k, v in icons.items() if "hero" in k.lower()), None)
+        return icons.get("evolutionMedium") if form == "evo" else icons.get("medium")
 
     def valid(self, size: str, name: str) -> bool:
         if size not in SIZES:
@@ -45,17 +67,12 @@ class CardImages:
             return path.read_bytes()
         if missing.exists():
             return None
-        try:
-            with urllib.request.urlopen(f"{ASSETS_BASE}/{SIZES[size]}/{name}.png", timeout=15) as resp:
-                data = resp.read()
-        except urllib.error.HTTPError as e:
-            if e.code == 404:
-                missing.parent.mkdir(parents=True, exist_ok=True)
-                missing.touch()
-            return None
-        except (urllib.error.URLError, TimeoutError, OSError):
-            return None
-        if not data.startswith(b"\x89PNG"):
+        data = self._fetch(f"{ASSETS_BASE}/{SIZES[size]}/{name}.png")
+        if data is None:
+            data = self._fetch(self._official_url(name))
+        if data is None:
+            missing.parent.mkdir(parents=True, exist_ok=True)
+            missing.touch()
             return None
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(data)

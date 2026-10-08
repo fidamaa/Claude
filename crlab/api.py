@@ -19,6 +19,7 @@ from .catalog import DATA_DIR, UnknownCardError
 from .collector import Collector
 from .engine import DeckError, Engine
 from .images import CardImages, card_slug
+from .levels import FORM_CODES
 from .levels import PlayerCollection
 from .optimizer import suggest_swaps
 from .settings import load_settings
@@ -56,6 +57,7 @@ class BuildIn(BaseModel):
     min_avg_elixir: float | None = None
     top_k: int | None = None
     potential: bool = True
+    forced_forms: dict[str, str] = Field(default_factory=dict, description="carta -> normal | evo | hero exigida")
 
 
 def jsonable(x):
@@ -70,11 +72,30 @@ def jsonable(x):
     return x
 
 
+def sync_cards(log=print) -> dict | None:
+    """Atualiza o catálogo com todas as cartas do jogo (API oficial) antes de montar o motor."""
+    from .catalog import extra_dir, get_catalog, reload_catalog
+    from .catalog_sync import sync_catalog
+    from .ingest.official_api import ClashApi
+    try:
+        res = sync_catalog(ClashApi(), get_catalog(), extra_dir(), log=log)
+        reload_catalog()
+        return res
+    except Exception as e:  # noqa: BLE001 - nunca derruba o site por falha na sincronização
+        log(f"Sincronização do catálogo falhou (seguindo com o catálogo local): {type(e).__name__}: {e}")
+        return None
+
+
 def create_app(cfg: dict | None = None, engine: Engine | None = None, start_collector: bool = False) -> FastAPI:
     cfg = cfg or load_settings()
+    os.environ.setdefault("CRLAB_DATA_DIR", str(Path(cfg["data"]["db_path"]).parent))
+    if engine is None and start_collector and os.environ.get("CR_API_TOKEN"):
+        sync_cards()
     app = FastAPI(title="Clash Deck Lab", version="0.1.0",
                   description="Análise explicável de decks, matchups por arquétipo e geração de decks.")
     state = {"engine": engine or Engine.from_settings(cfg)}
+    from .ingest.official_api import register_catalog
+    register_catalog(state["engine"].catalog)
     collector = Collector(cfg, on_new_engine=lambda e: state.__setitem__("engine", e))
     if start_collector:
         collector.start_background()
@@ -107,19 +128,7 @@ def create_app(cfg: dict | None = None, engine: Engine | None = None, start_coll
     # IDs oficiais das cartas (para o link "copiar deck" do jogo). Base: data/card_ids.json;
     # com CR_API_TOKEN, completa/atualiza pela API oficial em segundo plano.
     card_ids: dict[str, int] = json.loads((DATA_DIR / "card_ids.json").read_text(encoding="utf-8"))
-
-    def refresh_ids():
-        from .ingest.official_api import ApiError, ClashApi
-        try:
-            for item in ClashApi()._get("/cards").get("items", []):
-                card = eng().catalog.find(item.get("name", ""))
-                if card and item.get("id"):
-                    card_ids[card.key] = int(item["id"])
-        except (ApiError, OSError, ValueError):
-            pass
-
-    if os.environ.get("CR_API_TOKEN") and start_collector:
-        threading.Thread(target=refresh_ids, daemon=True).start()
+    card_ids.update({k: v for k, v in (eng().catalog.meta.get("ids") or {}).items() if v})
 
     @app.get("/api/cards")
     def cards():
@@ -209,6 +218,26 @@ def create_app(cfg: dict | None = None, engine: Engine | None = None, start_coll
                           "winrate": float(m.card_wr[i])} for i in order if m.card_games[i] > 0]
         return jsonable({"source": source, "decks": decks, "cards": cards_out, "data": e.data_status()})
 
+    @app.get("/api/player/{tag}/raw")
+    def player_raw(tag: str):
+        """Diagnóstico: campos crus das cartas (como a API marca Evo/Herói), sem as URLs de imagem."""
+        from .ingest.official_api import ApiError, ClashApi, card_forms
+        if not os.environ.get("CR_API_TOKEN"):
+            raise HTTPException(status_code=503, detail="Servidor sem CR_API_TOKEN.")
+        try:
+            player = ClashApi().player(tag)
+        except ApiError as e:
+            raise HTTPException(status_code=502, detail=str(e)) from e
+        out = []
+        for c in player.get("cards", []):
+            item = {k: v for k, v in c.items() if k != "iconUrls"}
+            item["iconUrls_keys"] = sorted((c.get("iconUrls") or {}).keys())
+            evo, hero = card_forms(c)
+            item["interpretado"] = {"evo": evo, "hero": hero}
+            out.append(item)
+        special = [c for c in out if c.get("evolutionLevel") or c.get("maxEvolutionLevel")]
+        return {"cards_com_evo_ou_heroi": special, "total_cartas": len(out)}
+
     @app.get("/api/player/{tag}/decks")
     def player_decks(tag: str):
         """Perfil, deck atual e decks usados recentemente por qualquer jogador (battlelog oficial)."""
@@ -279,6 +308,8 @@ def create_app(cfg: dict | None = None, engine: Engine | None = None, start_coll
                 win_conditions=names_to_idx(body.win_conditions), style=parse_style(body.style),
                 max_avg_elixir=body.max_avg_elixir, min_avg_elixir=body.min_avg_elixir, top_k=body.top_k,
                 potential=body.potential,
+                forced_forms={eng().catalog.resolve(k).idx: FORM_CODES[v] for k, v in body.forced_forms.items()
+                              if v in FORM_CODES},
             )
             return DeckBuilder(eng()).build(req, collection(body.collection))
         return guarded(run)

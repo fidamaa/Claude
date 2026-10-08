@@ -53,7 +53,10 @@ class Collector:
         if not self.lock.acquire(blocking=False):
             return {"started": False, "reason": "Uma coleta já está em andamento."}
         try:
-            from .ingest.official_api import ClashApi
+            from .api import sync_cards
+            from .ingest.official_api import ClashApi, register_catalog
+            sync_cards(log=self._log)  # cartas novas do jogo entram no catálogo antes do treino
+            register_catalog(get_catalog())
             self.status.update(running=True, last_error=None)
             self._log("Coleta iniciada")
             api = ClashApi()
