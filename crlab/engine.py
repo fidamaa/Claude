@@ -79,6 +79,7 @@ class Engine:
 
     def attach_model(self, model: DataModel):
         self.model = model
+        self.__dict__.pop("_opp_cache", None)
         n_arch = model.arch_games
         w = (n_arch / (n_arch + 500))[:, None]
         self.arch_caps = (1 - w) * self.ref_arch_caps + w * np.where(model.arch_caps.any(1)[:, None],
@@ -126,24 +127,39 @@ class Engine:
         c = h["max_logit"]
         return c * np.tanh(L / c)
 
-    def model_logits(self, idx, primary):
+    def _opponent_tables(self, fast: bool):
+        """Pré-calcula, por arquétipo, a força dos decks adversários amostrados (S x K) e os pesos.
+        No modo rápido (busca do gerador) usa só os 48 adversários mais frequentes de cada arquétipo."""
+        key = "fast" if fast else "full"
+        cache = self.__dict__.setdefault("_opp_cache", {})
+        if key not in cache:
+            m = self.model
+            b, M = m.bt_b, m.bt_M
+            tables = {}
+            for a in range(K):
+                opp = m.opponents.get(a)
+                if opp is None or len(opp["w"]) == 0:
+                    continue
+                O, w = opp["idx"], np.asarray(opp["w"], float)
+                if fast and len(w) > 48:
+                    keep = np.argsort(-w)[:48]
+                    O, w = O[keep], w[keep]
+                tables[a] = (b[O].sum(1)[:, None] + M[O].sum(1), w / w.sum())
+            cache[key] = tables
+        return cache[key]
+
+    def model_logits(self, idx, primary, fast: bool = False):
         m = self.model
         b, M = m.bt_b, m.bt_M
         x = b[idx].sum(1)[:, None] + M[idx].sum(1)  # B x K
         out = np.zeros_like(x)
-        for a in range(K):
-            opp = m.opponents.get(a)
-            if opp is None or len(opp["w"]) == 0:
-                continue
-            O = opp["idx"]
-            T = b[O].sum(1)[:, None] + M[O].sum(1)  # S x K (depende do arquétipo do deck avaliado)
-            t = T[:, primary].T  # B x S
-            p = sigmoid(x[:, a:a + 1] - t) @ opp["w"] / opp["w"].sum()
-            out[:, a] = logit(p)
+        for a, (T, w) in self._opponent_tables(fast).items():
+            t = T[:, primary].T  # B x S (depende do arquétipo do deck avaliado)
+            out[:, a] = logit(sigmoid(x[:, a:a + 1] - t) @ w)
         support = m.card_arch_games[idx].min(1)  # B x K: carta menos observada limita a confiança
         return out, support
 
-    def evaluate(self, idx, col: PlayerCollection | None = None, detail: bool = False) -> dict:
+    def evaluate(self, idx, col: PlayerCollection | None = None, detail: bool = False, fast: bool = False) -> dict:
         idx = np.atleast_2d(np.asarray(idx))
         primary, labels = self.clf.classify_batch(idx)
         caps = self.fx.capabilities(idx)
@@ -157,7 +173,7 @@ class Engine:
         support = np.zeros_like(L_h)
         L_m = None
         if self.model is not None:
-            L_m, support = self.model_logits(idx, primary)
+            L_m, support = self.model_logits(idx, primary, fast=fast)
             wm = support / (support + self.cfg["blend"]["model_k"])
             L = (1 - wm) * L_h + wm * L_m
         gaps = self.levels.gaps(idx, col)

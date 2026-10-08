@@ -41,7 +41,7 @@ class DeckBuilder:
 
     # ---------------------------------------------------------------- objetivo
     def _score(self, decks: np.ndarray, req: BuildRequest, col) -> np.ndarray:
-        ev = self.engine.evaluate(decks, col)
+        ev = self.engine.evaluate(decks, col, fast=True)
         s = ev["score"].copy()
         f = self.f
         champs = f["champ"][decks].sum(1)
@@ -64,7 +64,9 @@ class DeckBuilder:
         deck = list(partial)
         while len(deck) < 8:
             cand = pool[~np.isin(pool, deck)]
-            batch = np.array([deck + [c] for c in cand])
+            batch = np.empty((len(cand), len(deck) + 1), dtype=int)
+            batch[:, :-1] = deck
+            batch[:, -1] = cand
             s = self._score(batch, req, col)
             if noise:
                 s = s + rng.normal(0, noise, len(s))
@@ -72,32 +74,28 @@ class DeckBuilder:
         return deck
 
     def _local_search(self, deck: list[int], locked: set[int], pool: np.ndarray, req, col, seen: dict):
-        cur = list(deck)
-        cur_s = float(self._score(np.array([cur]), req, col)[0])
+        """Melhor troca 1-por-1 até convergir. Os lotes (posições livres x candidatas) são montados
+        de forma vetorizada; só os melhores de cada lote entram no registro de decks vistos."""
+        cur = np.array(deck)
+        cur_s = float(self._score(cur[None, :], req, col)[0])
         for _ in range(self.bcfg["max_iters"]):
+            free = np.array([p for p, c in enumerate(cur) if c not in locked])
             cand = pool[~np.isin(pool, cur)]
-            moves, batch = [], []
-            for pos, c_out in enumerate(cur):
-                if c_out in locked:
-                    continue
-                rest = cur[:pos] + cur[pos + 1:]
-                for c in cand:
-                    moves.append((pos, int(c)))
-                    batch.append(rest + [int(c)])
-            if not batch:
+            if len(free) == 0 or len(cand) == 0:
                 break
-            batch = np.array(batch)
+            pos = np.repeat(free, len(cand))
+            new = np.tile(cand, len(free))
+            batch = np.repeat(cur[None, :], len(pos), axis=0)
+            batch[np.arange(len(pos)), pos] = new
             s = self._score(batch, req, col)
-            for row, sc in zip(batch, s):
-                seen[tuple(sorted(row.tolist()))] = float(sc)
+            for j in np.argpartition(-s, min(24, len(s) - 1))[:24]:
+                seen[tuple(sorted(batch[j].tolist()))] = float(s[j])
             j = int(np.argmax(s))
             if s[j] <= cur_s + 1e-6:
                 break
-            pos, c = moves[j]
-            cur = cur[:pos] + cur[pos + 1:] + [c]
-            cur_s = float(s[j])
-        seen[tuple(sorted(cur))] = cur_s
-        return cur, cur_s
+            cur, cur_s = batch[j].copy(), float(s[j])
+        seen[tuple(sorted(cur.tolist()))] = cur_s
+        return cur.tolist(), cur_s
 
     def build(self, req: BuildRequest, col: PlayerCollection | None = None) -> dict:
         cat, f = self.cat, self.f
@@ -139,10 +137,19 @@ class DeckBuilder:
             for r in range(self.bcfg["restarts_per_seed"]):
                 starts.append(self._complete(sd, pool, req, col, rng, noise=0.0 if r == 0 else 0.02))
         starts += known
+        done_starts: set[tuple] = set()
+        optima: set[tuple] = set()
         for st in starts:
+            key = tuple(sorted(st))
+            if key in done_starts:
+                continue
+            done_starts.add(key)
             lock = locked | (set(st) & set(wcs)) if wcs else locked
             deck, s = self._local_search(st, lock, pool, req, col, seen)
-            for _ in range(2):  # perturbação
+            if tuple(sorted(deck)) in optima:  # convergiu para um ótimo já explorado
+                continue
+            optima.add(tuple(sorted(deck)))
+            for _ in range(self.bcfg["perturbations"]):  # perturbação
                 free = [c for c in deck if c not in lock]
                 if len(free) < 2:
                     break

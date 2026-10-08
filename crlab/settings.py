@@ -78,8 +78,9 @@ DEFAULTS: dict = {
         "opponent_samples": 300,
     },
     "builder": {
-        "restarts_per_seed": 3,
-        "max_seeds": 14,
+        "restarts_per_seed": 2,
+        "max_seeds": 10,
+        "perturbations": 1,
         "max_iters": 25,
         "top_k": 5,
         "min_distinct_cards": 2,

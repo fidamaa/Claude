@@ -15,6 +15,8 @@ explicações. Ela não entrega uma nota única de 0 a 100. Ela tenta responder:
 | **Níveis e evoluções** | Diferencia força teórica, força no nível do jogador, desempenho no meta (dados) e compatibilidade com o deck |
 | **Otimização** | "Trocar A por B melhora contra X (+3,1 p.p.), mas piora contra Y (−2,0 p.p.)" e as 3 melhores substitutas por carta, opcionalmente mantendo a condição de vitória ou mirando um arquétipo |
 | **Criar decks** | Busca combinatória sobre a coleção do jogador com cartas obrigatórias/proibidas, condição de vitória, estilo e faixa de elixir, e devolve os K melhores decks distintos, comparados lado a lado |
+| **Meta e jogadores** | Decks e cartas em alta nas partidas coletadas; consulta do deck atual e dos decks recentes de qualquer jogador pela tag |
+| **Copiar para o jogo** | Botão que abre o Clash Royale com o deck pronto para copiar (link oficial `link.clashroyale.com`) |
 | **Dados reais** | Coleta pela API oficial, importação de JSONL/CSV, modelo estatístico com validação temporal, janela de período e ponderação por recência |
 
 ## Instalação e uso rápido

@@ -9,8 +9,40 @@ const pct = (p, d = 0) => (100 * num(p)).toFixed(d) + "%";
 const pp = (x) => (x >= 0 ? "+" : "−") + Math.abs(100 * num(x)).toFixed(1);
 const norm = (s) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
 
-const state = { cards: [], byKey: {}, archetypes: [], archName: {}, deck: [], build: { wincon: [], must: [], exclude: [] } };
+const state = { cards: [], byKey: {}, archetypes: [], archName: {}, deck: [], contrib: null, meta: null, metaSort: "games",
+  build: { wincon: [], must: [], exclude: [] } };
 const COL_KEY = "crlab.collection.v1", PLAYER_KEY = "crlab.player.v1", DECK_KEY = "crlab.deck.v1";
+
+// ------------------------------------------------------------------ ícones (SVG em linha, sem emojis)
+const ICONS = {
+  shield: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
+  trash: '<path d="M3 6h18"/><path d="M19 6l-1 14H6L5 6"/><path d="M8 6V4h8v2"/>',
+  clipboard: '<rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>',
+  external: '<path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>',
+  copy: '<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
+  crown: '<path d="m2 7 5 5 5-8 5 8 5-5-2 12H4z"/>',
+  check: '<path d="M20 6 9 17l-5-5"/>',
+  ban: '<circle cx="12" cy="12" r="10"/><path d="m4.9 4.9 14.2 14.2"/>',
+  sparkles: '<path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 16v5M16.5 18.5h5"/>',
+  drop: '<path d="M12 2.7s6 6.3 6 11.3a6 6 0 0 1-12 0c0-5 6-11.3 6-11.3z"/>',
+  cycle: '<path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M8 16H3v5"/>',
+  layers: '<path d="m12 2 10 5-10 5L2 7z"/><path d="m2 17 10 5 10-5"/><path d="m2 12 10 5 10-5"/>',
+  level: '<path d="M4 20V14M10 20V9M16 20V4M2 20h20"/>',
+  air: '<path d="M2 16l20-8-6 14-3-6z"/><path d="m13 16-4 4"/>',
+  tank: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5"/>',
+  swarm: '<circle cx="6" cy="7" r="2.5"/><circle cx="18" cy="7" r="2.5"/><circle cx="12" cy="13" r="2.5"/><circle cx="6" cy="19" r="2.5"/><circle cx="18" cy="19" r="2.5"/>',
+  castle: '<path d="M3 21V8l3 2V6l3 2V4h6v4l3-2v4l3-2v13z"/><path d="M10 21v-5h4v5"/>',
+  swords: '<path d="M14.5 17.5 3 6V3h3l11.5 11.5"/><path d="m13 19 6-6"/><path d="m16 16 4 4"/><path d="m19 21 2-2"/>',
+  bolt: '<path d="M13 2 3 14h9l-1 8 10-12h-9z"/>',
+  alert: '<path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/>',
+  arrow: '<path d="M5 12h14M12 5l7 7-7 7"/>',
+  up: '<path d="m18 15-6-6-6 6"/>', down: '<path d="m6 9 6 6 6-6"/>',
+  user: '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
+  trophy: '<path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3"/>',
+  x: '<path d="M18 6 6 18M6 6l12 12"/>',
+};
+const icon = (n) => `<svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[n] || ""}</svg>`;
+function hydrateIcons(root = document) { $$("[data-icon]", root).forEach((el) => { el.innerHTML = icon(el.dataset.icon); }); }
 
 // Rótulos curtos (o texto completo fica no tooltip)
 const STRONG = { air_defense: "Defesa aérea", air_swarm: "Área aérea", ground_swarm: "Área terrestre", tank_killing: "Anti-tanque",
@@ -22,13 +54,13 @@ const WEAK = { air_defense: "Defesa aérea fraca", air_swarm: "Pouca área aére
   siege_breaking: "Sofre com siege", defense_volume: "Defesa frágil", pressure: "Pouca pressão", spells: "Feitiços incompletos",
   reset: "Sem reset" };
 const GROUPS = [
-  ["✈️", "Defesa aérea", ["air_defense", "air_swarm"]],
-  ["🛡️", "Contra tanques", ["tank_killing", "defense_volume"]],
-  ["💥", "Contra enxames", ["ground_swarm", "anti_graveyard"]],
-  ["🏰", "Contra Corredor/RG", ["building_def"]],
-  ["🔄", "Ciclo e custo", ["cycle", "elixir_eff", "cheap_answers"]],
-  ["⚔️", "Ataque", ["pressure", "siege_breaking", "counterattack"]],
-  ["✨", "Feitiços", ["spells", "reset"]],
+  ["air", "Defesa aérea", ["air_defense", "air_swarm"]],
+  ["tank", "Contra tanques", ["tank_killing", "defense_volume"]],
+  ["swarm", "Contra enxames", ["ground_swarm", "anti_graveyard"]],
+  ["castle", "Contra Corredor/RG", ["building_def"]],
+  ["cycle", "Ciclo e custo", ["cycle", "elixir_eff", "cheap_answers"]],
+  ["swords", "Ataque", ["pressure", "siege_breaking", "counterattack"]],
+  ["bolt", "Feitiços", ["spells", "reset"]],
 ];
 
 // ------------------------------------------------------------------ utilidades
@@ -51,29 +83,74 @@ function load(key, fallback) { try { return JSON.parse(localStorage.getItem(key)
 const emptyCol = () => ({ cards: {}, evolutions: [], reference_level: null });
 const loadCollection = () => ({ ...emptyCol(), ...load(COL_KEY, emptyCol()) });
 const saveCollection = (c) => store(COL_KEY, c);
+const hasCollection = () => Object.keys(loadCollection().cards).length > 0;
 function collectionPayload() {
   const c = loadCollection();
   if (!Object.keys(c.cards).length) return null;
   return { cards: c.cards, evolutions: c.evolutions, reference_level: c.reference_level || null };
 }
-const cardName = (k) => esc(state.byKey[k]?.name_pt || k);
+function refLevel(col) {
+  const v = Object.values(col.cards).filter((x) => typeof x === "number").sort((a, b) => a - b);
+  return v.length ? v[Math.floor(0.75 * (v.length - 1))] : null;
+}
+function deckLevel(keys) {
+  const col = loadCollection();
+  const v = keys.map((k) => col.cards[k]).filter((x) => typeof x === "number");
+  return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null;
+}
 const loading = (msg) => `<div class="panel loading"><span class="spinner"></span>${esc(msg)}</div>`;
+const options = (vals, sel, fmt = (v) => v) => vals.map((v) => `<option value="${esc(v)}" ${String(v) === String(sel) ? "selected" : ""}>${esc(fmt(v))}</option>`).join("");
 
 // Tooltip único: qualquer elemento com data-tip (texto puro, quebras de linha preservadas)
-const tipEl = () => $("#tip");
 document.addEventListener("mouseover", (e) => {
   const el = e.target.closest("[data-tip]");
-  if (!el) { tipEl().style.display = "none"; return; }
-  tipEl().textContent = el.dataset.tip;
-  tipEl().style.whiteSpace = "pre-line";
-  tipEl().style.display = "block";
+  const tip = $("#tip");
+  if (!el) { tip.style.display = "none"; return; }
+  tip.textContent = el.dataset.tip;
+  tip.style.display = "block";
 });
 document.addEventListener("mousemove", (e) => {
-  const t = tipEl();
+  const t = $("#tip");
   if (t.style.display !== "block") return;
   const x = Math.min(e.clientX + 14, window.innerWidth - t.offsetWidth - 8);
   const y = e.clientY + 16 + t.offsetHeight > window.innerHeight ? e.clientY - t.offsetHeight - 10 : e.clientY + 16;
   t.style.left = x + "px"; t.style.top = y + "px";
+});
+
+// ------------------------------------------------------------------ copiar deck para o jogo
+// Link oficial do jogo: abre o Clash Royale com o deck pronto para copiar. Cartas com evolução
+// desbloqueada vão primeiro (posições de evolução).
+function deckLink(keys) {
+  const col = loadCollection();
+  const evo = keys.filter((k) => state.byKey[k]?.evo && col.evolutions.includes(k)).slice(0, 2);
+  const ordered = [...evo, ...keys.filter((k) => !evo.includes(k))];
+  const ids = ordered.map((k) => state.byKey[k]?.id);
+  if (ids.length !== 8 || ids.some((x) => !x)) return null;
+  return `https://link.clashroyale.com/en/?clashroyale://copyDeck?deck=${ids.join(";")}&l=Royals&tt=159000000`;
+}
+function openInGame(keys) {
+  const url = deckLink(keys);
+  if (!url) return toast(keys.length !== 8 ? "O deck precisa de 8 cartas." : "Uma das cartas ainda não tem ID oficial para o link.");
+  window.open(url, "_blank", "noopener");
+}
+async function copyLink(keys) {
+  const url = deckLink(keys);
+  if (!url) return toast("Não foi possível gerar o link deste deck.");
+  try { await navigator.clipboard.writeText(url); toast("Link copiado. Abra no celular para copiar o deck no jogo."); }
+  catch { prompt("Copie o link do deck:", url); }
+}
+const deckButtons = (keys, analyze = true) => `<div class="btns">
+  ${analyze ? `<button class="sm act-analyze" data-deck="${esc(JSON.stringify(keys))}">Analisar</button>` : ""}
+  <button class="sm act-game" data-deck="${esc(JSON.stringify(keys))}" data-tip="Abrir no Clash Royale e copiar o deck">${icon("external")} Jogo</button>
+  <button class="sm act-link" data-deck="${esc(JSON.stringify(keys))}" data-tip="Copiar link do deck">${icon("copy")}</button></div>`;
+document.addEventListener("click", (e) => {
+  const b = e.target.closest(".act-analyze, .act-game, .act-link");
+  if (!b) return;
+  const keys = JSON.parse(b.dataset.deck);
+  if (b.classList.contains("act-game")) return openInGame(keys);
+  if (b.classList.contains("act-link")) return copyLink(keys);
+  state.deck = keys; store(DECK_KEY, keys); deckChanged();
+  showTab("analyze"); analyzeDeck(); window.scrollTo({ top: 0, behavior: "smooth" });
 });
 
 // ------------------------------------------------------------------ navegação
@@ -82,6 +159,7 @@ function showTab(name) {
   $$(".tab").forEach((t) => t.classList.toggle("active", t.id === "tab-" + name));
   if (name === "collection") renderCollection();
   if (name === "data") renderStatus();
+  if (name === "meta") renderMeta();
   if (name === "analyze") renderSlots();
 }
 $$("nav button").forEach((b) => b.addEventListener("click", () => showTab(b.dataset.tab)));
@@ -96,7 +174,7 @@ document.addEventListener("error", (e) => {
   img.closest(".ctile, .mini")?.classList.add("noimg");
 }, true);
 
-function tile(c, { size = "s", inDeck = false, off = false, extraTip = "", evoArt = false, showLevel = true } = {}) {
+function tile(c, { size = "s", inDeck = false, extraTip = "", evoArt = false, showLevel = true } = {}) {
   if (!c) return "";
   const col = loadCollection();
   const lvl = col.cards[c.key];
@@ -106,22 +184,18 @@ function tile(c, { size = "s", inDeck = false, off = false, extraTip = "", evoAr
   if (showLevel && hasEvo) badge = `<span class="badge evo">EVO</span>`;
   else if (showLevel && lvl != null) badge = `<span class="badge ${ref && lvl < ref - 0.5 ? "low" : ""}">${num(lvl)}</span>`;
   const useEvo = evoArt && hasEvo && c.evo;
-  const src = imgUrl(c, size, useEvo);
   const fb = useEvo ? ` data-fallback="${imgUrl(c, size)}"` : "";
   const tip = `${c.name_pt}  ·  ${c.elixir} de elixir${lvl != null ? "  ·  nível " + lvl : ""}${extraTip ? "\n" + extraTip : ""}`;
-  return `<div class="ctile r-${esc(c.rarity)} ${inDeck ? "in" : ""} ${off ? "off" : ""}" data-key="${esc(c.key)}" data-tip="${esc(tip)}">
-    <div class="art" data-initial="${esc(c.name_pt.slice(0, 1))}"><img src="${src}"${fb} alt="${esc(c.name_pt)}" loading="lazy"></div>
+  return `<div class="ctile r-${esc(c.rarity)} ${inDeck ? "in" : ""}" data-key="${esc(c.key)}" data-tip="${esc(tip)}">
+    <div class="art" data-initial="${esc(c.name_pt.slice(0, 1))}"><img src="${imgUrl(c, size, useEvo)}"${fb} alt="${esc(c.name_pt)}" loading="lazy"></div>
     <span class="drop"><span>${num(c.elixir)}</span></span>${badge}<span class="nm">${esc(c.name_pt)}</span></div>`;
-}
-function refLevel(col) {
-  const v = Object.values(col.cards).filter((x) => typeof x === "number").sort((a, b) => a - b);
-  return v.length ? v[Math.floor(0.75 * (v.length - 1))] : null;
 }
 function mini(k) {
   const c = state.byKey[k];
   if (!c) return esc(k);
   return `<span class="mini"><img src="${imgUrl(c, "s")}" alt="" loading="lazy">${esc(c.name_pt)}</span>`;
 }
+const deckTiles = (keys) => `<div class="slots">${keys.map((k) => tile(state.byKey[k], { evoArt: true })).join("")}</div>`;
 function matches(card, q) {
   if (!q) return true;
   const n = norm(q);
@@ -135,18 +209,18 @@ function openPicker(mode, slot = null) {
   Object.assign(picker, { mode, slot, elixir: "all", type: "all" });
   $$("#m-elixir button, #m-type button").forEach((b) => b.classList.toggle("on", b.dataset.v === "all"));
   $("#m-search").value = "";
-  const hasCol = Object.keys(loadCollection().cards).length > 0;
+  const hasCol = hasCollection();
   $("#m-owned").checked = hasCol && (mode === "deck" ? $("#analyze-use-col").checked : $("#build-use-col").checked);
-  $("#m-owned").parentElement.style.display = hasCol ? "" : "none";
+  $("#m-owned").closest(".switch").style.display = hasCol ? "" : "none";
   $("#modal").hidden = false;
   renderModal();
   setTimeout(() => $("#m-search").focus(), 30);
 }
 function closePicker() {
   $("#modal").hidden = true;
-  if (picker.mode === "deck") { renderSlots(); } else { renderChips(); }
+  if (picker.mode === "deck") renderSlots(); else renderChips();
 }
-function pickerSelected() { return picker.mode === "deck" ? state.deck : state.build[picker.mode]; }
+const pickerSelected = () => (picker.mode === "deck" ? state.deck : state.build[picker.mode]);
 function renderModal() {
   const col = loadCollection();
   const sel = pickerSelected();
@@ -156,10 +230,9 @@ function renderModal() {
   if (picker.elixir !== "all") list = list.filter((c) => (picker.elixir === "6" ? c.elixir >= 6 : c.elixir === +picker.elixir));
   if (picker.type !== "all") list = list.filter((c) => c.type === picker.type);
   list = list.filter((c) => matches(c, $("#m-search").value)).sort((a, b) => a.elixir - b.elixir || a.name_pt.localeCompare(b.name_pt));
-  const title = picker.mode === "deck"
+  $("#modal-title").textContent = picker.mode === "deck"
     ? (picker.slot != null && state.deck[picker.slot] ? `Trocar ${state.byKey[state.deck[picker.slot]].name_pt}` : `Montar deck · ${state.deck.length}/8`)
     : MODE_TITLE[picker.mode];
-  $("#modal-title").textContent = title;
   $("#m-grid").innerHTML = list.map((c) => tile(c, { inDeck: sel.includes(c.key) })).join("") || "<p class='muted'>Nenhuma carta com esses filtros.</p>";
   $$("#m-grid .ctile").forEach((el) => el.addEventListener("click", () => pickCard(el.dataset.key)));
 }
@@ -167,15 +240,14 @@ function pickCard(k) {
   if (picker.mode === "deck") {
     const i = state.deck.indexOf(k);
     if (picker.slot != null && state.deck[picker.slot]) {
-      if (i >= 0) { [state.deck[i], state.deck[picker.slot]] = [state.deck[picker.slot], state.deck[i]]; }
+      if (i >= 0) [state.deck[i], state.deck[picker.slot]] = [state.deck[picker.slot], state.deck[i]];
       else state.deck[picker.slot] = k;
       store(DECK_KEY, state.deck); deckChanged(); closePicker(); return;
     }
     if (i >= 0) state.deck.splice(i, 1);
     else if (state.deck.length < 8) state.deck.push(k);
     else return toast("Deck completo. Remova uma carta primeiro.");
-    store(DECK_KEY, state.deck); deckChanged();
-    renderSlots();
+    store(DECK_KEY, state.deck); deckChanged(); renderSlots();
     if (state.deck.length === 8 && i < 0) { closePicker(); return; }
   } else {
     for (const m of ["wincon", "must", "exclude"]) if (m !== picker.mode) state.build[m] = state.build[m].filter((x) => x !== k);
@@ -187,14 +259,14 @@ function pickCard(k) {
 }
 (function initModal() {
   const seg = (el, items, key) => {
-    el.innerHTML = items.map(([v, label]) => `<button data-v="${v}" class="${picker[key] === v ? "on" : ""}">${label}</button>`).join("");
+    el.innerHTML = items.map(([v, label]) => `<button data-v="${v}" class="${v === "all" ? "on" : ""}">${label}</button>`).join("");
     $$("button", el).forEach((b) => b.addEventListener("click", () => {
       picker[key] = b.dataset.v;
       $$("button", el).forEach((x) => x.classList.toggle("on", x === b));
       renderModal();
     }));
   };
-  seg($("#m-elixir"), [["all", "💧 Todos"], ["1", "1"], ["2", "2"], ["3", "3"], ["4", "4"], ["5", "5"], ["6", "6+"]], "elixir");
+  seg($("#m-elixir"), [["all", `${icon("drop")} Todos`], ["1", "1"], ["2", "2"], ["3", "3"], ["4", "4"], ["5", "5"], ["6", "6+"]], "elixir");
   seg($("#m-type"), [["all", "Todas"], ["troop", "Tropas"], ["spell", "Feitiços"], ["building", "Construções"]], "type");
   $("#m-search").addEventListener("input", renderModal);
   $("#m-owned").addEventListener("change", renderModal);
@@ -208,7 +280,7 @@ function renderAccount() {
   const p = load(PLAYER_KEY, null);
   if (!p) return;
   $("#account").innerHTML = `<div class="player-chip" data-tip="${esc(`${p.tag}\n${num(p.n_cards)} cartas · ${num(p.n_evos)} evoluções${p.arena ? "\n" + p.arena : ""}`)}">
-    👤 <b>${esc(p.name)}</b>${p.trophies != null ? ` 🏆 ${num(p.trophies)}` : ""}<button id="btn-switch">Atualizar</button></div>`;
+    ${icon("user")} <b>${esc(p.name)}</b>${p.trophies != null ? `<span class="tr">${icon("trophy")} ${num(p.trophies)}</span>` : ""}<button id="btn-switch">Atualizar</button></div>`;
   $("#btn-switch").addEventListener("click", () => importTag(p.tag));
 }
 async function importTag(rawTag) {
@@ -223,24 +295,20 @@ async function importTag(rawTag) {
     saveCollection(col);
     store(PLAYER_KEY, { ...r.player, n_cards: Object.keys(col.cards).length, n_evos: col.evolutions.length });
     const deck = (r.current_deck || []).filter((k) => state.byKey[k]);
-    if (deck.length === 8) { state.deck = deck; store(DECK_KEY, deck); }
+    if (deck.length === 8) { state.deck = deck; store(DECK_KEY, deck); deckChanged(); }
     $("#analyze-use-col").checked = true;
     renderAccount(); renderSlots(); renderChips();
     if ($("#tab-collection").classList.contains("active")) renderCollection();
     toast(`Conta importada: ${Object.keys(col.cards).length} cartas${deck.length === 8 ? " e deck atual" : ""}.`);
   } catch (e) { toast("Erro: " + e.message, 6000); }
 }
-function bindAccountInput() {
-  const btn = $("#btn-tag");
-  if (!btn) return;
-  btn.addEventListener("click", () => importTag($("#tag-input").value));
-  $("#tag-input").addEventListener("keydown", (e) => { if (e.key === "Enter") importTag($("#tag-input").value); });
-}
 
 // ------------------------------------------------------------------ ANALISAR
 function deckChanged() {
   state.contrib = null;
-  $("#analyze-result").innerHTML = "";
+  $("#result-left").innerHTML = "";
+  $("#result-bottom").innerHTML = "";
+  renderSidebarMeta();
 }
 function renderSlots() {
   const slots = $("#deck-slots");
@@ -262,9 +330,11 @@ function renderSlots() {
   const els = state.deck.map((k) => state.byKey[k]?.elixir || 0);
   const avg = els.length ? els.reduce((a, b) => a + b, 0) / els.length : 0;
   const cyc = [...els].sort((a, b) => a - b).slice(0, 4).reduce((a, b) => a + b, 0);
-  $("#deck-meta").innerHTML = `<span class="stat-chip" data-tip="Custo médio de elixir">💧 <b>${avg.toFixed(1)}</b></span>
-    <span class="stat-chip" data-tip="Soma das 4 cartas mais baratas (velocidade de ciclo)">🔄 <b>${els.length >= 4 ? cyc : "—"}</b></span>
-    <span class="stat-chip">🃏 <b>${state.deck.length}</b>/8</span>`;
+  const lvl = deckLevel(state.deck);
+  $("#deck-meta").innerHTML = `<span class="stat-chip" data-tip="Custo médio de elixir">${icon("drop")} <b>${avg.toFixed(1)}</b> elixir</span>
+    <span class="stat-chip" data-tip="Soma das 4 cartas mais baratas (velocidade de ciclo)">${icon("cycle")} ciclo <b>${els.length >= 4 ? cyc : "—"}</b></span>
+    ${lvl != null ? `<span class="stat-chip" data-tip="Nível médio das cartas do deck na sua coleção">${icon("level")} nível <b>${lvl.toFixed(1)}</b></span>` : ""}
+    <span class="stat-chip">${icon("layers")} <b>${state.deck.length}</b>/8</span>`;
 }
 $("#btn-clear").addEventListener("click", () => { state.deck = []; store(DECK_KEY, []); deckChanged(); renderSlots(); openPicker("deck"); });
 $("#btn-paste").addEventListener("click", () => {
@@ -279,44 +349,39 @@ $("#btn-paste").addEventListener("click", () => {
   store(DECK_KEY, state.deck); deckChanged(); renderSlots();
   if (missing.length) toast("Não reconhecidas: " + missing.join(", "));
 });
+$("#btn-copy-deck").addEventListener("click", () => openInGame(state.deck));
 $("#btn-analyze").addEventListener("click", () => analyzeDeck());
 
 async function analyzeDeck() {
   if (state.deck.length !== 8) return toast("Selecione exatamente 8 cartas.");
   const btn = $("#btn-analyze");
   btn.disabled = true;
-  $("#analyze-result").innerHTML = loading("Analisando…");
+  $("#result-right").innerHTML = loading("Analisando…");
   try {
     const body = { deck: state.deck };
-    if ($("#analyze-use-col").checked) {
-      const col = collectionPayload();
-      if (col) body.collection = col;
-    }
+    if ($("#analyze-use-col").checked) { const col = collectionPayload(); if (col) body.collection = col; }
     const r = await api("/api/analyze", body);
     const maxC = Math.max(0.01, ...r.cards.map((c) => Math.abs(num(c.fit.ev_contribution))));
     state.contrib = Object.fromEntries(r.cards.map((c) => [c.card, {
       v: num(c.fit.ev_contribution), w: (Math.abs(num(c.fit.ev_contribution)) / maxC) * 100,
       tip: [
-        `Força teórica: ${"★".repeat(num(c.theoretical.tier))}`,
+        `Força teórica: ${num(c.theoretical.tier)}/5`,
         c.at_level.level != null ? `Seu nível: ${c.at_level.level} (${c.at_level.gap >= 0 ? "+" : ""}${c.at_level.gap} vs referência; atributos ×${c.at_level.stat_factor})` : null,
         c.meta ? `No meta: ${pct(c.meta.winrate_shrunk, 1)} de vitórias em ${c.meta.games} partidas` : null,
         `Contribuição: ${pp(c.fit.ev_contribution)} p.p.`,
       ].filter(Boolean).join("\n"),
     }]));
     renderSlots();
-    $("#analyze-result").innerHTML = renderAnalysis(r, true);
-    bindSuggest(body);
-  } catch (e) { $("#analyze-result").innerHTML = ""; toast("Erro: " + e.message); }
+    renderAnalysis(r, body);
+  } catch (e) { $("#result-right").innerHTML = ""; renderSidebarMeta(); toast("Erro: " + e.message); }
   finally { btn.disabled = false; }
 }
 
-// --- peças visuais
 function ring(p) {
   const r = 52, c = 2 * Math.PI * r, v = Math.max(0, Math.min(1, num(p)));
-  const color = v >= 0.5 ? "var(--pos)" : "var(--neg)";
   return `<div class="ring" data-tip="Chance média de vitória contra o meta (ponderada pela frequência de cada arquétipo)">
     <svg viewBox="0 0 120 120"><circle cx="60" cy="60" r="${r}" fill="none" stroke="var(--meter-bg)" stroke-width="11"/>
-    <circle cx="60" cy="60" r="${r}" fill="none" stroke="${color}" stroke-width="11" stroke-linecap="round" stroke-dasharray="${(v * c).toFixed(1)} ${c.toFixed(1)}"/></svg>
+    <circle cx="60" cy="60" r="${r}" fill="none" stroke="${v >= 0.5 ? "var(--pos)" : "var(--neg)"}" stroke-width="11" stroke-linecap="round" stroke-dasharray="${(v * c).toFixed(1)} ${c.toFixed(1)}"/></svg>
     <div class="val"><div><b>${pct(v, 1)}</b><span>vs meta</span></div></div></div>`;
 }
 function divergingChart(matchups) {
@@ -341,10 +406,10 @@ function profile(caps) {
     const v = items.reduce((a, c) => a + num(c.value), 0) / items.length;
     const b = items.reduce((a, c) => a + num(c.baseline), 0) / items.length;
     const tip = items.map((c) => `${c.name}: ${(100 * c.value).toFixed(0)} (média ${(100 * c.baseline).toFixed(0)})`).join("\n");
-    return `<div class="meter" data-tip="${esc(tip)}"><span><span class="ic">${ic}</span>${esc(name)}</span>
+    return `<div class="meter" data-tip="${esc(tip)}"><span class="ic">${icon(ic)}</span><span>${esc(name)}</span>
       <div class="track"><div class="fill" style="width:${(100 * v).toFixed(0)}%"></div><div class="base" style="left:${(100 * b).toFixed(0)}%"></div></div>
       <span class="n">${(100 * v).toFixed(0)}</span></div>`;
-  }).join("") + `<div class="legend" style="margin-top:8px"><span><i style="background:var(--meter)"></i>seu deck</span><span><i style="background:var(--text-2);width:2px"></i>média de decks conhecidos</span></div>`;
+  }).join("") + `<div class="legend" style="margin-top:10px"><span><i style="background:var(--meter)"></i>seu deck</span><span><i style="background:var(--text-2);width:2px"></i>média de decks conhecidos</span></div>`;
 }
 function verdictLine(ms) {
   const sorted = [...ms].sort((a, b) => b.win_prob - a.win_prob);
@@ -356,75 +421,81 @@ function verdictLine(ms) {
   return parts.length ? parts.join(" · ") : "Matchups equilibrados, sem grandes forças ou fraquezas.";
 }
 
-function renderAnalysis(r, withSuggest) {
+function renderAnalysis(r, body) {
   const strengths = r.capabilities.filter((c) => c.rating === "forte").sort((a, b) => (b.value - b.baseline) - (a.value - a.baseline)).slice(0, 3);
   const seen = new Set();
   const weak = r.vulnerabilities.filter((v) => WEAK[v.dimension] && !seen.has(v.dimension) && seen.add(v.dimension)).slice(0, 3);
   const tags = [
-    ...strengths.map((c) => `<span class="tag good" data-tip="${esc(c.name)}: ${(100 * c.value).toFixed(0)} (média ${(100 * c.baseline).toFixed(0)})">✓ ${esc(STRONG[c.key] || c.name)}</span>`),
-    ...weak.map((v) => `<span class="tag bad" data-tip="${esc(v.message)}">! ${esc(WEAK[v.dimension])}</span>`),
+    ...strengths.map((c) => `<span class="tag good" data-tip="${esc(c.name)}: ${(100 * c.value).toFixed(0)} (média ${(100 * c.baseline).toFixed(0)})">${icon("check")} ${esc(STRONG[c.key] || c.name)}</span>`),
+    ...weak.map((v) => `<span class="tag bad" data-tip="${esc(v.message)}">${icon("alert")} ${esc(WEAK[v.dimension])}</span>`),
   ];
-  const confTip = r.confidence.text;
-  tags.push(`<span class="tag neutral" data-tip="${esc(confTip)}">◎ confiança ${esc(r.confidence.level)}</span>`);
   const lv = r.levels;
-  if (lv.provided && Math.abs(lv.impact_ev) >= 0.005) {
-    tags.push(`<span class="tag ${lv.impact_ev < 0 ? "bad" : "good"}" data-tip="${esc(`Diferença de nível ${lv.effective_gap >= 0 ? "+" : ""}${lv.effective_gap} vs referência ${lv.reference_level}. ${lv.note}`)}">⬆ níveis ${pp(lv.impact_ev)} p.p.</span>`);
-  }
-  if (lv.provided && lv.not_owned.length) tags.push(`<span class="tag bad" data-tip="${esc("Você não possui: " + lv.not_owned.map((k) => state.byKey[k]?.name_pt || k).join(", "))}">✕ ${lv.not_owned.length} carta(s) que você não tem</span>`);
-  const notice = r.data && r.data.warning ? `<div class="notice">⚠ ${esc(r.data.warning)}</div>` : "";
+  if (lv.provided && lv.not_owned.length) tags.push(`<span class="tag bad" data-tip="${esc("Você não possui: " + lv.not_owned.map((k) => state.byKey[k]?.name_pt || k).join(", "))}">${icon("x")} ${lv.not_owned.length} carta(s) que você não tem</span>`);
+  const notice = r.data && r.data.warning ? `<div class="notice">${icon("alert")} ${esc(r.data.warning)}</div>` : "";
+  const levelBox = lv.provided
+    ? `<div data-tip="${esc(`Diferença efetiva ${lv.effective_gap >= 0 ? "+" : ""}${lv.effective_gap} em relação à referência ${lv.reference_level}. ${lv.note}`)}"><span>Efeito dos níveis</span><b style="color:${lv.impact_ev < -0.004 ? "var(--bad)" : lv.impact_ev > 0.004 ? "var(--ok)" : "inherit"}">${pp(lv.impact_ev)} p.p.</b></div>`
+    : `<div data-tip="Ative 'meus níveis' para considerar a sua coleção"><span>Efeito dos níveis</span><b class="muted">—</b></div>`;
+
+  $("#result-left").innerHTML = `
+    <div class="panel">
+      <div class="result-head">
+        ${ring(r.overall.ev)}
+        <div class="verdict">
+          <div class="arch">${esc(r.archetype.primary_pt)}</div>
+          <div class="line">${verdictLine(r.matchups)}</div>
+          <div class="tags">${tags.join("")}</div>
+        </div>
+      </div>
+      <div class="kv">
+        <div data-tip="Pior matchup entre os arquétipos do meta"><span>Pior matchup</span><b>${pct(r.overall.worst)}</b></div>
+        <div data-tip="${esc(r.confidence.text)}"><span>Confiança</span><b>${esc(r.confidence.level)}</b></div>
+        ${levelBox}
+      </div>
+      ${notice}
+    </div>
+    <div class="panel"><h2>Perfil do deck</h2>${profile(r.capabilities)}</div>`;
 
   const syn = r.synergies.filter((s) => s.value > 0).slice(0, 5).map((s) =>
-    `<div class="syn" data-tip="${esc(s.reason + " (" + s.source + ")")}">${mini(s.cards[0])}<span class="muted">+</span>${mini(s.cards[1])}</div>`).join("");
+    `<div class="syn" data-tip="${esc(s.reason + " (" + s.source + ")")}">${mini(s.cards[0])}<span class="op">+</span>${mini(s.cards[1])}</div>`).join("");
   const conf = r.synergies.filter((s) => s.value < 0).slice(0, 3).map((s) =>
-    `<div class="syn" data-tip="${esc(s.reason)}">${mini(s.cards[0])}<span class="muted">✕</span>${mini(s.cards[1])}</div>`).join("");
-  const issues = r.coherence.issues.map((i) => `<span class="tag bad" data-tip="${esc(i)}">! ${esc(i.split(":")[0].split("—")[0])}</span>`).join(" ");
+    `<div class="syn" data-tip="${esc(s.reason)}">${mini(s.cards[0])}<span class="op">×</span>${mini(s.cards[1])}</div>`).join("");
+  const issues = r.coherence.issues.map((i) => `<span class="tag bad" data-tip="${esc(i)}">${icon("alert")} ${esc(i.split(":")[0].split("—")[0])}</span>`).join(" ");
+
+  $("#result-right").innerHTML = `
+    <div class="panel">
+      <div class="panel-head"><h2>Matchups</h2><span class="spacer"></span>
+        <div class="legend"><span><i style="background:var(--pos)"></i>favorável</span><span><i style="background:var(--neg)"></i>desfavorável</span></div></div>
+      ${divergingChart(r.matchups)}
+    </div>
+    <div class="panel">
+      <div class="two">
+        <div><div class="sub">Sinergias</div>${syn ? `<div class="syn-list">${syn}</div>` : `<p class="muted small">Nenhuma sinergia catalogada.</p>`}</div>
+        <div><div class="sub">Conflitos</div>${conf || issues ? `<div class="syn-list">${conf}</div><div class="tags" style="margin-top:6px">${issues}</div>` : `<p class="muted small">Nenhum conflito encontrado.</p>`}</div>
+      </div>
+    </div>
+    <div class="panel"><div class="panel-head"><h2>Melhorar o deck</h2><span class="spacer"></span>
+        <select id="sg-target"><option value="">Média geral</option>${state.archetypes.map((a) => `<option value="${esc(a.key)}">Contra ${esc(a.name)}</option>`).join("")}</select>
+        <button id="btn-suggest" class="primary">Sugerir trocas</button></div>
+      <div class="row" style="gap:16px">
+        <label class="switch"><input type="checkbox" id="sg-keep"><span></span>manter condição de vitória</label>
+        <label class="switch"><input type="checkbox" id="sg-owned" ${hasCollection() ? "checked" : ""}><span></span>só minhas cartas</label>
+      </div>
+      <div id="suggest-result"></div></div>`;
 
   const tech = r.matchups.map((m) => `<tr><td>${esc(m.name)}</td><td>${pct(m.win_prob, 1)}</td><td>${m.interval ? `${pct(m.interval[0])}–${pct(m.interval[1])}` : "—"}</td>
     <td>${esc(m.confidence)}</td><td>${esc(m.source)}</td><td>${num(m.exact_games)}</td></tr>`).join("");
   const factors = r.factors.items.filter((f) => f.available).map((f) => `<tr><td>${esc(f.factor.replace(/_/g, " "))}</td><td>${(100 * num(f.value)).toFixed(0)}</td><td>${num(f.weight)}</td></tr>`).join("");
-
-  return `
-  <div class="panel">
-    <div class="result-head">
-      ${ring(r.overall.ev)}
-      <div class="verdict">
-        <h2>${esc(r.archetype.primary_pt)}</h2>
-        <div class="line">${verdictLine(r.matchups)}</div>
-        <div class="tags">${tags.join("")}</div>
-        ${notice}
-      </div>
-    </div>
-  </div>
-  <div class="panel">
-    <div class="panel-head"><h2>Matchups</h2><span class="spacer"></span>
-      <div class="legend"><span><i style="background:var(--pos)"></i>favorável</span><span><i style="background:var(--neg)"></i>desfavorável</span></div></div>
-    ${divergingChart(r.matchups)}
-    <p class="muted" style="margin:10px 0 0">Passe o mouse em cada arquétipo para ver o motivo.</p>
-  </div>
-  <div class="grid-2">
-    <div class="panel"><h2>Perfil do deck</h2>${profile(r.capabilities)}</div>
-    <div class="panel"><h2>Combinações</h2>
-      ${syn ? `<div class="sub">Sinergias</div><div class="syn-list">${syn}</div>` : `<p class="muted">Nenhuma sinergia catalogada.</p>`}
-      ${conf || issues ? `<div class="sub">Conflitos</div><div class="syn-list">${conf}</div><div class="tags" style="margin-top:6px">${issues}</div>` : ""}
-    </div>
-  </div>
-  ${withSuggest ? `<div class="panel"><div class="panel-head"><h2>Melhorar o deck</h2><span class="spacer"></span>
-      <select id="sg-target"><option value="">média geral</option>${state.archetypes.map((a) => `<option value="${esc(a.key)}">vs ${esc(a.name)}</option>`).join("")}</select>
-      <label class="check"><input type="checkbox" id="sg-keep"> manter condição de vitória</label>
-      <label class="check"><input type="checkbox" id="sg-owned" checked> só minhas cartas</label>
-      <button id="btn-suggest" class="primary">Sugerir trocas</button></div><div id="suggest-result"></div></div>` : ""}
-  <details class="panel"><summary>Detalhes técnicos</summary>
+  $("#result-bottom").innerHTML = `<details class="panel"><summary>Detalhes técnicos</summary>
     <p style="margin-top:12px">${esc(r.summary)}</p>
-    <p class="muted">Meta: ${esc(r.overall.meta_source)} · score ${esc(r.overall.objective_mode)} ${(100 * r.overall.score).toFixed(1)} · desvio entre matchups ±${(100 * r.overall.sd).toFixed(1)} p.p. · custo médio ${num(r.avg_elixir)} · ciclo ${num(r.cycle_cost)}</p>
-    <div class="table-wrap"><table><tr><th>Arquétipo</th><th>Chance</th><th>Intervalo 90%</th><th>Confiança</th><th>Fonte</th><th>Partidas do deck</th></tr>${tech}</table></div>
-    <p class="muted" style="margin-top:12px">Índice de fatores (secundário): ${r.factors.index ?? "—"}</p>
-    <div class="table-wrap"><table><tr><th>Fator</th><th>Valor</th><th>Peso</th></tr>${factors}</table></div>
+    <p class="muted small">Meta: ${esc(r.overall.meta_source)} · score ${esc(r.overall.objective_mode)} ${(100 * r.overall.score).toFixed(1)} · desvio entre matchups ±${(100 * r.overall.sd).toFixed(1)} p.p.</p>
+    <div class="two"><div class="table-wrap"><table><tr><th>Arquétipo</th><th>Chance</th><th>Intervalo 90%</th><th>Confiança</th><th>Fonte</th><th>Partidas</th></tr>${tech}</table></div>
+    <div class="table-wrap"><table><tr><th>Fator (índice ${r.factors.index ?? "—"})</th><th>Valor</th><th>Peso</th></tr>${factors}</table></div></div>
   </details>`;
+  bindSuggest(body);
 }
 
 function bindSuggest(baseBody) {
   const btn = $("#btn-suggest");
-  if (!btn) return;
   btn.addEventListener("click", async () => {
     btn.disabled = true;
     $("#suggest-result").innerHTML = `<div class="loading"><span class="spinner"></span>Testando trocas…</div>`;
@@ -432,26 +503,95 @@ function bindSuggest(baseBody) {
       const body = { ...baseBody, keep_win_condition: $("#sg-keep").checked, target: $("#sg-target").value || null, top: 5 };
       if ($("#sg-owned").checked) { const col = collectionPayload(); if (col) body.collection = col; } else delete body.collection;
       const r = await api("/api/suggest", body);
-      if (!r.swaps.length) { $("#suggest-result").innerHTML = "<p class='muted'>Nenhuma troca melhora o deck segundo o modelo atual.</p>"; return; }
+      if (!r.swaps.length) { $("#suggest-result").innerHTML = "<p class='muted small'>Nenhuma troca melhora o deck segundo o modelo atual.</p>"; return; }
       $("#suggest-result").innerHTML = r.swaps.map((s) => {
         const ds = Object.entries(s.delta_by_archetype).filter(([, v]) => Math.abs(v) >= 0.01).sort((a, b) => b[1] - a[1]);
         const eff = [...ds.slice(0, 2), ...ds.slice(-2).filter(([, v]) => v < 0)]
           .filter((x, i, arr) => arr.indexOf(x) === i)
-          .map(([a, v]) => `<span class="tag small ${v > 0 ? "good" : "bad"}">${v > 0 ? "▲" : "▼"} ${esc(state.archName[a] || a)} ${pp(v)}</span>`).join("");
-        return `<div class="swap" data-tip="${esc(s.explanation)}">${mini(s.out)}<span class="arrow">→</span>${mini(s.in)}
-          <div class="eff">${eff}</div><span class="delta ${s.delta_ev >= 0 ? "up" : "down"}">${pp(s.delta_ev)} p.p.</span></div>`;
+          .map(([a, v]) => `<span class="tag small ${v > 0 ? "good" : "bad"}">${icon(v > 0 ? "up" : "down")} ${esc(state.archName[a] || a)} ${pp(v)}</span>`).join("");
+        return `<div class="swap" data-tip="${esc(s.explanation)}">${mini(s.out)}<span class="arrow">${icon("arrow")}</span>${mini(s.in)}
+          <div class="eff">${eff}</div><span class="delta ${s.delta_ev >= 0 ? "up" : "down"}">${pp(s.delta_ev)}</span></div>`;
       }).join("");
     } catch (e) { $("#suggest-result").innerHTML = ""; toast("Erro: " + e.message); }
     finally { btn.disabled = false; }
   });
 }
 
+// Coluna direita antes da análise: decks em alta
+async function ensureMeta() {
+  if (!state.meta) state.meta = await api("/api/meta");
+  return state.meta;
+}
+async function renderSidebarMeta() {
+  if (state.contrib) return;
+  const box = $("#result-right");
+  try {
+    const m = await ensureMeta();
+    if (state.contrib) return;
+    box.innerHTML = `<div class="panel"><div class="panel-head"><h2>Decks em alta</h2><span class="spacer"></span>
+      <button class="sm ghost" id="see-meta">Ver todos</button></div>
+      ${metaList(m.decks.slice(0, 5), false)}</div>`;
+    $("#see-meta").addEventListener("click", () => showTab("meta"));
+  } catch { box.innerHTML = ""; }
+}
+
+// ------------------------------------------------------------------ META
+function metaList(decks, withPos = true) {
+  if (!decks.length) return "<p class='muted small'>Ainda não há decks com partidas suficientes.</p>";
+  return decks.map((d, i) => `<div class="meta-deck ${withPos ? "" : "nopos"}">
+    <div class="pos">${withPos ? i + 1 : ""}</div>
+    <div><div class="info"><b>${esc(d.name || d.archetype_pt)}</b><span>${icon("drop")} ${num(d.avg_elixir).toFixed(1)}</span>
+      ${d.games ? `<span>${num(d.games)} partidas · ${pct(d.usage, 1)} de uso</span>` : `<span>estimativa</span>`}</div>
+      ${deckTiles(d.deck)}</div>
+    <div class="wr"><b style="color:${d.winrate >= 0.5 ? "var(--pos)" : "var(--neg)"}">${pct(d.winrate, 1)}</b>
+      <span class="muted small" data-tip="${esc(d.games ? `Taxa de vitória ajustada pelo tamanho da amostra (bruta: ${pct(d.winrate_raw, 1)})` : "Chance média estimada pela heurística (sem dados)")}">${d.games ? "vitórias" : "estimada"}</span>
+      ${deckButtons(d.deck)}</div></div>`).join("");
+}
+async function renderMeta() {
+  try {
+    const m = await ensureMeta();
+    const decks = [...m.decks].sort((a, b) => (state.metaSort === "winrate" ? b.winrate - a.winrate : b.games - a.games || b.winrate - a.winrate));
+    $("#meta-note").textContent = m.source === "dados"
+      ? `Com base nas partidas coletadas (${m.data.first ? m.data.first.slice(0, 10) : ""} a ${m.data.last ? m.data.last.slice(0, 10) : ""}).`
+      : "Sem partidas coletadas ainda: mostrando decks de referência com estimativa heurística.";
+    $("#meta-decks").innerHTML = metaList(decks);
+    $("#meta-cards").innerHTML = m.cards.length
+      ? `<div class="card-rank">${m.cards.slice(0, 24).map((c) => `<div class="cr">${tile(state.byKey[c.card], { extraTip: `Uso: ${pct(c.usage, 1)} · vitórias: ${pct(c.winrate, 1)}`, showLevel: false })}
+          <small>${pct(c.usage, 0)} uso</small></div>`).join("")}</div>`
+      : "<p class='muted small'>Disponível quando houver partidas coletadas.</p>";
+  } catch (e) { $("#meta-decks").innerHTML = `<p class="muted">Erro: ${esc(e.message)}</p>`; }
+}
+$$("#meta-sort button").forEach((b) => b.addEventListener("click", () => {
+  state.metaSort = b.dataset.v;
+  $$("#meta-sort button").forEach((x) => x.classList.toggle("on", x === b));
+  renderMeta();
+}));
+async function lookupPlayer() {
+  const tag = $("#lookup-tag").value.trim().replace(/^#/, "").toUpperCase();
+  if (!tag) return toast("Digite a tag do jogador.");
+  const box = $("#lookup-result");
+  box.innerHTML = `<div class="loading"><span class="spinner"></span>Buscando…</div>`;
+  try {
+    const r = await api(`/api/player/${encodeURIComponent(tag)}/decks`);
+    const p = r.player;
+    const cur = r.current_deck.length === 8 ? `<div class="sub">Deck atual</div>${deckTiles(r.current_deck)}<div style="margin-top:8px">${deckButtons(r.current_deck)}</div>` : "";
+    const recent = r.recent_decks.map((d) => `<div class="meta-deck nopos"><div class="pos"></div><div>
+        <div class="info"><span>${num(d.games)} partida(s) · ${num(d.wins)} vitória(s)${d.avg_level ? ` · nível ${d.avg_level}` : ""}</span></div>${deckTiles(d.deck)}</div>
+        <div class="wr">${deckButtons(d.deck)}</div></div>`).join("");
+    box.innerHTML = `<div class="player-head"><span class="av">${icon("user")}</span><div><b>${esc(p.name)}</b> <span class="muted">${esc(p.tag)}</span><br>
+      <span class="muted small">${p.trophies != null ? `${num(p.trophies)} troféus · ` : ""}${num(r.n_cards)} cartas${r.avg_level ? ` · nível médio ${r.avg_level}` : ""}${p.arena ? " · " + esc(p.arena) : ""}</span></div></div>
+      ${cur}${recent ? `<div class="sub">Decks recentes</div>${recent}` : ""}`;
+  } catch (e) { box.innerHTML = `<p class="muted">Erro: ${esc(e.message)}</p>`; }
+}
+$("#btn-lookup").addEventListener("click", lookupPlayer);
+$("#lookup-tag").addEventListener("keydown", (e) => { if (e.key === "Enter") lookupPlayer(); });
+
 // ------------------------------------------------------------------ CRIAR
 function renderChips() {
   for (const k of ["wincon", "must", "exclude"]) {
     const el = $("#chips-" + k);
     el.innerHTML = state.build[k].map((c) => tile(state.byKey[c], { extraTip: "Clique para remover", showLevel: false })).join("")
-      + `<button class="add-tile" data-mode="${k}" data-tip="Adicionar">+</button>`;
+      + `<button class="add-tile" data-tip="Adicionar">+</button>`;
     $$(".ctile", el).forEach((t) => t.addEventListener("click", () => { state.build[k] = state.build[k].filter((x) => x !== t.dataset.key); renderChips(); }));
     $(".add-tile", el).addEventListener("click", () => openPicker(k));
   }
@@ -475,47 +615,54 @@ $("#btn-build").addEventListener("click", async () => {
       body.collection = collectionPayload();
       if (!body.collection) toast("Sem coleção: usando todas as cartas. Importe sua conta para considerar níveis.");
     }
+    const t0 = performance.now();
     const r = await api("/api/build", body);
+    const secs = ((performance.now() - t0) / 1000).toFixed(1);
     const order = state.archetypes.map((a) => a.key);
-    $("#build-result").innerHTML = r.decks.map((d) => {
-      const a = d.analysis, by = Object.fromEntries(a.matchups.map((m) => [m.archetype, m]));
-      const worst = a.matchups.reduce((x, y) => (y.win_prob < x.win_prob ? y : x));
-      const strip = order.map((k) => `<i style="background:${cellColor(by[k].win_prob)}" data-tip="${esc(by[k].name)}: ${pct(by[k].win_prob, 1)}"></i>`).join("");
-      return `<div class="panel deck-result">
-        <div class="rank">#${num(d.rank)}</div>
-        <div><div class="muted" style="margin-bottom:6px"><b style="color:var(--text)">${esc(a.archetype.primary_pt)}</b> · 💧 ${num(a.avg_elixir)}${a.levels.provided ? ` · nível ${a.levels.effective_gap >= 0 ? "+" : ""}${num(a.levels.effective_gap)}` : ""}</div>
-          <div class="slots">${a.deck.map((k) => tile(state.byKey[k], { evoArt: true })).join("")}</div>
-          <div class="strip">${strip}</div><div class="strip-legend"><span>matchups (passe o mouse)</span></div></div>
-        <div class="side"><b>${pct(a.overall.ev, 1)}</b><span class="muted">vs meta · pior ${pct(worst.win_prob)}</span>
-          <button class="use-deck" data-deck="${esc(JSON.stringify(a.deck))}">Ver análise</button></div>
-      </div>`;
-    }).join("") || "<div class='panel muted'>Nenhum deck encontrado com essas restrições.</div>";
-    $$(".use-deck").forEach((b) => b.addEventListener("click", () => {
-      state.deck = JSON.parse(b.dataset.deck); store(DECK_KEY, state.deck);
-      showTab("analyze"); analyzeDeck(); window.scrollTo({ top: 0, behavior: "smooth" });
-    }));
+    $("#build-result").innerHTML = `<p class="muted small" style="margin:0 4px">${r.decks.length} decks em ${secs} s · ${num(r.explored).toLocaleString("pt-BR")} combinações avaliadas</p>`
+      + (r.decks.map((d) => {
+        const a = d.analysis, by = Object.fromEntries(a.matchups.map((m) => [m.archetype, m]));
+        const worst = a.matchups.reduce((x, y) => (y.win_prob < x.win_prob ? y : x));
+        const strip = order.map((k) => `<i style="background:${cellColor(by[k].win_prob)}" data-tip="${esc(by[k].name)}: ${pct(by[k].win_prob, 1)}"></i>`).join("");
+        const lvl = deckLevel(a.deck);
+        return `<div class="panel deck-result">
+          <div class="rank">${num(d.rank)}</div>
+          <div><div class="head"><b>${esc(a.archetype.primary_pt)}</b>
+              <span class="stat-chip">${icon("drop")} <b>${num(a.avg_elixir).toFixed(1)}</b></span>
+              ${lvl != null ? `<span class="stat-chip">${icon("level")} nível <b>${lvl.toFixed(1)}</b></span>` : ""}</div>
+            ${deckTiles(a.deck)}
+            <div class="strip" data-tip="Matchups por arquétipo (azul = favorável, vermelho = desfavorável)">${strip}</div></div>
+          <div class="side"><b style="color:${a.overall.ev >= 0.5 ? "var(--pos)" : "var(--neg)"}">${pct(a.overall.ev, 1)}</b>
+            <span class="muted small">vs meta · pior ${pct(worst.win_prob)}</span>${deckButtons(a.deck)}</div>
+        </div>`;
+      }).join("") || "<div class='panel muted'>Nenhum deck encontrado com essas restrições.</div>");
   } catch (e) { $("#build-result").innerHTML = ""; toast("Erro: " + e.message); }
   finally { btn.disabled = false; }
 });
 
 // ------------------------------------------------------------------ COLEÇÃO
+const LEVELS = Array.from({ length: 16 }, (_, i) => 16 - i);
 function renderCollection() {
   const col = loadCollection();
-  $("#col-ref").value = col.reference_level ?? "";
   const q = $("#col-filter").value;
   const ownedOnly = $("#col-owned").checked;
   const list = state.cards.filter((c) => matches(c, q) && (!ownedOnly || c.key in col.cards))
     .sort((a, b) => a.elixir - b.elixir || a.name_pt.localeCompare(b.name_pt));
-  $("#col-count").textContent = `${Object.keys(col.cards).length} cartas · ${col.evolutions.length} evoluções`;
+  const lv = Object.values(col.cards).filter((x) => typeof x === "number");
+  const avg = lv.length ? lv.reduce((a, b) => a + b, 0) / lv.length : null;
+  $("#col-stats").innerHTML = `<span class="stat-chip">${icon("layers")} <b>${lv.length}</b> cartas</span>
+    <span class="stat-chip">${icon("sparkles")} <b>${col.evolutions.length}</b> evoluções</span>
+    ${avg != null ? `<span class="stat-chip">${icon("level")} nível médio <b>${avg.toFixed(1)}</b></span>` : ""}`;
+  $("#col-ref").innerHTML = `<option value="">Automática${refLevel(col) ? ` (${refLevel(col)})` : ""}</option>` + options(LEVELS, col.reference_level ?? "");
   $("#col-table").innerHTML = `<div class="col-grid">${list.map((c) => `<div class="col-card ${c.key in col.cards ? "owned" : ""}">
       ${tile(c, { evoArt: true, showLevel: false })}
-      <div class="col-ctrl"><input type="number" min="1" max="16" data-key="${esc(c.key)}" value="${col.cards[c.key] ?? ""}" placeholder="nív." aria-label="Nível de ${esc(c.name_pt)}">
+      <div class="col-ctrl"><select data-key="${esc(c.key)}" aria-label="Nível de ${esc(c.name_pt)}"><option value="">—</option>${options(LEVELS, col.cards[c.key] ?? "")}</select>
       ${c.evo ? `<button class="evo-toggle ${col.evolutions.includes(c.key) ? "on" : ""}" data-evo="${esc(c.key)}" data-tip="Evolução desbloqueada">EVO</button>` : ""}</div>
     </div>`).join("")}</div>`;
-  $$("#col-table input[type=number]").forEach((inp) => inp.addEventListener("change", () => {
+  $$("#col-table select").forEach((sel) => sel.addEventListener("change", () => {
     const c = loadCollection();
-    const v = parseFloat(inp.value);
-    if (isNaN(v)) delete c.cards[inp.dataset.key]; else c.cards[inp.dataset.key] = Math.max(1, Math.min(16, v));
+    const v = parseInt(sel.value);
+    if (isNaN(v)) delete c.cards[sel.dataset.key]; else c.cards[sel.dataset.key] = v;
     saveCollection(c); renderCollection();
   }));
   $$("#col-table .evo-toggle").forEach((b) => b.addEventListener("click", () => {
@@ -528,13 +675,14 @@ function renderCollection() {
 }
 $("#col-filter").addEventListener("input", renderCollection);
 $("#col-owned").addEventListener("change", renderCollection);
-$("#col-ref").addEventListener("change", () => { const c = loadCollection(); c.reference_level = parseFloat($("#col-ref").value) || null; saveCollection(c); });
-$("#btn-fill").addEventListener("click", () => {
-  const v = parseFloat($("#col-fill").value);
-  if (isNaN(v)) return toast("Informe um nível.");
+$("#col-ref").addEventListener("change", () => { const c = loadCollection(); c.reference_level = parseInt($("#col-ref").value) || null; saveCollection(c); renderCollection(); });
+$("#col-fill").addEventListener("change", () => {
+  const v = parseInt($("#col-fill").value);
+  if (isNaN(v)) return;
+  if (!confirm(`Definir TODAS as cartas no nível ${v}?`)) { $("#col-fill").value = ""; return; }
   const c = loadCollection();
   for (const card of state.cards) c.cards[card.key] = v;
-  saveCollection(c); renderCollection();
+  saveCollection(c); $("#col-fill").value = ""; renderCollection();
 });
 $("#btn-col-clear").addEventListener("click", () => {
   if (!confirm("Apagar a coleção salva neste navegador?")) return;
@@ -570,18 +718,18 @@ async function renderStatus() {
     const kpi = (k, val, sub, tip = "") => `<div class="kpi" ${tip ? `data-tip="${esc(tip)}"` : ""}><div class="k">${esc(k)}</div><div class="v">${val}</div><div class="s">${esc(sub)}</div></div>`;
     $("#data-status").innerHTML = `<div class="kpis">
       ${kpi("Fonte das estimativas", d.model ? (d.warning ? "Sintética" : "Dados reais") : "Heurística", d.model ? "modelo treinado" : "sem partidas suficientes", d.warning || d.note || "")}
-      ${kpi("Partidas no modelo", d.model ? num(d.battles).toLocaleString("pt-BR") : "0", d.model ? `${String(d.first || "").slice(5, 10)} → ${String(d.last || "").slice(5, 10)}` : "—")}
+      ${kpi("Partidas no modelo", d.model ? num(d.battles).toLocaleString("pt-BR") : "0", d.model ? `${String(d.first || "").slice(5, 10)} a ${String(d.last || "").slice(5, 10)}` : "—")}
       ${kpi("Acurácia (recentes)", v ? pct(v.accuracy_model, 1) : "—", v ? `${num(v.holdout)} partidas de teste` : "sem validação", v ? `log-loss ${num(v.logloss_model).toFixed(4)} vs ${num(v.logloss_baseline).toFixed(4)} (base)` : "")}
-      ${kpi("Treinado em", d.model ? esc(String(d.trained_at || "").slice(0, 16).replace("T", " ")) : "—", d.model ? `janela ${num(d.days)} dias` : "")}
+      ${kpi("Treinado em", d.model ? esc(String(d.trained_at || "").slice(0, 16).replace("T", " ")) : "—", d.model ? `janela de ${num(d.days)} dias` : "")}
     </div>`;
     $("#collector-pill").innerHTML = !c.enabled ? `<span class="tag neutral">desativada</span>`
-      : c.running ? `<span class="tag neutral"><span class="spinner"></span>coletando</span>` : `<span class="tag good">✓ ativa · a cada ${num(c.interval_hours)} h</span>`;
+      : c.running ? `<span class="tag neutral"><span class="spinner"></span>coletando</span>` : `<span class="tag good">${icon("check")} ativa · a cada ${num(c.interval_hours)} h</span>`;
     $("#collector-status").innerHTML = !c.enabled
-      ? `<p class="muted">O servidor precisa da chave da API (<code>CR_API_TOKEN</code>) para coletar partidas reais.</p>`
-      : `<p class="muted">${c.last_run ? `Última coleta: ${esc(c.last_run.replace("T", " "))}` : "Primeira coleta em andamento."}
+      ? `<p class="muted small">O servidor precisa da chave da API (CR_API_TOKEN) para coletar partidas reais.</p>`
+      : `<p class="muted small">${c.last_run ? `Última coleta: ${esc(c.last_run.replace("T", " "))}` : "Primeira coleta em andamento."}
          ${c.last_result ? ` · ${num(c.last_result.new_battles)} partidas novas · ${num(c.last_result.total)} no banco` : ""}</p>
-         ${c.last_error ? `<span class="tag bad">! ${esc(c.last_error)}</span>` : ""}
-         ${c.log?.length ? `<details class="picker-box"><summary>Registro</summary><div class="log">${c.log.map(esc).join("\n")}</div></details>` : ""}`;
+         ${c.last_error ? `<span class="tag bad">${icon("alert")} ${esc(c.last_error)}</span>` : ""}
+         ${c.log?.length ? `<details class="more"><summary>Registro</summary><div class="log">${c.log.map(esc).join("\n")}</div></details>` : ""}`;
   } catch (e) { $("#data-status").textContent = "Erro: " + e.message; }
 }
 $("#btn-refresh").addEventListener("click", async () => {
@@ -595,15 +743,24 @@ async function refreshPill() {
     const s = await api("/api/status");
     const d = s.data, pill = $("#status-pill");
     pill.className = "status-pill";
-    if (d.model && !d.warning) { pill.classList.add("real"); pill.textContent = `● dados reais · ${num(d.battles).toLocaleString("pt-BR")} partidas`; }
-    else if (d.model) { pill.classList.add("synthetic"); pill.textContent = "● dados de demonstração"; }
-    else pill.textContent = s.collector?.running ? "● coletando partidas…" : "● modo heurístico";
+    if (d.model && !d.warning) { pill.classList.add("real"); pill.textContent = `dados reais · ${num(d.battles).toLocaleString("pt-BR")} partidas`; }
+    else if (d.model) { pill.classList.add("synthetic"); pill.textContent = "dados de demonstração"; }
+    else if (s.collector?.running) { pill.classList.add("busy"); pill.textContent = "coletando partidas…"; }
+    else pill.textContent = "modo heurístico";
     pill.dataset.tip = d.warning || d.note || "Estimativas baseadas em partidas reais.";
   } catch { /* ignora */ }
 }
 
 // ------------------------------------------------------------------ init
 (async function init() {
+  hydrateIcons();
+  $("#build-top").innerHTML = options([3, 5, 8, 10], 5);
+  const el = ["", "2.6", "2.8", "3.0", "3.2", "3.4", "3.6", "3.8", "4.0", "4.2", "4.5"];
+  $("#build-min").innerHTML = options(el, "", (v) => (v ? v : "Sem mínimo"));
+  $("#build-max").innerHTML = options(el, "", (v) => (v ? v : "Sem máximo"));
+  $("#col-fill").innerHTML = `<option value="">Escolher…</option>` + options(LEVELS, "");
+  $("#tag-input").addEventListener("keydown", (e) => { if (e.key === "Enter") importTag($("#tag-input").value); });
+  $("#btn-tag").addEventListener("click", () => importTag($("#tag-input").value));
   try {
     state.cards = await api("/api/cards");
     state.byKey = Object.fromEntries(state.cards.map((c) => [c.key, c]));
@@ -613,8 +770,8 @@ async function refreshPill() {
     const saved = load(DECK_KEY, null);
     state.deck = Array.isArray(saved) && saved.length && saved.every((k) => state.byKey[k])
       ? saved : ["Hog Rider", "Musketeer", "Ice Golem", "Ice Spirit", "Skeletons", "Cannon", "Fireball", "The Log"];
-    if (collectionPayload()) $("#analyze-use-col").checked = true;
-    bindAccountInput(); renderAccount(); renderSlots(); renderChips(); refreshPill();
+    if (hasCollection()) $("#analyze-use-col").checked = true;
+    renderAccount(); renderSlots(); renderChips(); renderSidebarMeta(); refreshPill();
     setInterval(refreshPill, 60000);
   } catch (e) { toast("Falha ao carregar: " + e.message, 8000); }
 })();
