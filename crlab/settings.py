@@ -15,9 +15,10 @@ DEFAULTS: dict = {
     "levels": {
         # Efeito (em logit) de 1 nível médio de vantagem/desvantagem. Calibrável pelo modelo.
         "gamma_per_level": 0.28,
-        # Uma evolução equivale a quantos níveis de vantagem para a carta.
-        "evo_bonus_levels": 1.0,
-        "max_evolutions": 2,
+        # Quantos níveis de vantagem (na carta) equivalem a usá-la como Evolução / Herói.
+        # Com dados reais, o modelo aprende o efeito de cada Evo/Herói separadamente.
+        "evo_bonus_levels": 3.0,
+        "hero_bonus_levels": 3.0,
         "max_level": 16,
         # Sensibilidade a nível: feitiços e enxames dependem de "breakpoints" (matar ou não matar).
         "sensitivity": {"spell": 1.3, "swarm": 1.2, "default": 1.0},

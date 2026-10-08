@@ -30,10 +30,12 @@ def _mutate(deck: list[int], engine: Engine, rng, n_swaps: int) -> list[int]:
 
 
 def generate(engine: Engine, n: int = 20000, seed: int = 0, days: int = 30, gamma: float = 0.3,
-             hidden_sd: float = 0.08) -> tuple[list[dict], dict]:
+             hidden_sd: float = 0.08, form_effect: float = 0.15) -> tuple[list[dict], dict]:
     rng = np.random.default_rng(seed)
     cat = engine.catalog
     hidden = rng.normal(0, hidden_sd, cat.n)
+    hidden_evo = np.abs(rng.normal(form_effect, 0.05, cat.n))   # efeito oculto de cada Evolução
+    hidden_hero = np.abs(rng.normal(form_effect, 0.05, cat.n))  # e de cada Herói
     base = [d["idx"] for d in engine.reference_decks]
     pool = []
     for d in base:
@@ -50,8 +52,15 @@ def generate(engine: Engine, n: int = 20000, seed: int = 0, days: int = 30, gamm
     ib = rng.choice(len(pool), n, p=popularity)
     lvl_a = np.clip(rng.normal(14, 0.8, n), 10, 16)
     lvl_b = np.clip(lvl_a + rng.normal(0, 0.6, n), 10, 16)
+    # cada jogador tem (ou não) as Evos/Heróis do deck; formas escolhidas pelas regras das posições
+    forms_full = engine.levels.auto_forms(pool, None)
+    def sample_forms(idx_rows):
+        keep = rng.random(forms_full[idx_rows].shape) < 0.6
+        return np.where(keep, forms_full[idx_rows], 0)
+    fa, fb = sample_forms(ia), sample_forms(ib)
+    eff = lambda P, F: (hidden_evo[P] * (F == 1) + hidden_hero[P] * (F == 2)).sum(1)  # noqa: E731
     z = (L[ia, prim[ib]] - L[ib, prim[ia]]) / 2 + hidden[pool[ia]].sum(1) - hidden[pool[ib]].sum(1) \
-        + gamma * (lvl_a - lvl_b)
+        + gamma * (lvl_a - lvl_b) + eff(pool[ia], fa) - eff(pool[ib], fb)
     y = (rng.random(n) < 1 / (1 + np.exp(-z))).astype(float)
     now = datetime.now(timezone.utc).replace(microsecond=0)
     out = []
@@ -60,10 +69,16 @@ def generate(engine: Engine, n: int = 20000, seed: int = 0, days: int = 30, gamm
         out.append({
             "played_at": t.isoformat(), "source": "synthetic", "mode": "synthetic",
             "a": {"cards": [cat.cards[i].key for i in pool[ia[k]]], "level": round(float(lvl_a[k]), 2),
-                  "tag": f"#SYN{k}A"},
+                  "tag": f"#SYN{k}A",
+                  "evolutions": [cat.cards[i].key for i, f in zip(pool[ia[k]], fa[k]) if f == 1],
+                  "heroes": [cat.cards[i].key for i, f in zip(pool[ia[k]], fa[k]) if f == 2]},
             "b": {"cards": [cat.cards[i].key for i in pool[ib[k]]], "level": round(float(lvl_b[k]), 2),
-                  "tag": f"#SYN{k}B"},
+                  "tag": f"#SYN{k}B",
+                  "evolutions": [cat.cards[i].key for i, f in zip(pool[ib[k]], fb[k]) if f == 1],
+                  "heroes": [cat.cards[i].key for i, f in zip(pool[ib[k]], fb[k]) if f == 2]},
             "result": float(y[k]),
         })
-    truth = {"gamma": gamma, "hidden_strength": {cat.cards[i].key: float(hidden[i]) for i in range(cat.n)}}
+    truth = {"gamma": gamma, "hidden_strength": {cat.cards[i].key: float(hidden[i]) for i in range(cat.n)},
+             "evo_effect": {cat.cards[i].key: float(hidden_evo[i]) for i in range(cat.n)},
+             "hero_effect": {cat.cards[i].key: float(hidden_hero[i]) for i in range(cat.n)}}
     return out, truth

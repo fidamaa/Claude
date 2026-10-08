@@ -89,6 +89,14 @@ def _to_arrays(rows, catalog: Catalog, half_life: float):
     keep.sort(key=lambda t: t[0][0])
     A = np.array([t[1] for t in keep])
     B = np.array([t[2] for t in keep])
+
+    def forms_of(keys_row, evo_txt, hero_txt):
+        evo = set((evo_txt or "").split("|")) - {""}
+        hero = set((hero_txt or "").split("|")) - {""}
+        return [2 if k in hero else 1 if k in evo else 0 for k in keys_row]
+
+    FA = np.array([forms_of([catalog.cards[i].key for i in t[1]], t[0][8], t[0][11] if len(t[0]) > 11 else None) for t in keep])
+    FB = np.array([forms_of([catalog.cards[i].key for i in t[2]], t[0][9], t[0][12] if len(t[0]) > 12 else None) for t in keep])
     y = np.array([t[0][10] for t in keep], float)
     la = np.array([t[0][6] if t[0][6] is not None else np.nan for t in keep], float)
     lb = np.array([t[0][7] if t[0][7] is not None else np.nan for t in keep], float)
@@ -99,40 +107,55 @@ def _to_arrays(rows, catalog: Catalog, half_life: float):
     w = 0.5 ** (age / half_life) if half_life else np.ones(len(keep))
     meta = {"first": min(times).isoformat(), "last": last.isoformat(),
             "sources": sorted({t[0][1] for t in keep}), "has_levels": bool(np.isfinite(la).any())}
-    return dict(A=A, B=B, y=y, dl=dl, w=w, keys_a=[t[0][4] for t in keep], keys_b=[t[0][5] for t in keep],
+    return dict(A=A, B=B, FA=FA, FB=FB, y=y, dl=dl, w=w, keys_a=[t[0][4] for t in keep], keys_b=[t[0][5] for t in keep],
                 meta=meta), dropped
 
 
-def fit_bt(A, B, pa, pb, dl, y, w, n, l2_b, l2_m, iters=500, lr=0.05, init=None):
-    """Bradley-Terry com interação carta x arquétipo. Otimização Adam em lote completo."""
-    b = np.zeros(n) if init is None else init[0].copy()
-    M = np.zeros(n * K) if init is None else init[1].ravel().copy()
-    g = 0.0 if init is None else float(init[2])
-    params = [b, M, np.array([g])]
+def fit_bt(A, B, pa, pb, dl, y, w, n, l2_b, l2_m, iters=500, lr=0.05, init=None, FA=None, FB=None):
+    """Bradley-Terry com interação carta x arquétipo e efeito próprio de cada Evolução (ev) e de
+    cada Herói (hv). Otimização Adam em lote completo."""
+    FA = np.zeros_like(A) if FA is None else FA
+    FB = np.zeros_like(B) if FB is None else FB
+    if init is None:
+        params = [np.zeros(n), np.zeros(n * K), np.array([0.0]), np.zeros(n), np.zeros(n)]
+    else:
+        params = [init[0].copy(), init[1].ravel().copy(), np.array([float(init[2])]), init[3].copy(), init[4].copy()]
     m1 = [np.zeros_like(p) for p in params]
     m2 = [np.zeros_like(p) for p in params]
     W = w.sum()
     fa, fb = A.ravel(), B.ravel()
     ia = (A * K + pb[:, None]).ravel()
     ib = (B * K + pa[:, None]).ravel()
+    ea, eb = (FA == 1).astype(float), (FB == 1).astype(float)
+    ha, hb = (FA == 2).astype(float), (FB == 2).astype(float)
     for t in range(1, iters + 1):
-        b, M, gv = params
-        z = b[A].sum(1) - b[B].sum(1) + M[ia].reshape(A.shape).sum(1) - M[ib].reshape(B.shape).sum(1) + gv[0] * dl
+        b, M, gv, ev, hv = params
+        z = (b[A].sum(1) - b[B].sum(1) + M[ia].reshape(A.shape).sum(1) - M[ib].reshape(B.shape).sum(1) + gv[0] * dl
+             + (ev[A] * ea + hv[A] * ha).sum(1) - (ev[B] * eb + hv[B] * hb).sum(1))
         r = w * (sigmoid(z) - y) / W
         r8 = np.repeat(r, A.shape[1])
         gb = np.bincount(fa, r8, n) - np.bincount(fb, r8, n) + l2_b * b / W
         gM = np.bincount(ia, r8, n * K) - np.bincount(ib, r8, n * K) + l2_m * M / W
         gg = np.array([(r * dl).sum()])
-        for i, gr in enumerate((gb, gM, gg)):
+        gev = np.bincount(fa, r8 * ea.ravel(), n) - np.bincount(fb, r8 * eb.ravel(), n) + l2_b * ev / W
+        ghv = np.bincount(fa, r8 * ha.ravel(), n) - np.bincount(fb, r8 * hb.ravel(), n) + l2_b * hv / W
+        for i, gr in enumerate((gb, gM, gg, gev, ghv)):
             m1[i] = 0.9 * m1[i] + 0.1 * gr
             m2[i] = 0.999 * m2[i] + 0.001 * gr * gr
             params[i] = params[i] - lr * (m1[i] / (1 - 0.9 ** t)) / (np.sqrt(m2[i] / (1 - 0.999 ** t)) + 1e-8)
-    b, M, gv = params
-    return b, M.reshape(n, K), float(gv[0])
+    b, M, gv, ev, hv = params
+    return b, M.reshape(n, K), float(gv[0]), ev, hv
 
 
-def bt_logit(b, M, gamma, A, B, pa, pb, dl):
-    return b[A].sum(1) - b[B].sum(1) + M[A, pb[:, None]].sum(1) - M[B, pa[:, None]].sum(1) + gamma * dl
+def form_effect(ev, hv, X, F):
+    return (ev[X] * (F == 1) + hv[X] * (F == 2)).sum(1)
+
+
+def bt_logit(b, M, gamma, A, B, pa, pb, dl, ev=None, hv=None, FA=None, FB=None):
+    z = b[A].sum(1) - b[B].sum(1) + M[A, pb[:, None]].sum(1) - M[B, pa[:, None]].sum(1) + gamma * dl
+    if ev is not None and FA is not None:
+        z = z + form_effect(ev, hv, A, FA) - form_effect(ev, hv, B, FB)
+    return z
 
 
 def _logloss(p, y):
@@ -149,6 +172,7 @@ def train_model(store: BattleStore, catalog: Catalog, cfg: dict, heuristic_engin
         raise ValueError("Nenhuma partida utilizável no período/fonte selecionados.")
     n = catalog.n
     A, B, y, dl, w = data["A"], data["B"], data["y"], data["dl"], data["w"]
+    FA, FB = data["FA"], data["FB"]
     N = len(y)
     log(f"Partidas utilizáveis: {N} (descartadas por carta desconhecida: {dropped})")
     clf = ArchetypeClassifier(catalog)
@@ -165,10 +189,11 @@ def train_model(store: BattleStore, catalog: Catalog, cfg: dict, heuristic_engin
     # ---------------------------------------------------------------- validação temporal
     split = int(N * 0.9)
     if N >= 500:
-        b0, M0, g0 = fit_bt(A[:split], B[:split], pa[:split], pb[:split], dl[:split], y[:split], w[:split], n,
-                            dcfg["l2_card"], dcfg["l2_interaction"])
+        init = fit_bt(A[:split], B[:split], pa[:split], pb[:split], dl[:split], y[:split], w[:split], n,
+                      dcfg["l2_card"], dcfg["l2_interaction"], FA=FA[:split], FB=FB[:split])
         te = slice(split, N)
-        p_te = sigmoid(bt_logit(b0, M0, g0, A[te], B[te], pa[te], pb[te], dl[te]))
+        b0, M0, g0, ev0, hv0 = init
+        p_te = sigmoid(bt_logit(b0, M0, g0, A[te], B[te], pa[te], pb[te], dl[te], ev0, hv0, FA[te], FB[te]))
         yt = y[te]
         model.info["validation"] = {
             "holdout": int(N - split),
@@ -177,14 +202,15 @@ def train_model(store: BattleStore, catalog: Catalog, cfg: dict, heuristic_engin
             "accuracy_model": float(np.mean((p_te > 0.5) == (yt > 0.5))),
             "brier_model": float(np.mean((p_te - yt) ** 2)),
         }
-        init = (b0, M0, g0)
     else:
         init = None
-    b, M, gamma = fit_bt(A, B, pa, pb, dl, y, w, n, dcfg["l2_card"], dcfg["l2_interaction"],
+    b, M, gamma, ev, hv = fit_bt(A, B, pa, pb, dl, y, w, n, dcfg["l2_card"], dcfg["l2_interaction"], FA=FA, FB=FB,
                          iters=300 if init is not None else 500, init=init)
     if not data["meta"]["has_levels"]:
         gamma = cfg["levels"]["gamma_per_level"]
-    model.arrays.update(bt_b=b, bt_M=M, bt_gamma=np.array(gamma))
+    model.arrays.update(bt_b=b, bt_M=M, bt_gamma=np.array(gamma), bt_ev=ev, bt_hv=hv)
+    model.arrays["evo_games"] = np.bincount(A.ravel(), (FA == 1).ravel(), n) + np.bincount(B.ravel(), (FB == 1).ravel(), n)
+    model.arrays["hero_games"] = np.bincount(A.ravel(), (FA == 2).ravel(), n) + np.bincount(B.ravel(), (FB == 2).ravel(), n)
     log(f"Modelo de cartas treinado (γ por nível = {gamma:.3f})")
 
     # ---------------------------------------------------------------- estatísticas descritivas
@@ -202,7 +228,7 @@ def train_model(store: BattleStore, catalog: Catalog, cfg: dict, heuristic_engin
     # Sinergia observada: resíduo do modelo de cartas nas partidas que contêm o par, ou seja, o
     # quanto o par vence ALÉM do que a força individual das cartas explica (passo de Newton com
     # encolhimento: lift = Σ resíduo / (Σ p(1-p) + k)).
-    z = bt_logit(b, M, gamma, A, B, pa, pb, dl)
+    z = bt_logit(b, M, gamma, A, B, pa, pb, dl, ev, hv, FA, FB)
     p_side = np.concatenate([sigmoid(z), sigmoid(-z)])
     resid = both_y - p_side
     info = p_side * (1 - p_side)
@@ -245,8 +271,11 @@ def train_model(store: BattleStore, catalog: Catalog, cfg: dict, heuristic_engin
     # amostras de adversários por arquétipo + capacidade média observada
     fx = FeatureExtractor(catalog)
     counts: dict[str, int] = defaultdict(int)
-    for kk in data["keys_a"] + data["keys_b"]:
+    bonus_sum: dict[str, float] = defaultdict(float)
+    fe_a, fe_b = form_effect(ev, hv, A, FA), form_effect(ev, hv, B, FB)
+    for kk, fe in zip(data["keys_a"] + data["keys_b"], np.concatenate([fe_a, fe_b])):
         counts[kk] += 1
+        bonus_sum[kk] += float(fe)
     uniq = list(counts)
     U = np.array([[catalog.by_key[c].idx for c in kk.split("|")] for kk in uniq])
     cu = np.array([counts[k] for k in uniq], float)
@@ -259,7 +288,8 @@ def train_model(store: BattleStore, catalog: Catalog, cfg: dict, heuristic_engin
             continue
         arch_caps[a] = np.average(caps[m], axis=0, weights=cu[m])
         order = np.argsort(-cu[m])[: dcfg["opponent_samples"]]
-        model.opponents[a] = {"idx": U[m][order], "w": cu[m][order], "primary": pu[m][order]}
+        bonus = np.array([bonus_sum[uniq[j]] / counts[uniq[j]] for j in np.flatnonzero(m)[order]])
+        model.opponents[a] = {"idx": U[m][order], "w": cu[m][order], "primary": pu[m][order], "bonus": bonus}
     model.arrays["arch_caps"] = arch_caps
 
     # ---------------------------------------------------------------- calibração da heurística

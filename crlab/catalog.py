@@ -35,6 +35,7 @@ TAG_DOC = {
     "champ": "campeão",
     "bait": "isca de feitiço",
     "ranged": "ataque à distância",
+    "hero": "possui versão Herói",
 }
 
 # Apelidos comuns (normalizados na carga). Nomes em inglês e pt-BR já são aceitos.
@@ -134,7 +135,8 @@ class Card:
     def to_dict(self) -> dict:
         return {
             "key": self.key, "name_pt": self.name_pt, "elixir": self.elixir, "type": self.type,
-            "rarity": self.rarity, "tier": self.tier, "evo": self.evo, "tags": sorted(self.tags),
+            "rarity": self.rarity, "tier": self.tier, "evo": self.evo, "hero": "hero" in self.tags,
+            "tags": sorted(self.tags),
         }
 
 
@@ -200,7 +202,7 @@ class Catalog:
         f["troop"] = 1 - f["spell"] - f["building"]
         for tag in ["wc", "wc2", "tank", "minitank", "tk", "swarm", "airswarm", "flying", "bt", "bldgdef",
                     "spawner", "small", "big", "antibldg", "reset", "knock", "kite", "pull", "champ", "bait",
-                    "ranged", "pump", "freeze"]:
+                    "ranged", "pump", "freeze", "hero"]:
             f[tag] = np.array([c.has(tag) for c in cs], float)
         for wct in ["beatdown", "air", "hog", "rg", "siege", "bait", "chip", "bridge", "drill", "graveyard", "spell"]:
             f["wct_" + wct] = np.array([c.has("wct_" + wct) for c in cs], float)

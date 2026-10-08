@@ -29,11 +29,13 @@ WEB_DIR = Path(__file__).parent / "web"
 class Collection(BaseModel):
     cards: dict[str, float | None] = Field(default_factory=dict, description="carta -> nível (1..16)")
     evolutions: list[str] = Field(default_factory=list)
+    heroes: list[str] = Field(default_factory=list)
     reference_level: float | None = None
 
 
 class AnalyzeIn(BaseModel):
     deck: list[str]
+    forms: list[str] | None = Field(default=None, description="forma por posição: normal | evo | hero (None = automático)")
     collection: Collection | None = None
 
 
@@ -53,6 +55,7 @@ class BuildIn(BaseModel):
     max_avg_elixir: float | None = None
     min_avg_elixir: float | None = None
     top_k: int | None = None
+    potential: bool = True
 
 
 def jsonable(x):
@@ -257,7 +260,7 @@ def create_app(cfg: dict | None = None, engine: Engine | None = None, start_coll
 
     @app.post("/api/analyze")
     def analyze(body: AnalyzeIn):
-        return guarded(lambda: eng().analyze(body.deck, collection(body.collection)))
+        return guarded(lambda: eng().analyze(body.deck, collection(body.collection), body.forms))
 
     @app.post("/api/suggest")
     def suggest(body: SuggestIn):
@@ -275,6 +278,7 @@ def create_app(cfg: dict | None = None, engine: Engine | None = None, start_coll
                 must_include=names_to_idx(body.must_include), exclude=names_to_idx(body.exclude),
                 win_conditions=names_to_idx(body.win_conditions), style=parse_style(body.style),
                 max_avg_elixir=body.max_avg_elixir, min_avg_elixir=body.min_avg_elixir, top_k=body.top_k,
+                potential=body.potential,
             )
             return DeckBuilder(eng()).build(req, collection(body.collection))
         return guarded(run)

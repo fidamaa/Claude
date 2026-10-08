@@ -11,6 +11,7 @@ Estratégia: busca local iterada com múltiplas sementes.
 """
 from __future__ import annotations
 
+import copy
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -30,6 +31,7 @@ class BuildRequest:
     max_avg_elixir: float | None = None
     min_avg_elixir: float | None = None
     top_k: int | None = None
+    potential: bool = True                  # incluir decks extras "se você upar/desbloquear"
 
 
 class DeckBuilder:
@@ -97,6 +99,56 @@ class DeckBuilder:
         seen[tuple(sorted(cur.tolist()))] = cur_s
         return cur.tolist(), cur_s
 
+    def _search(self, req, col, pool, must, wcs, rng, light: bool = False) -> dict:
+        """Busca local iterada; devolve {deck (tupla ordenada): score} dos melhores decks vistos."""
+        f = self.f
+        seeds: list[list[int]] = []
+        if wcs:
+            seeds += [must + [w] if w not in must else list(must) for w in wcs]
+        elif any(f["wc"][m] > 0 for m in must):
+            seeds.append(list(must))
+        else:
+            cand_wc = [int(c) for c in pool if f["wc"][c] > 0 and c not in must]
+            single = self._score(np.array([must + [c] for c in cand_wc]), req, col) if cand_wc else []
+            for j in np.argsort(-np.asarray(single))[: (6 if light else self.bcfg["max_seeds"])]:
+                seeds.append(must + [cand_wc[j]])
+            if not seeds:
+                seeds.append(list(must))
+        known = self._known_decks(pool, must, req)
+
+        seen: dict[tuple, float] = {}
+        locked = set(must) | ({wcs[0]} if len(wcs) == 1 else set())
+        starts = []
+        for sd in seeds:
+            for r in range(1 if light else self.bcfg["restarts_per_seed"]):
+                starts.append(self._complete(sd, pool, req, col, rng, noise=0.0 if r == 0 else 0.02))
+        starts += known
+        pool = self._prune_pool(starts, pool, must, wcs, req, col, light)
+        done_starts: set[tuple] = set()
+        optima: set[tuple] = set()
+        for st in starts:
+            key = tuple(sorted(st))
+            if key in done_starts:
+                continue
+            done_starts.add(key)
+            lock = locked | (set(st) & set(wcs)) if wcs else locked
+            deck, s = self._local_search(st, lock, pool, req, col, seen)
+            if tuple(sorted(deck)) in optima:  # convergiu para um ótimo já explorado
+                continue
+            optima.add(tuple(sorted(deck)))
+            for _ in range(0 if light else self.bcfg["perturbations"]):  # perturbação
+                free = [c for c in deck if c not in lock]
+                if len(free) < 2:
+                    break
+                drop = rng.choice(free, 2, replace=False)
+                kept = [c for c in deck if c not in drop]
+                pert = self._complete(kept, pool, req, col, rng, noise=0.03)
+                deck2, s2 = self._local_search(pert, lock, pool, req, col, seen)
+                if s2 > s:
+                    deck, s = deck2, s2
+
+        return seen
+
     def build(self, req: BuildRequest, col: PlayerCollection | None = None) -> dict:
         cat, f = self.cat, self.f
         rng = np.random.default_rng(self.bcfg["seed"])
@@ -115,51 +167,7 @@ class DeckBuilder:
         if req.win_conditions and not wcs:
             raise DeckError("Nenhuma das condições de vitória pedidas está disponível na coleção.")
 
-        # sementes
-        seeds: list[list[int]] = []
-        if wcs:
-            seeds += [must + [w] if w not in must else list(must) for w in wcs]
-        elif any(f["wc"][m] > 0 for m in must):
-            seeds.append(list(must))
-        else:
-            cand_wc = [int(c) for c in pool if f["wc"][c] > 0 and c not in must]
-            single = self._score(np.array([must + [c] for c in cand_wc]), req, col) if cand_wc else []
-            for j in np.argsort(-np.asarray(single))[: self.bcfg["max_seeds"]]:
-                seeds.append(must + [cand_wc[j]])
-            if not seeds:
-                seeds.append(list(must))
-        known = self._known_decks(pool, must, req)
-
-        seen: dict[tuple, float] = {}
-        locked = set(must) | ({wcs[0]} if len(wcs) == 1 else set())
-        starts = []
-        for sd in seeds:
-            for r in range(self.bcfg["restarts_per_seed"]):
-                starts.append(self._complete(sd, pool, req, col, rng, noise=0.0 if r == 0 else 0.02))
-        starts += known
-        done_starts: set[tuple] = set()
-        optima: set[tuple] = set()
-        for st in starts:
-            key = tuple(sorted(st))
-            if key in done_starts:
-                continue
-            done_starts.add(key)
-            lock = locked | (set(st) & set(wcs)) if wcs else locked
-            deck, s = self._local_search(st, lock, pool, req, col, seen)
-            if tuple(sorted(deck)) in optima:  # convergiu para um ótimo já explorado
-                continue
-            optima.add(tuple(sorted(deck)))
-            for _ in range(self.bcfg["perturbations"]):  # perturbação
-                free = [c for c in deck if c not in lock]
-                if len(free) < 2:
-                    break
-                drop = rng.choice(free, 2, replace=False)
-                kept = [c for c in deck if c not in drop]
-                pert = self._complete(kept, pool, req, col, rng, noise=0.03)
-                deck2, s2 = self._local_search(pert, lock, pool, req, col, seen)
-                if s2 > s:
-                    deck, s = deck2, s2
-
+        seen = self._search(req, col, pool, must, wcs, rng)
         ranked = sorted(seen.items(), key=lambda kv: -kv[1])
         top_k = req.top_k or self.bcfg["top_k"]
         chosen = self._select_diverse(ranked, must, req, top_k * 2)
@@ -173,8 +181,11 @@ class DeckBuilder:
         for i, r in enumerate(results):
             r["rank"] = i + 1
             r["why"] = self._why(r, results)
+        potential = self._potential(req, col, pool, must, wcs, rng, [r["analysis"]["deck"] for r in results]) \
+            if (col is not None and req.potential) else []
         return {
             "decks": results,
+            "potential": potential,
             "explored": len(seen),
             "request": {
                 "pool_size": int(len(pool)), "must_include": [cat.cards[i].key for i in must],
@@ -185,6 +196,68 @@ class DeckBuilder:
             "note": ("Busca local iterada sobre combinações de 8 cartas avaliadas pelo mesmo motor da análise. "
                      f"{len(seen)} decks distintos avaliados."),
         }
+
+    def _prune_pool(self, starts, pool, must, wcs, req, col, light) -> np.ndarray:
+        """Pré-seleção: avalia uma vez todas as trocas a partir dos decks iniciais e mantém só as
+        cartas mais promissoras (mais as obrigatórias, condições de vitória e as já usadas)."""
+        cap = self.bcfg.get("pool_cap", 55) - (15 if light else 0)
+        if len(pool) <= cap or not starts:
+            return pool
+        best = np.full(len(pool), -np.inf)
+        pos_in_pool = {int(c): j for j, c in enumerate(pool)}
+        for st in starts[: (2 if light else 4)]:
+            cur = np.array(st)
+            cand = pool[~np.isin(pool, cur)]
+            pos = np.repeat(np.arange(8), len(cand))
+            new = np.tile(cand, 8)
+            batch = np.repeat(cur[None, :], len(pos), axis=0)
+            batch[np.arange(len(pos)), pos] = new
+            sc = self._score(batch, req, col).reshape(8, len(cand)).max(0)
+            for c, v in zip(cand, sc):
+                j = pos_in_pool[int(c)]
+                best[j] = max(best[j], v)
+        keep = set(pool[np.argsort(-best)[:cap]].tolist()) | set(must) | set(wcs)
+        for st in starts:
+            keep |= set(st)
+        return np.array(sorted(keep))
+
+    def _potential(self, req, col, pool, must, wcs, rng, shown: list[list[str]]) -> list[dict]:
+        """1–2 decks extras que ficariam melhores se o jogador upasse cartas abaixo do nível de
+        referência ou desbloqueasse Evoluções/Heróis de cartas que já tem."""
+        cat = self.cat
+        pot = copy.deepcopy(col)
+        for i in pot.levels:
+            pot.levels[i] = max(pot.levels[i], col.reference_level)
+        pot.evolutions |= {i for i in pot.levels if cat.cards[i].evo}
+        pot.heroes |= {i for i in pot.levels if cat.cards[i].has("hero")}
+        seen = self._search(req, pot, pool, must, wcs, rng, light=True)
+        shown_idx = [{cat.by_key[k].idx for k in d} for d in shown]
+        cands = [d for d, _s in sorted(seen.items(), key=lambda kv: -kv[1])[:80]
+                 if all(len(set(d) - sd) >= 2 for sd in shown_idx)]
+        if not cands:
+            return []
+        arr = np.array(cands)
+        gain = self.engine.evaluate(arr, pot)["ev"] - self.engine.evaluate(arr, col)["ev"]  # em lote
+        out = []
+        for j in np.argsort(-gain):
+            deck = cands[j]
+            if gain[j] < 0.01 or any(len(set(deck) - sd) < 2 for sd in shown_idx):
+                continue
+            now = self.engine.analyze(list(deck), col)
+            future = self.engine.analyze(list(deck), pot)
+            ups = [{"card": cat.cards[i].key, "from": col.levels[i], "to": col.reference_level}
+                   for i in deck if col.levels.get(i, col.reference_level) < col.reference_level - 0.5]
+            unlocks = [{"card": sl["card"], "kind": sl["form"]} for sl in future["slots"]
+                       if sl["form"] != "normal" and cat.by_key[sl["card"]].idx not in
+                       (col.evolutions if sl["form"] == "evo" else col.heroes)]
+            if not ups and not unlocks:
+                continue
+            out.append({"analysis": now, "potential_ev": future["overall"]["ev"], "potential_slots": future["slots"],
+                        "gain": round(future["overall"]["ev"] - now["overall"]["ev"], 4), "upgrades": ups, "unlocks": unlocks})
+            shown_idx.append(set(deck))
+            if len(out) >= self.bcfg.get("potential_k", 2):
+                break
+        return out
 
     def _select_diverse(self, ranked, must, req, limit) -> list[tuple]:
         """1ª passada: melhor deck de cada núcleo de condições de vitória (variedade de planos de jogo).

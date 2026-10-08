@@ -9,9 +9,44 @@ const pct = (p, d = 0) => (100 * num(p)).toFixed(d) + "%";
 const pp = (x) => (x >= 0 ? "+" : "−") + Math.abs(100 * num(x)).toFixed(1);
 const norm = (s) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
 
-const state = { cards: [], byKey: {}, archetypes: [], archName: {}, deck: [], contrib: null, meta: null, metaSort: "games",
+const state = { cards: [], byKey: {}, archetypes: [], archName: {}, deck: Array(8).fill(null), forms: Array(8).fill("normal"),
+  contrib: null, meta: null, metaSort: "games",
   build: { wincon: [], must: [], exclude: [] } };
-const COL_KEY = "crlab.collection.v1", PLAYER_KEY = "crlab.player.v1", DECK_KEY = "crlab.deck.v1";
+const COL_KEY = "crlab.collection.v1", PLAYER_KEY = "crlab.player.v1", DECK_KEY = "crlab.deck.v2";
+// Posições especiais do jogo: 1ª Evo, 2ª Herói, 3ª Evo ou Herói (todas aceitam carta normal).
+const SLOT_FORMS = [["normal", "evo"], ["normal", "hero"], ["normal", "evo", "hero"]];
+const SLOT_LABEL = ["Evolução", "Herói", "Evo ou Herói"];
+const SLOT_SHORT = ["Evo", "Herói", "Evo/Herói"];
+const FORM_SHORT = { normal: "—", evo: "Evo", hero: "Herói" };
+const FORM_PT = { normal: "Normal", evo: "Evo", hero: "Herói" };
+const deckKeys = () => state.deck.filter(Boolean);
+function saveDeck() { store(DECK_KEY, { deck: state.deck, forms: state.forms }); }
+function setDeck(keys, forms = null) {
+  state.deck = Array(8).fill(null);
+  state.forms = Array(8).fill("normal");
+  keys.slice(0, 8).forEach((k, i) => { state.deck[i] = k; if (forms) state.forms[i] = forms[i] || "normal"; });
+  if (!forms) autoForms();
+  saveDeck();
+}
+// Pode usar a forma? (a carta precisa ter a forma; com coleção ativa, precisa estar desbloqueada)
+function formAvailable(key, form) {
+  if (form === "normal") return true;
+  const c = state.byKey[key];
+  if (!c || (form === "evo" && !c.evo) || (form === "hero" && !c.hero)) return false;
+  if (!$("#analyze-use-col")?.checked || !hasCollection()) return true;
+  const col = loadCollection();
+  return form === "evo" ? col.evolutions.includes(key) : (col.heroes || []).includes(key);
+}
+// Preenche as posições especiais com a melhor forma disponível de cada carta (sem trocar cartas de lugar).
+function autoForms() {
+  state.forms = state.forms.map((f, i) => {
+    const k = state.deck[i];
+    if (!k || i > 2) return "normal";
+    if (f !== "normal" && SLOT_FORMS[i].includes(f) && formAvailable(k, f)) return f;
+    const pref = i === 0 ? ["evo"] : i === 1 ? ["hero"] : ["evo", "hero"];
+    return pref.find((x) => formAvailable(k, x)) || "normal";
+  });
+}
 
 // ------------------------------------------------------------------ ícones (SVG em linha, sem emojis)
 const ICONS = {
@@ -80,14 +115,14 @@ async function api(path, body, headers = {}) {
 }
 function store(key, value) { try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* indisponível */ } }
 function load(key, fallback) { try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; } }
-const emptyCol = () => ({ cards: {}, evolutions: [], reference_level: null });
+const emptyCol = () => ({ cards: {}, evolutions: [], heroes: [], reference_level: null });
 const loadCollection = () => ({ ...emptyCol(), ...load(COL_KEY, emptyCol()) });
 const saveCollection = (c) => store(COL_KEY, c);
 const hasCollection = () => Object.keys(loadCollection().cards).length > 0;
 function collectionPayload() {
   const c = loadCollection();
   if (!Object.keys(c.cards).length) return null;
-  return { cards: c.cards, evolutions: c.evolutions, reference_level: c.reference_level || null };
+  return { cards: c.cards, evolutions: c.evolutions, heroes: c.heroes || [], reference_level: c.reference_level || null };
 }
 function refLevel(col) {
   const v = Object.values(col.cards).filter((x) => typeof x === "number").sort((a, b) => a - b);
@@ -121,10 +156,9 @@ document.addEventListener("mousemove", (e) => {
 // Link oficial do jogo: abre o Clash Royale com o deck pronto para copiar. Cartas com evolução
 // desbloqueada vão primeiro (posições de evolução).
 function deckLink(keys) {
-  const col = loadCollection();
-  const evo = keys.filter((k) => state.byKey[k]?.evo && col.evolutions.includes(k)).slice(0, 2);
-  const ordered = [...evo, ...keys.filter((k) => !evo.includes(k))];
-  const ids = ordered.map((k) => state.byKey[k]?.id);
+  // keys já vêm na ordem das posições (1ª Evo, 2ª Herói, 3ª Evo/Herói); o jogo aplica a forma
+  // automaticamente se a carta estiver desbloqueada na conta.
+  const ids = keys.map((k) => state.byKey[k]?.id);
   if (ids.length !== 8 || ids.some((x) => !x)) return null;
   return `https://link.clashroyale.com/en/?clashroyale://copyDeck?deck=${ids.join(";")}&l=Royals&tt=159000000`;
 }
@@ -139,8 +173,8 @@ async function copyLink(keys) {
   try { await navigator.clipboard.writeText(url); toast("Link copiado. Abra no celular para copiar o deck no jogo."); }
   catch { prompt("Copie o link do deck:", url); }
 }
-const deckButtons = (keys, analyze = true) => `<div class="btns">
-  ${analyze ? `<button class="sm act-analyze" data-deck="${esc(JSON.stringify(keys))}">Analisar</button>` : ""}
+const deckButtons = (keys, analyze = true, forms = null) => `<div class="btns">
+  ${analyze ? `<button class="sm act-analyze" data-deck="${esc(JSON.stringify(keys))}" ${forms ? `data-forms="${esc(JSON.stringify(forms))}"` : ""}>Analisar</button>` : ""}
   <button class="sm act-game" data-deck="${esc(JSON.stringify(keys))}" data-tip="Abrir no Clash Royale e copiar o deck">${icon("external")} Jogo</button>
   <button class="sm act-link" data-deck="${esc(JSON.stringify(keys))}" data-tip="Copiar link do deck">${icon("copy")}</button></div>`;
 document.addEventListener("click", (e) => {
@@ -149,8 +183,8 @@ document.addEventListener("click", (e) => {
   const keys = JSON.parse(b.dataset.deck);
   if (b.classList.contains("act-game")) return openInGame(keys);
   if (b.classList.contains("act-link")) return copyLink(keys);
-  state.deck = keys; store(DECK_KEY, keys); deckChanged();
-  showTab("analyze"); analyzeDeck(); window.scrollTo({ top: 0, behavior: "smooth" });
+  setDeck(keys, b.dataset.forms ? JSON.parse(b.dataset.forms) : null); deckChanged();
+  showTab("analyze"); analyzeDeck(!b.dataset.forms); window.scrollTo({ top: 0, behavior: "smooth" });
 });
 
 // ------------------------------------------------------------------ navegação
@@ -165,7 +199,7 @@ function showTab(name) {
 $$("nav button").forEach((b) => b.addEventListener("click", () => showTab(b.dataset.tab)));
 
 // ------------------------------------------------------------------ cartas
-const imgUrl = (c, size, evo = false) => `/img/card/${size}/${encodeURIComponent(c.slug)}${evo ? "-ev1" : ""}.png`;
+const imgUrl = (c, size, form = "normal") => `/img/card/${size}/${encodeURIComponent(c.slug)}${form === "evo" || form === true ? "-ev1" : form === "hero" ? "-hero" : ""}.png`;
 // Imagem quebrada: tenta a versão sem evolução; se falhar, mostra a inicial da carta.
 document.addEventListener("error", (e) => {
   const img = e.target;
@@ -174,28 +208,33 @@ document.addEventListener("error", (e) => {
   img.closest(".ctile, .mini")?.classList.add("noimg");
 }, true);
 
-function tile(c, { size = "s", inDeck = false, extraTip = "", evoArt = false, showLevel = true } = {}) {
+function tile(c, { size = "s", inDeck = false, extraTip = "", form = "normal", showLevel = true } = {}) {
   if (!c) return "";
   const col = loadCollection();
   const lvl = col.cards[c.key];
   const ref = col.reference_level || refLevel(col);
-  const hasEvo = col.evolutions.includes(c.key);
   let badge = "";
-  if (showLevel && hasEvo) badge = `<span class="badge evo">EVO</span>`;
+  if (form === "evo") badge = `<span class="badge evo">EVO</span>`;
+  else if (form === "hero") badge = `<span class="badge hero">HERÓI</span>`;
   else if (showLevel && lvl != null) badge = `<span class="badge ${ref && lvl < ref - 0.5 ? "low" : ""}">${num(lvl)}</span>`;
-  const useEvo = evoArt && hasEvo && c.evo;
-  const fb = useEvo ? ` data-fallback="${imgUrl(c, size)}"` : "";
+  const fb = form !== "normal" ? ` data-fallback="${imgUrl(c, size)}"` : "";
   const tip = `${c.name_pt}  ·  ${c.elixir} de elixir${lvl != null ? "  ·  nível " + lvl : ""}${extraTip ? "\n" + extraTip : ""}`;
   return `<div class="ctile r-${esc(c.rarity)} ${inDeck ? "in" : ""}" data-key="${esc(c.key)}" data-tip="${esc(tip)}">
-    <div class="art" data-initial="${esc(c.name_pt.slice(0, 1))}"><img src="${imgUrl(c, size, useEvo)}"${fb} alt="${esc(c.name_pt)}" loading="lazy"></div>
+    <div class="art" data-initial="${esc(c.name_pt.slice(0, 1))}"><img src="${imgUrl(c, size, form)}"${fb} alt="${esc(c.name_pt)}" loading="lazy"></div>
     <span class="drop"><span>${num(c.elixir)}</span></span>${badge}<span class="nm">${esc(c.name_pt)}</span></div>`;
 }
-function mini(k) {
+function mini(k, form = "normal") {
   const c = state.byKey[k];
   if (!c) return esc(k);
-  return `<span class="mini"><img src="${imgUrl(c, "s")}" alt="" loading="lazy">${esc(c.name_pt)}</span>`;
+  const fb = form !== "normal" ? ` data-fallback="${imgUrl(c, "s")}"` : "";
+  const suffix = form === "evo" ? " (Evo)" : form === "hero" ? " (Herói)" : "";
+  return `<span class="mini"><img src="${imgUrl(c, "s", form)}"${fb} alt="" loading="lazy">${esc(c.name_pt + suffix)}</span>`;
 }
-const deckTiles = (keys) => `<div class="slots">${keys.map((k) => tile(state.byKey[k], { evoArt: true })).join("")}</div>`;
+// slots = [{card, form}] (ordem das posições) ou lista simples de cartas
+const deckTiles = (slots) => `<div class="slots">${slots.map((x) => typeof x === "string"
+  ? tile(state.byKey[x]) : tile(state.byKey[x.card], { form: x.form })).join("")}</div>`;
+const slotKeys = (slots) => slots.map((x) => (typeof x === "string" ? x : x.card));
+const slotForms = (slots) => slots.map((x) => (typeof x === "string" ? "normal" : x.form));
 function matches(card, q) {
   if (!q) return true;
   const n = norm(q);
@@ -220,7 +259,7 @@ function closePicker() {
   $("#modal").hidden = true;
   if (picker.mode === "deck") renderSlots(); else renderChips();
 }
-const pickerSelected = () => (picker.mode === "deck" ? state.deck : state.build[picker.mode]);
+const pickerSelected = () => (picker.mode === "deck" ? deckKeys() : state.build[picker.mode]);
 function renderModal() {
   const col = loadCollection();
   const sel = pickerSelected();
@@ -230,25 +269,34 @@ function renderModal() {
   if (picker.elixir !== "all") list = list.filter((c) => (picker.elixir === "6" ? c.elixir >= 6 : c.elixir === +picker.elixir));
   if (picker.type !== "all") list = list.filter((c) => c.type === picker.type);
   list = list.filter((c) => matches(c, $("#m-search").value)).sort((a, b) => a.elixir - b.elixir || a.name_pt.localeCompare(b.name_pt));
+  const slotTxt = picker.slot != null && picker.slot < 3 ? ` · posição ${picker.slot + 1} (${SLOT_LABEL[picker.slot]})` : "";
   $("#modal-title").textContent = picker.mode === "deck"
-    ? (picker.slot != null && state.deck[picker.slot] ? `Trocar ${state.byKey[state.deck[picker.slot]].name_pt}` : `Montar deck · ${state.deck.length}/8`)
+    ? (picker.slot != null && state.deck[picker.slot] ? `Trocar ${state.byKey[state.deck[picker.slot]].name_pt}${slotTxt}` : `Montar deck · ${deckKeys().length}/8${slotTxt}`)
     : MODE_TITLE[picker.mode];
+  $("#modal-remove").hidden = !(picker.mode === "deck" && picker.slot != null && state.deck[picker.slot]);
   $("#m-grid").innerHTML = list.map((c) => tile(c, { inDeck: sel.includes(c.key) })).join("") || "<p class='muted'>Nenhuma carta com esses filtros.</p>";
   $$("#m-grid .ctile").forEach((el) => el.addEventListener("click", () => pickCard(el.dataset.key)));
 }
 function pickCard(k) {
   if (picker.mode === "deck") {
     const i = state.deck.indexOf(k);
-    if (picker.slot != null && state.deck[picker.slot]) {
-      if (i >= 0) [state.deck[i], state.deck[picker.slot]] = [state.deck[picker.slot], state.deck[i]];
-      else state.deck[picker.slot] = k;
-      store(DECK_KEY, state.deck); deckChanged(); closePicker(); return;
+    if (picker.slot != null) {
+      // posição escolhida: coloca (ou troca de lugar, se a carta já está no deck)
+      if (i >= 0) {
+        [state.deck[i], state.deck[picker.slot]] = [state.deck[picker.slot], state.deck[i]];
+        state.forms[i] = "normal";
+      } else state.deck[picker.slot] = k;
+      state.forms[picker.slot] = "normal";
+      autoForms(); saveDeck(); deckChanged(); closePicker(); return;
     }
-    if (i >= 0) state.deck.splice(i, 1);
-    else if (state.deck.length < 8) state.deck.push(k);
-    else return toast("Deck completo. Remova uma carta primeiro.");
-    store(DECK_KEY, state.deck); deckChanged(); renderSlots();
-    if (state.deck.length === 8 && i < 0) { closePicker(); return; }
+    if (i >= 0) { state.deck[i] = null; state.forms[i] = "normal"; }
+    else {
+      const free = state.deck.indexOf(null);
+      if (free < 0) return toast("Deck completo. Remova uma carta primeiro.");
+      state.deck[free] = k;
+    }
+    autoForms(); saveDeck(); deckChanged(); renderSlots();
+    if (deckKeys().length === 8 && i < 0) { closePicker(); return; }
   } else {
     for (const m of ["wincon", "must", "exclude"]) if (m !== picker.mode) state.build[m] = state.build[m].filter((x) => x !== k);
     const arr = state.build[picker.mode];
@@ -271,6 +319,10 @@ function pickCard(k) {
   $("#m-search").addEventListener("input", renderModal);
   $("#m-owned").addEventListener("change", renderModal);
   $("#modal-done").addEventListener("click", closePicker);
+  $("#modal-remove").addEventListener("click", () => {
+    state.deck[picker.slot] = null; state.forms[picker.slot] = "normal";
+    saveDeck(); deckChanged(); closePicker();
+  });
   $("#modal").addEventListener("click", (e) => { if (e.target.id === "modal") closePicker(); });
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("#modal").hidden) closePicker(); });
 })();
@@ -279,7 +331,7 @@ function pickCard(k) {
 function renderAccount() {
   const p = load(PLAYER_KEY, null);
   if (!p) return;
-  $("#account").innerHTML = `<div class="player-chip" data-tip="${esc(`${p.tag}\n${num(p.n_cards)} cartas · ${num(p.n_evos)} evoluções${p.arena ? "\n" + p.arena : ""}`)}">
+  $("#account").innerHTML = `<div class="player-chip" data-tip="${esc(`${p.tag}\n${num(p.n_cards)} cartas · ${num(p.n_evos)} evoluções · ${num(p.n_heroes)} heróis${p.arena ? "\n" + p.arena : ""}`)}">
     ${icon("user")} <b>${esc(p.name)}</b>${p.trophies != null ? `<span class="tr">${icon("trophy")} ${num(p.trophies)}</span>` : ""}<button id="btn-switch">Atualizar</button></div>`;
   $("#btn-switch").addEventListener("click", () => importTag(p.tag));
 }
@@ -292,10 +344,12 @@ async function importTag(rawTag) {
     const col = { cards: {}, evolutions: [], reference_level: loadCollection().reference_level };
     for (const [name, lvl] of Object.entries(r.cards)) if (state.byKey[name]) col.cards[name] = lvl;
     col.evolutions = r.evolutions.filter((k) => state.byKey[k]);
+    col.heroes = (r.heroes || []).filter((k) => state.byKey[k]);
     saveCollection(col);
-    store(PLAYER_KEY, { ...r.player, n_cards: Object.keys(col.cards).length, n_evos: col.evolutions.length });
+    store(PLAYER_KEY, { ...r.player, n_cards: Object.keys(col.cards).length, n_evos: col.evolutions.length, n_heroes: col.heroes.length });
+    $("#analyze-use-col").checked = true;
     const deck = (r.current_deck || []).filter((k) => state.byKey[k]);
-    if (deck.length === 8) { state.deck = deck; store(DECK_KEY, deck); deckChanged(); }
+    if (deck.length === 8) { setDeck(deck); deckChanged(); }
     $("#analyze-use-col").checked = true;
     renderAccount(); renderSlots(); renderChips();
     if ($("#tab-collection").classList.contains("active")) renderCollection();
@@ -314,29 +368,48 @@ function renderSlots() {
   const slots = $("#deck-slots");
   slots.innerHTML = "";
   for (let i = 0; i < 8; i++) {
-    const c = state.deck[i] && state.byKey[state.deck[i]];
+    const key = state.deck[i];
+    const c = key && state.byKey[key];
+    const form = state.forms[i] || "normal";
     const info = c && state.contrib ? state.contrib[c.key] : null;
     const d = document.createElement("div");
-    d.className = "cell";
-    d.innerHTML = c ? tile(c, { size: "l", evoArt: true, extraTip: (info ? info.tip + "\n" : "") + "Toque para trocar" })
-      : `<div class="ctile empty" data-tip="Adicionar carta"><div class="art">+</div><span class="nm">&nbsp;</span></div>`;
+    d.className = "cell" + (i < 3 ? " special" : "");
+    const head = i < 3 ? `<div class="slot-label"><span class="l">${SLOT_LABEL[i]}</span><span class="s">${SLOT_SHORT[i]}</span></div>`
+      : `<div class="slot-label blank"></div>`;
+    d.innerHTML = head + (c ? tile(c, { size: "l", form, extraTip: (info ? info.tip + "\n" : "") + "Toque para trocar" })
+      : `<div class="ctile empty" data-tip="Adicionar carta"><div class="art">+</div><span class="nm">&nbsp;</span></div>`);
+    if (c && i < 3) {
+      const opts = SLOT_FORMS[i].filter((f) => f === "normal" || (f === "evo" ? c.evo : c.hero));
+      if (opts.length > 1) {
+        d.insertAdjacentHTML("beforeend", `<div class="form-pick">${opts.map((f) => {
+          const ok = formAvailable(c.key, f);
+          return `<button data-f="${f}" class="${f === form ? "on" : ""} ${f}" ${ok ? "" : "disabled"}
+            data-tip="${esc(ok ? `Usar como ${FORM_PT[f]}` : `Você não tem ${f === "evo" ? "a Evolução" : "o Herói"} desta carta`)}"><span class="l">${FORM_PT[f]}</span><span class="s">${FORM_SHORT[f]}</span></button>`;
+        }).join("")}</div>`);
+        $$(".form-pick button", d).forEach((b) => b.addEventListener("click", (e) => {
+          e.stopPropagation();
+          state.forms[i] = b.dataset.f; saveDeck(); deckChanged(); renderSlots();
+        }));
+      }
+    }
     if (info) {
       d.insertAdjacentHTML("beforeend", `<div class="contrib" data-tip="Contribuição para o deck: ${pp(info.v)} p.p. de chance de vitória">
         <i style="width:${info.w.toFixed(0)}%;${info.v < 0 ? "background:var(--neg)" : ""}"></i></div><div class="contrib-v">${pp(info.v)}</div>`);
     }
-    d.querySelector(".ctile").addEventListener("click", () => openPicker("deck", c ? i : null));
+    d.querySelector(".ctile").addEventListener("click", () => openPicker("deck", i));
     slots.appendChild(d);
   }
-  const els = state.deck.map((k) => state.byKey[k]?.elixir || 0);
+  const keys = deckKeys();
+  const els = keys.map((k) => state.byKey[k]?.elixir || 0);
   const avg = els.length ? els.reduce((a, b) => a + b, 0) / els.length : 0;
   const cyc = [...els].sort((a, b) => a - b).slice(0, 4).reduce((a, b) => a + b, 0);
-  const lvl = deckLevel(state.deck);
+  const lvl = deckLevel(keys);
   $("#deck-meta").innerHTML = `<span class="stat-chip" data-tip="Custo médio de elixir">${icon("drop")} <b>${avg.toFixed(1)}</b> elixir</span>
     <span class="stat-chip" data-tip="Soma das 4 cartas mais baratas (velocidade de ciclo)">${icon("cycle")} ciclo <b>${els.length >= 4 ? cyc : "—"}</b></span>
     ${lvl != null ? `<span class="stat-chip" data-tip="Nível médio das cartas do deck na sua coleção">${icon("level")} nível <b>${lvl.toFixed(1)}</b></span>` : ""}
-    <span class="stat-chip">${icon("layers")} <b>${state.deck.length}</b>/8</span>`;
+    <span class="stat-chip">${icon("layers")} <b>${keys.length}</b>/8</span>`;
 }
-$("#btn-clear").addEventListener("click", () => { state.deck = []; store(DECK_KEY, []); deckChanged(); renderSlots(); openPicker("deck"); });
+$("#btn-clear").addEventListener("click", () => { setDeck([]); deckChanged(); renderSlots(); openPicker("deck"); });
 $("#btn-paste").addEventListener("click", () => {
   const txt = prompt("Cole as 8 cartas separadas por vírgula (português ou inglês):");
   if (!txt) return;
@@ -345,22 +418,26 @@ $("#btn-paste").addEventListener("click", () => {
     const c = state.cards.find((x) => norm(x.key) === norm(raw) || norm(x.name_pt) === norm(raw));
     if (c) found.push(c.key); else missing.push(raw);
   }
-  state.deck = [...new Set(found)].slice(0, 8);
-  store(DECK_KEY, state.deck); deckChanged(); renderSlots();
+  setDeck([...new Set(found)].slice(0, 8)); deckChanged(); renderSlots();
   if (missing.length) toast("Não reconhecidas: " + missing.join(", "));
 });
-$("#btn-copy-deck").addEventListener("click", () => openInGame(state.deck));
+$("#btn-copy-deck").addEventListener("click", () => openInGame(state.deck.filter(Boolean)));
+$("#analyze-use-col").addEventListener("change", () => { autoForms(); saveDeck(); deckChanged(); renderSlots(); });
 $("#btn-analyze").addEventListener("click", () => analyzeDeck());
 
-async function analyzeDeck() {
-  if (state.deck.length !== 8) return toast("Selecione exatamente 8 cartas.");
+// auto = true: o servidor escolhe as melhores Evos/Heróis disponíveis e reorganiza as posições.
+async function analyzeDeck(auto = false) {
+  if (deckKeys().length !== 8) return toast("O deck precisa de 8 cartas.");
   const btn = $("#btn-analyze");
   btn.disabled = true;
   $("#result-right").innerHTML = loading("Analisando…");
   try {
-    const body = { deck: state.deck };
+    const body = { deck: [...state.deck], forms: auto ? null : [...state.forms] };
     if ($("#analyze-use-col").checked) { const col = collectionPayload(); if (col) body.collection = col; }
     const r = await api("/api/analyze", body);
+    setDeck(slotKeys(r.slots), slotForms(r.slots));
+    body.deck = [...state.deck]; body.forms = [...state.forms];
+    (r.warnings || []).forEach((w) => toast(w, 5000));
     const maxC = Math.max(0.01, ...r.cards.map((c) => Math.abs(num(c.fit.ev_contribution))));
     state.contrib = Object.fromEntries(r.cards.map((c) => [c.card, {
       v: num(c.fit.ev_contribution), w: (Math.abs(num(c.fit.ev_contribution)) / maxC) * 100,
@@ -453,6 +530,7 @@ function renderAnalysis(r, body) {
       </div>
       ${notice}
     </div>
+    ${improvementsPanel(r)}
     <div class="panel"><h2>Perfil do deck</h2>${profile(r.capabilities)}</div>`;
 
   const syn = r.synergies.filter((s) => s.value > 0).slice(0, 5).map((s) =>
@@ -494,13 +572,28 @@ function renderAnalysis(r, body) {
   bindSuggest(body);
 }
 
+function improvementsPanel(r) {
+  const imp = r.improvements;
+  if (!imp) return "";
+  const items = [
+    ...imp.unlocks.slice(0, 4).map((u) => ({ gain: u.gain, html: `${mini(u.card, u.kind)}<span class="imp-txt">Desbloquear ${u.kind === "evo" ? "a Evolução" : "o Herói"}</span>` })),
+    ...imp.upgrades.slice(0, 4).map((u) => ({ gain: u.gain, html: `${mini(u.card)}<span class="imp-txt">Upar do nível ${num(u.from)} para ${num(u.to)}</span>` })),
+  ].sort((a, b) => b.gain - a.gain).slice(0, 5);
+  if (!items.length) return "";
+  return `<div class="panel"><div class="panel-head"><h2>Para ficar mais forte</h2><span class="spacer"></span>
+      ${imp.all_upgrades_gain ? `<span class="tag good" data-tip="Ganho se todas as cartas abaixo do nível de referência forem upadas">${icon("up")} todos os upgrades ${pp(imp.all_upgrades_gain)} p.p.</span>` : ""}</div>
+    ${items.map((x) => `<div class="imp">${x.html}<span class="delta up">${pp(x.gain)}</span></div>`).join("")}
+    <p class="muted small" style="margin:8px 0 0">Ganho estimado na chance média contra o meta.</p></div>`;
+}
+
 function bindSuggest(baseBody) {
   const btn = $("#btn-suggest");
   btn.addEventListener("click", async () => {
     btn.disabled = true;
     $("#suggest-result").innerHTML = `<div class="loading"><span class="spinner"></span>Testando trocas…</div>`;
     try {
-      const body = { ...baseBody, keep_win_condition: $("#sg-keep").checked, target: $("#sg-target").value || null, top: 5 };
+      const body = { deck: baseBody.deck, collection: baseBody.collection, keep_win_condition: $("#sg-keep").checked,
+        target: $("#sg-target").value || null, top: 5 };
       if ($("#sg-owned").checked) { const col = collectionPayload(); if (col) body.collection = col; } else delete body.collection;
       const r = await api("/api/suggest", body);
       if (!r.swaps.length) { $("#suggest-result").innerHTML = "<p class='muted small'>Nenhuma troca melhora o deck segundo o modelo atual.</p>"; return; }
@@ -625,20 +718,43 @@ $("#btn-build").addEventListener("click", async () => {
         const worst = a.matchups.reduce((x, y) => (y.win_prob < x.win_prob ? y : x));
         const strip = order.map((k) => `<i style="background:${cellColor(by[k].win_prob)}" data-tip="${esc(by[k].name)}: ${pct(by[k].win_prob, 1)}"></i>`).join("");
         const lvl = deckLevel(a.deck);
+        const keys = slotKeys(a.slots), forms = slotForms(a.slots);
         return `<div class="panel deck-result">
           <div class="rank">${num(d.rank)}</div>
           <div><div class="head"><b>${esc(a.archetype.primary_pt)}</b>
               <span class="stat-chip">${icon("drop")} <b>${num(a.avg_elixir).toFixed(1)}</b></span>
               ${lvl != null ? `<span class="stat-chip">${icon("level")} nível <b>${lvl.toFixed(1)}</b></span>` : ""}</div>
-            ${deckTiles(a.deck)}
+            ${deckTiles(a.slots)}
             <div class="strip" data-tip="Matchups por arquétipo (azul = favorável, vermelho = desfavorável)">${strip}</div></div>
           <div class="side"><b style="color:${a.overall.ev >= 0.5 ? "var(--pos)" : "var(--neg)"}">${pct(a.overall.ev, 1)}</b>
-            <span class="muted small">vs meta · pior ${pct(worst.win_prob)}</span>${deckButtons(a.deck)}</div>
+            <span class="muted small">vs meta · pior ${pct(worst.win_prob)}</span>${deckButtons(keys, true, forms)}</div>
         </div>`;
-      }).join("") || "<div class='panel muted'>Nenhum deck encontrado com essas restrições.</div>");
+      }).join("") || "<div class='panel muted'>Nenhum deck encontrado com essas restrições.</div>")
+      + potentialSection(r.potential || []);
   } catch (e) { $("#build-result").innerHTML = ""; toast("Erro: " + e.message); }
   finally { btn.disabled = false; }
 });
+
+function potentialSection(list) {
+  if (!list.length) return "";
+  return `<div class="pot-head"><h2>${icon("up")} Com upgrades ou desbloqueios</h2>
+      <p class="muted small">Decks que ficam melhores se você upar cartas abaixo do nível ou desbloquear Evoluções/Heróis.</p></div>`
+    + list.map((p) => {
+      const a = p.analysis;
+      const chips = [
+        ...p.upgrades.map((u) => `<span class="tag neutral">${icon("level")} ${esc(state.byKey[u.card]?.name_pt || u.card)} ${num(u.from)} → ${num(u.to)}</span>`),
+        ...p.unlocks.map((u) => `<span class="tag neutral">${icon("sparkles")} ${u.kind === "evo" ? "Evo" : "Herói"} ${esc(state.byKey[u.card]?.name_pt || u.card)}</span>`),
+      ].join("");
+      return `<div class="panel deck-result potential">
+        <div class="rank">${icon("up")}</div>
+        <div><div class="head"><b>${esc(a.archetype.primary_pt)}</b><span class="stat-chip">${icon("drop")} <b>${num(a.avg_elixir).toFixed(1)}</b></span></div>
+          ${deckTiles(p.potential_slots)}
+          <div class="tags" style="margin-top:10px">${chips}</div></div>
+        <div class="side"><b style="color:var(--pos)">${pct(p.potential_ev, 1)}</b>
+          <span class="muted small">hoje ${pct(a.overall.ev, 1)} · ${pp(p.gain)} p.p.</span>
+          ${deckButtons(slotKeys(a.slots), true, slotForms(a.slots))}</div></div>`;
+    }).join("");
+}
 
 // ------------------------------------------------------------------ COLEÇÃO
 const LEVELS = Array.from({ length: 16 }, (_, i) => 16 - i);
@@ -652,12 +768,14 @@ function renderCollection() {
   const avg = lv.length ? lv.reduce((a, b) => a + b, 0) / lv.length : null;
   $("#col-stats").innerHTML = `<span class="stat-chip">${icon("layers")} <b>${lv.length}</b> cartas</span>
     <span class="stat-chip">${icon("sparkles")} <b>${col.evolutions.length}</b> evoluções</span>
+    <span class="stat-chip">${icon("crown")} <b>${(col.heroes || []).length}</b> heróis</span>
     ${avg != null ? `<span class="stat-chip">${icon("level")} nível médio <b>${avg.toFixed(1)}</b></span>` : ""}`;
   $("#col-ref").innerHTML = `<option value="">Automática${refLevel(col) ? ` (${refLevel(col)})` : ""}</option>` + options(LEVELS, col.reference_level ?? "");
   $("#col-table").innerHTML = `<div class="col-grid">${list.map((c) => `<div class="col-card ${c.key in col.cards ? "owned" : ""}">
-      ${tile(c, { evoArt: true, showLevel: false })}
+      ${tile(c, { form: col.evolutions.includes(c.key) ? "evo" : (col.heroes || []).includes(c.key) ? "hero" : "normal", showLevel: false })}
       <div class="col-ctrl"><select data-key="${esc(c.key)}" aria-label="Nível de ${esc(c.name_pt)}"><option value="">—</option>${options(LEVELS, col.cards[c.key] ?? "")}</select>
-      ${c.evo ? `<button class="evo-toggle ${col.evolutions.includes(c.key) ? "on" : ""}" data-evo="${esc(c.key)}" data-tip="Evolução desbloqueada">EVO</button>` : ""}</div>
+      ${c.evo ? `<button class="evo-toggle ${col.evolutions.includes(c.key) ? "on" : ""}" data-evo="${esc(c.key)}" data-tip="Evolução desbloqueada">EVO</button>` : ""}
+      ${c.hero ? `<button class="evo-toggle hero ${(col.heroes || []).includes(c.key) ? "on" : ""}" data-hero="${esc(c.key)}" data-tip="Herói desbloqueado">HERÓI</button>` : ""}</div>
     </div>`).join("")}</div>`;
   $$("#col-table select").forEach((sel) => sel.addEventListener("change", () => {
     const c = loadCollection();
@@ -667,8 +785,10 @@ function renderCollection() {
   }));
   $$("#col-table .evo-toggle").forEach((b) => b.addEventListener("click", () => {
     const c = loadCollection();
-    const k = b.dataset.evo;
-    c.evolutions = c.evolutions.includes(k) ? c.evolutions.filter((x) => x !== k) : [...c.evolutions, k];
+    const k = b.dataset.evo || b.dataset.hero;
+    const field = b.dataset.evo ? "evolutions" : "heroes";
+    c[field] = c[field] || [];
+    c[field] = c[field].includes(k) ? c[field].filter((x) => x !== k) : [...c[field], k];
     if (!(k in c.cards)) c.cards[k] = c.reference_level || refLevel(c) || 14;
     saveCollection(c); renderCollection();
   }));
@@ -698,7 +818,8 @@ $("#btn-import").addEventListener("click", () => {
   if (!txt) return;
   try {
     const d = JSON.parse(txt);
-    const c = { cards: {}, evolutions: (d.evolutions || []).filter((k) => state.byKey[k]), reference_level: d.reference_level ?? null };
+    const c = { cards: {}, evolutions: (d.evolutions || []).filter((k) => state.byKey[k]),
+      heroes: (d.heroes || []).filter((k) => state.byKey[k]), reference_level: d.reference_level ?? null };
     const unknown = [];
     for (const [name, lvl] of Object.entries(d.cards || {})) {
       const card = state.cards.find((x) => norm(x.key) === norm(name) || norm(x.name_pt) === norm(name));
@@ -767,10 +888,10 @@ async function refreshPill() {
     state.archetypes = await api("/api/archetypes");
     state.archName = Object.fromEntries(state.archetypes.map((a) => [a.key, a.name]));
     $("#build-style").innerHTML += state.archetypes.map((a) => `<option value="${esc(a.key)}">${esc(a.name)}</option>`).join("");
-    const saved = load(DECK_KEY, null);
-    state.deck = Array.isArray(saved) && saved.length && saved.every((k) => state.byKey[k])
-      ? saved : ["Hog Rider", "Musketeer", "Ice Golem", "Ice Spirit", "Skeletons", "Cannon", "Fireball", "The Log"];
     if (hasCollection()) $("#analyze-use-col").checked = true;
+    const saved = load(DECK_KEY, null);
+    if (saved && Array.isArray(saved.deck) && saved.deck.every((k) => k === null || state.byKey[k])) setDeck(saved.deck.map((k) => k), saved.forms);
+    else setDeck(["Skeletons", "Musketeer", "Ice Golem", "Hog Rider", "Ice Spirit", "Cannon", "Fireball", "The Log"]);
     renderAccount(); renderSlots(); renderChips(); renderSidebarMeta(); refreshPill();
     setInterval(refreshPill, 60000);
   } catch (e) { toast("Falha ao carregar: " + e.message, 8000); }

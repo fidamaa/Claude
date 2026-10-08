@@ -2,19 +2,20 @@
 # (estimativas manuais). Com dados reais, o modelo estatístico substitui/ajusta esses valores.
 # hp=durabilidade, dpsg=dano útil contra tropas terrestres, dpsa=dano contra aéreas, spl=dano em área,
 # evo=1 se a carta possui evolução no jogo. tags: ver crlab/catalog.py (TAG_DOC).
+# hero = a carta tem versão Herói. Cartas marcadas com '(aprox.)' abaixo foram adicionadas com valores aproximados.
 key;name_pt;elixir;type;rarity;hp;dpsg;dpsa;spl;tier;evo;tags
 Skeletons;Esqueletos;1;troop;common;0;3;0;0;4;1;swarm
 Fire Spirit;Espírito de Fogo;1;troop;common;0;2;2;4;3;0;
 Ice Spirit;Espírito de Gelo;1;troop;common;0;1;1;3;4;1;reset
 Electro Spirit;Espírito Elétrico;1;troop;common;0;1;1;3;3;0;reset
 Heal Spirit;Espírito Curador;1;troop;rare;0;1;1;2;3;0;heal
-Goblins;Goblins;2;troop;common;1;4;0;0;2;0;swarm bait
+Goblins;Goblins;2;troop;common;1;4;0;0;2;0;swarm bait hero
 Spear Goblins;Goblins Lanceiros;2;troop;common;1;3;3;0;3;0;swarm bait ranged
 Bomber;Bombardeiro;2;troop;common;1;3;0;6;3;1;ranged
 Bats;Morcegos;2;troop;common;0;4;4;0;4;1;swarm airswarm flying bait
-Ice Golem;Golem de Gelo;2;troop;rare;5;1;0;2;4;0;minitank kite
+Ice Golem;Golem de Gelo;2;troop;rare;5;1;0;2;4;0;minitank kite hero
 Wall Breakers;Destruidores de Muros;2;troop;epic;1;0;0;3;4;1;wc wct_bridge bt
-Knight;Cavaleiro;3;troop;common;6;4;0;0;4;1;minitank
+Knight;Cavaleiro;3;troop;common;6;4;0;0;4;1;minitank hero
 Archers;Arqueiras;3;troop;common;2;3;3;0;3;1;ranged
 Minions;Servos;3;troop;common;1;4;4;0;3;0;swarm airswarm flying
 Goblin Gang;Gangue de Goblins;3;troop;common;1;6;3;0;4;0;swarm bait
@@ -23,19 +24,19 @@ Guards;Guardas;3;troop;epic;3;5;0;0;3;0;swarm
 Princess;Princesa;3;troop;legendary;1;2;2;4;3;0;bait ranged
 Ice Wizard;Mago de Gelo;3;troop;legendary;3;2;2;4;3;0;ranged slow
 Dart Goblin;Goblin com Dardos;3;troop;rare;1;4;4;0;4;1;bait ranged
-Mega Minion;Mega Servo;3;troop;rare;3;5;5;0;4;0;flying
+Mega Minion;Mega Servo;3;troop;rare;3;5;5;0;4;0;flying hero
 Miner;Mineiro;3;troop;legendary;4;3;0;0;5;0;wc wct_chip
 Bandit;Bandida;3;troop;legendary;4;5;0;0;3;0;wc2 wct_bridge
-Royal Ghost;Fantasma Real;3;troop;legendary;4;4;0;4;3;0;wc2 wct_bridge
+Royal Ghost;Fantasma Real;3;troop;legendary;4;4;0;4;3;1;wc2 wct_bridge
 Fisherman;Pescador;3;troop;legendary;5;3;0;0;4;0;kite
 Firecracker;Pirotécnica;3;troop;common;1;3;3;5;4;1;ranged
 Skeleton Barrel;Barril de Esqueletos;3;troop;common;2;2;0;0;3;1;wc2 wct_bait flying bt bait
 Elixir Golem;Golem de Elixir;3;troop;rare;6;0;0;0;2;0;wc wct_beatdown bt tank
 Little Prince;Pequeno Príncipe;3;troop;champion;3;5;5;0;4;0;champ ranged
 Valkyrie;Valquíria;4;troop;rare;6;4;0;6;4;1;minitank
-Musketeer;Mosqueteira;4;troop;rare;3;5;5;0;4;1;ranged
+Musketeer;Mosqueteira;4;troop;rare;3;5;5;0;4;1;ranged hero
 Baby Dragon;Bebê Dragão;4;troop;epic;5;3;3;5;4;1;flying minitank
-Mini P.E.K.K.A;Mini P.E.K.K.A;4;troop;rare;4;8;0;0;4;0;tk
+Mini P.E.K.K.A;Mini P.E.K.K.A;4;troop;rare;4;8;0;0;4;0;tk hero
 Hog Rider;Corredor;4;troop;rare;5;0;0;0;5;0;wc wct_hog bt
 Dark Prince;Príncipe das Trevas;4;troop;epic;5;4;0;4;3;0;minitank
 Lumberjack;Lenhador;4;troop;legendary;3;7;0;0;3;1;tk
@@ -46,7 +47,7 @@ Hunter;Caçador;4;troop;epic;4;8;4;3;3;1;tk
 Night Witch;Bruxa Sombria;4;troop;legendary;3;5;3;0;3;0;spawner
 Zappies;Eletrocutadores;4;troop;rare;3;2;2;0;2;0;reset ranged
 Flying Machine;Máquina Voadora;4;troop;rare;3;4;4;0;3;0;flying ranged
-Magic Archer;Arqueiro Mágico;4;troop;legendary;2;3;3;3;3;0;ranged
+Magic Archer;Arqueiro Mágico;4;troop;legendary;2;3;3;3;3;0;ranged hero
 Mighty Miner;Mineiro Poderoso;4;troop;champion;5;8;0;0;3;0;champ tk
 Battle Healer;Curandeira Guerreira;4;troop;rare;5;3;0;0;2;0;heal
 Skeleton King;Rei Esqueleto;4;troop;champion;6;4;0;5;3;0;champ minitank
@@ -57,7 +58,7 @@ Phoenix;Fênix;4;troop;legendary;4;4;4;0;3;0;flying
 Witch;Bruxa;5;troop;epic;3;3;3;5;2;1;spawner ranged
 Barbarians;Bárbaros;5;troop;common;5;7;0;0;2;1;tk
 Prince;Príncipe;5;troop;epic;6;7;0;0;3;0;wc2 wct_bridge
-Wizard;Mago;5;troop;rare;3;4;4;6;3;0;ranged
+Wizard;Mago;5;troop;rare;3;4;4;6;3;1;ranged hero
 Minion Horde;Horda de Servos;5;troop;common;2;9;9;0;2;0;swarm airswarm flying tk bait
 Bowler;Lançador;5;troop;epic;6;4;0;7;3;0;knock
 Executioner;Executor;5;troop;epic;5;4;4;7;3;1;ranged
@@ -69,7 +70,7 @@ Electro Dragon;Dragão Elétrico;5;troop;epic;4;3;3;5;3;1;flying reset
 Archer Queen;Rainha Arqueira;5;troop;champion;4;6;6;0;4;0;champ ranged tk
 Monk;Monge;5;troop;champion;6;4;0;3;3;0;champ minitank
 Balloon;Balão;5;troop;epic;5;1;0;0;4;0;wc wct_air flying bt
-Giant;Gigante;5;troop;rare;9;0;0;0;3;0;wc wct_beatdown tank bt
+Giant;Gigante;5;troop;rare;9;0;0;0;3;0;wc wct_beatdown tank bt hero
 Giant Skeleton;Esqueleto Gigante;6;troop;epic;8;3;0;8;2;0;tank
 Royal Giant;Gigante Real;6;troop;common;8;0;0;0;4;1;wc wct_rg tank bt
 Elite Barbarians;Bárbaros de Elite;6;troop;common;6;8;0;0;2;0;wc2 wct_bridge tk
@@ -99,7 +100,7 @@ Mirror;Espelho;1;spell;epic;0;0;0;0;1;0;
 Zap;Zap;2;spell;common;0;2;2;4;4;1;small reset
 Giant Snowball;Bola de Neve;2;spell;common;0;2;2;5;3;1;small knock
 The Log;Tronco;2;spell;legendary;0;3;0;6;5;0;small knock
-Barbarian Barrel;Barril de Bárbaro;2;spell;epic;0;3;0;5;4;0;small knock
+Barbarian Barrel;Barril de Bárbaro;2;spell;epic;0;3;0;5;4;0;small knock hero
 Rage;Fúria;2;spell;epic;0;0;0;0;2;0;rage
 Arrows;Flechas;3;spell;common;0;3;3;6;3;0;small
 Royal Delivery;Entrega Real;3;spell;common;0;4;0;5;2;0;small
@@ -113,3 +114,15 @@ Poison;Veneno;4;spell;epic;0;5;5;7;4;0;big
 Graveyard;Cemitério;5;spell;legendary;0;0;0;0;4;0;wc wct_graveyard
 Lightning;Relâmpago;6;spell;epic;0;8;8;3;3;0;big reset antibldg
 Rocket;Foguete;6;spell;rare;0;9;9;2;3;0;big wc2 wct_spell antibldg
+# --- cartas recentes (aprox.): valores estimados, corrigidos pelo modelo quando há partidas reais
+Berserker;Berserker;2;troop;common;3;5;0;0;3;0;
+Suspicious Bush;Arbusto Suspeito;2;troop;rare;1;0;0;0;3;0;wc2 wct_bait bt bait
+Spirit Empress;Imperatriz Espiritual;3;troop;legendary;3;4;4;3;3;0;ranged
+Goblin Demolisher;Demolidor Goblin;4;troop;rare;4;3;0;5;3;0;ranged
+Rune Giant;Gigante Rúnico;4;troop;epic;7;2;0;0;3;0;tank
+Goblin Machine;Máquina Goblin;5;troop;legendary;6;5;0;3;3;0;minitank
+Goblinstein;Goblinstein;5;troop;champion;8;4;0;0;3;0;champ tank
+Boss Bandit;Chefona Bandida;6;troop;champion;7;6;0;0;3;0;champ tank wc2 wct_bridge
+Goblin Curse;Maldição Goblin;2;spell;epic;0;3;3;5;3;0;small
+Vines;Vinhas;3;spell;epic;0;4;4;3;3;0;
+Void;Vazio;3;spell;epic;0;6;6;3;3;0;big

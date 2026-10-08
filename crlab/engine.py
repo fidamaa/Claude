@@ -20,7 +20,9 @@ from .catalog import DATA_DIR, Catalog, get_catalog
 from .datamodel import DataModel
 from .explain import DIM_BAD, DIM_GOOD, DIM_PT, VULNERABILITIES, fmt_pct, join_pt
 from .features import FeatureExtractor, SynergyModel
-from .levels import LevelModel, PlayerCollection
+import copy
+
+from .levels import EVO, FORM_CODES, FORM_NAMES, HERO, NORMAL, SLOT_ALLOWED, LevelModel, PlayerCollection, arrange_slots, forms_valid
 from .settings import load_settings
 from .stats import CONFIDENCE_TEXT, beta_posterior, confidence_level, logit, matchup_label, sigmoid
 from .store import deck_key
@@ -112,6 +114,36 @@ class Engine:
             raise DeckError("Um deck pode ter no máximo um campeão.")
         return idx
 
+    def parse_forms(self, idx: list[int], forms, col: PlayerCollection | None, warnings: list[str]) -> list[int] | None:
+        """Valida formas por posição (1ª: normal/Evo; 2ª: normal/Herói; 3ª: normal/Evo/Herói)."""
+        if forms is None:
+            return None
+        if len(forms) != len(idx):
+            raise DeckError("Informe uma forma (normal, evo ou hero) para cada uma das 8 cartas.")
+        out = []
+        for pos, (i, f) in enumerate(zip(idx, forms)):
+            code = FORM_CODES.get(str(f or "normal").lower())
+            if code is None:
+                raise DeckError(f"Forma desconhecida: {f}. Use normal, evo ou hero.")
+            card = self.catalog.cards[i]
+            if code not in SLOT_ALLOWED[pos]:
+                slot = ["1ª (Evolução)", "2ª (Herói)", "3ª (Evolução ou Herói)"][pos] if pos < 3 else f"{pos + 1}ª"
+                raise DeckError(f"A posição {slot} não aceita {card.name_pt} como {FORM_NAMES[code]}.")
+            if code == EVO and not card.evo:
+                raise DeckError(f"{card.name_pt} não tem Evolução.")
+            if code == HERO and not card.has("hero"):
+                raise DeckError(f"{card.name_pt} não tem versão Herói.")
+            if col is not None and code == EVO and i not in col.evolutions:
+                warnings.append(f"Você não tem a Evolução de {card.name_pt}; considerada como carta normal.")
+                code = NORMAL
+            if col is not None and code == HERO and i not in col.heroes:
+                warnings.append(f"Você não tem o Herói {card.name_pt}; considerado como carta normal.")
+                code = NORMAL
+            out.append(code)
+        if not forms_valid(out):
+            raise DeckError("No máximo 2 Evoluções, 2 Heróis e 3 formas especiais por deck.")
+        return out
+
     # ---------------------------------------------------------------- avaliação em lote
     def heuristic_logits(self, caps, syn, coh, qual, primary, avg):
         h = self.cfg["heuristic"]
@@ -144,14 +176,22 @@ class Engine:
                 if fast and len(w) > 48:
                     keep = np.argsort(-w)[:48]
                     O, w = O[keep], w[keep]
-                tables[a] = (b[O].sum(1)[:, None] + M[O].sum(1), w / w.sum())
+                T = b[O].sum(1)[:, None] + M[O].sum(1)
+                if "bonus" in opp:
+                    bonus = np.asarray(opp["bonus"], float)
+                    if fast and len(opp["w"]) > 48:
+                        bonus = bonus[np.argsort(-np.asarray(opp["w"], float))[:48]]
+                    T = T + bonus[:, None]
+                tables[a] = (T, w / w.sum())
             cache[key] = tables
         return cache[key]
 
-    def model_logits(self, idx, primary, fast: bool = False):
+    def model_logits(self, idx, primary, fast: bool = False, forms=None):
         m = self.model
         b, M = m.bt_b, m.bt_M
         x = b[idx].sum(1)[:, None] + M[idx].sum(1)  # B x K
+        if forms is not None and "bt_ev" in m.arrays:
+            x = x + (m.bt_ev[idx] * (forms == EVO) + m.bt_hv[idx] * (forms == HERO)).sum(1)[:, None]
         out = np.zeros_like(x)
         for a, (T, w) in self._opponent_tables(fast).items():
             t = T[:, primary].T  # B x S (depende do arquétipo do deck avaliado)
@@ -159,27 +199,34 @@ class Engine:
         support = m.card_arch_games[idx].min(1)  # B x K: carta menos observada limita a confiança
         return out, support
 
-    def evaluate(self, idx, col: PlayerCollection | None = None, detail: bool = False, fast: bool = False) -> dict:
+    def evaluate(self, idx, col: PlayerCollection | None = None, detail: bool = False, fast: bool = False,
+                 forms=None) -> dict:
         idx = np.atleast_2d(np.asarray(idx))
+        values = self.levels.form_values(col)
+        forms = self.levels.auto_forms(idx, col, values) if forms is None else np.atleast_2d(np.asarray(forms))
+        form_bonus = self.levels.form_bonus(idx, forms, col, values)
         primary, labels = self.clf.classify_batch(idx)
         caps = self.fx.capabilities(idx)
         syn = self.syn.score(idx)
         coh = self.fx.coherence(idx)
         qual = self.fx.quality(idx)
         avg = self.catalog.features["elixir"][idx].mean(1)
-        L_h = self.heuristic_logits(caps, syn, coh, qual, primary, avg)
+        # Evoluções/Heróis entram na parte heurística como níveis-equivalentes; com dados, o modelo
+        # aprende o efeito real de cada forma (bt_ev / bt_hv) e a mistura pondera as duas fontes.
+        L_h = self.heuristic_logits(caps, syn, coh, qual, primary, avg) + self.gamma * form_bonus[:, None]
         L = L_h
         wm = np.zeros_like(L_h)
         support = np.zeros_like(L_h)
         L_m = None
         if self.model is not None:
-            L_m, support = self.model_logits(idx, primary, fast=fast)
+            L_m, support = self.model_logits(idx, primary, fast=fast, forms=forms)
             wm = support / (support + self.cfg["blend"]["model_k"])
             L = (1 - wm) * L_h + wm * L_m
         gaps = self.levels.gaps(idx, col)
         L = L + self.gamma * gaps[:, None]
         p = sigmoid(L)
-        res = {"p": p, "primary": primary, "labels": labels, "gaps": gaps, **self.objective(p)}
+        res = {"p": p, "primary": primary, "labels": labels, "gaps": gaps, "forms": forms, "form_bonus": form_bonus,
+               **self.objective(p)}
         if detail:
             res.update(caps=caps, syn=syn, coh=coh, qual=qual, L_h=L_h, L_m=L_m, wm=wm, support=support)
         return res
@@ -269,10 +316,18 @@ class Engine:
         return [t for _, t in dpos[:top]], [t for _, t in dneg[:top]]
 
     # ---------------------------------------------------------------- análise completa
-    def analyze(self, names_or_idx, col: PlayerCollection | None = None) -> dict:
+    def analyze(self, names_or_idx, col: PlayerCollection | None = None, forms=None) -> dict:
+        """forms: None (escolha automática das melhores Evos/Heróis disponíveis) ou uma forma por
+        posição, na ordem do deck: "normal" | "evo" | "hero"."""
         idx = (self.parse_deck(names_or_idx) if isinstance(names_or_idx[0], str) else list(names_or_idx))
+        warnings: list[str] = list(col.warnings) if col is not None else []
+        codes = self.parse_forms(idx, forms, col, warnings)
+        forms_auto = codes is None
+        if forms_auto:
+            codes = [int(x) for x in self.levels.auto_forms([idx], col)[0]]
+        idx, codes = arrange_slots(idx, codes) if forms_auto else (idx, codes)
         cards = [self.catalog.cards[i] for i in idx]
-        ev = self.evaluate([idx], col, detail=True)
+        ev = self.evaluate([idx], col, detail=True, forms=[codes])
         matchups = self.finalize_matchups(idx, ev)
         for a, m in enumerate(matchups):
             pos, neg = self.matchup_reasons(ev, a)
@@ -295,8 +350,8 @@ class Engine:
         } for i, d in enumerate(DIMS)]
         strengths = [DIM_GOOD[d] for i, d in enumerate(DIMS) if caps[i] - self.base_caps[i] > 0.12]
         vulns = self._vulnerabilities(idx, caps, matchups)
-        fit = self._leave_one_out(idx, col, overall["ev"])
-        card_rows = self._card_details(idx, col, fit)
+        fit = self._leave_one_out(idx, col, float(ev["ev"][0]), codes)
+        card_rows = self._card_details(idx, col, fit, codes)
         factors = self._factors(idx, ev, overall, col)
         exact = self.exact_stats(idx)
         overall_conf = self._overall_confidence(matchups)
@@ -321,7 +376,11 @@ class Engine:
             "synergies": self.syn.pairs(idx),
             "coherence": {"value": round(float(ev["coh"][0]), 3), "issues": self.fx.coherence_issues([idx])},
             "cards": card_rows,
-            "levels": self._level_summary(idx, col, ev),
+            "levels": self._level_summary(idx, col, ev, codes),
+            "slots": [{"card": self.catalog.cards[i].key, "form": FORM_NAMES[f]} for i, f in zip(idx, codes)],
+            "forms_auto": forms_auto,
+            "improvements": self._improvements(idx, codes, col, ev) if col is not None else None,
+            "warnings": warnings,
             "factors": factors,
             "historical": ({"games": exact[0], "wins": exact[1],
                             "posterior": beta_posterior(exact[1], exact[0], 0.5, 50)} if exact else None),
@@ -372,13 +431,14 @@ class Engine:
                             "message": f"Matchup ruim contra {m['name']} ({fmt_pct(m['win_prob'])})."})
         return sorted(out, key=lambda x: -x["severity"])
 
-    def _leave_one_out(self, idx, col, ev_full) -> list[float]:
+    def _leave_one_out(self, idx, col, ev_full, forms) -> list[float]:
         sub = np.array([[j for j in idx if j != i] for i in idx])
-        r = self.evaluate(sub, col)
+        fsub = np.array([[f for j, f in zip(idx, forms) if j != i] for i in idx])
+        r = self.evaluate(sub, col, forms=fsub)
         return [float(ev_full - e) for e in r["ev"]]
 
-    def _card_details(self, idx, col, fit) -> list[dict]:
-        lv = {d["card"]: d for d in self.levels.card_detail(idx, col)}
+    def _card_details(self, idx, col, fit, forms) -> list[dict]:
+        lv = {d["card"]: d for d in self.levels.card_detail(idx, col, forms)}
         rows = []
         for i, contrib in zip(idx, fit):
             c = self.catalog.cards[i]
@@ -401,21 +461,55 @@ class Engine:
             rows.append(row)
         return rows
 
-    def _level_summary(self, idx, col, ev) -> dict:
+    def _level_summary(self, idx, col, ev, forms) -> dict:
         if col is None:
             return {"provided": False, "note": "Níveis não informados: análise considera todas as cartas no mesmo nível do adversário."}
         gap = float(ev["gaps"][0])
-        ev0 = self.evaluate([idx], None)["ev"][0]
+        flat = copy.deepcopy(col)
+        flat.levels = {k: col.reference_level for k in col.levels}
+        ev0 = self.evaluate([idx], flat, forms=[forms])["ev"][0]
         evl = float(ev["ev"][0])
-        under = [d for d in self.levels.card_detail(idx, col) if d["gap"] <= -1]
+        under = [d for d in self.levels.card_detail(idx, col, forms) if d["gap"] <= -1]
         missing = [self.catalog.cards[i].key for i in idx if i not in col.levels]
         return {
             "provided": True, "reference_level": col.reference_level, "effective_gap": round(gap, 2),
             "impact_ev": round(evl - float(ev0), 4),
             "underleveled": under, "not_owned": missing,
-            "evolutions_used": [self.catalog.cards[i].key for i in self.levels.evo_slots(idx, col)],
+            "evolutions_used": [self.catalog.cards[i].key for i, f in zip(idx, forms) if f == EVO],
+            "heroes_used": [self.catalog.cards[i].key for i, f in zip(idx, forms) if f == HERO],
             "note": f"Cada nível de diferença ≈ {self.gamma:.2f} em logit (~{100 * (sigmoid(self.gamma) - 0.5):.1f} p.p.).",
         }
+
+    def _improvements(self, idx, forms, col, ev) -> dict:
+        """O que mais melhoraria ESTE deck para ESTE jogador: desbloquear Evos/Heróis das cartas do
+        deck e subir cartas abaixo do nível de referência (ganho em p.p. na média vs meta)."""
+        base = float(self.evaluate([idx], col)["ev"][0])  # formas automáticas com o que o jogador tem
+        unlocks, upgrades = [], []
+        for i in idx:
+            c = self.catalog.cards[i]
+            for kind, capable, owned_set in (("evo", c.evo, col.evolutions), ("hero", c.has("hero"), col.heroes)):
+                if not capable or i in owned_set:
+                    continue
+                c2 = copy.deepcopy(col)
+                (c2.evolutions if kind == "evo" else c2.heroes).add(i)
+                c2.levels.setdefault(i, col.reference_level)
+                gain = float(self.evaluate([idx], c2)["ev"][0]) - base
+                if gain > 0.002:
+                    unlocks.append({"card": c.key, "kind": kind, "gain": round(gain, 4)})
+            lvl = col.levels.get(i, col.reference_level)
+            if lvl < col.reference_level - 0.5:
+                c2 = copy.deepcopy(col)
+                c2.levels[i] = col.reference_level
+                gain = float(self.evaluate([idx], c2, forms=[forms])["ev"][0]) - float(ev["ev"][0])
+                upgrades.append({"card": c.key, "from": lvl, "to": col.reference_level, "gain": round(gain, 4)})
+        all_up = None
+        if upgrades:
+            c2 = copy.deepcopy(col)
+            for u in upgrades:
+                c2.levels[self.catalog.by_key[u["card"]].idx] = col.reference_level
+            all_up = round(float(self.evaluate([idx], c2, forms=[forms])["ev"][0]) - float(ev["ev"][0]), 4)
+        return {"unlocks": sorted(unlocks, key=lambda u: -u["gain"]), "upgrades": sorted(upgrades, key=lambda u: -u["gain"]),
+                "all_upgrades_gain": all_up}
 
     def _factors(self, idx, ev, overall, col) -> dict:
         c = {d: float(ev["caps"][0][i]) for i, d in enumerate(DIMS)}
