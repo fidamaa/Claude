@@ -185,9 +185,16 @@ def create_app(cfg: dict | None = None, engine: Engine | None = None, start_coll
     if WEB_DIR.exists():
         app.mount("/static", StaticFiles(directory=WEB_DIR), name="static")
 
+        # Versão dos arquivos estáticos na URL: o navegador baixa de novo a cada atualização do site.
+        import hashlib
+        version = hashlib.sha1(b"".join((WEB_DIR / f).read_bytes() for f in ("app.js", "style.css"))).hexdigest()[:10]
+        page = ((WEB_DIR / "index.html").read_text(encoding="utf-8")
+                .replace("/static/app.js", f"/static/app.js?v={version}")
+                .replace("/static/style.css", f"/static/style.css?v={version}"))
+
         @app.get("/")
         def index():
-            return FileResponse(WEB_DIR / "index.html")
+            return Response(content=page, media_type="text/html", headers={"Cache-Control": "no-cache"})
 
     return app
 
