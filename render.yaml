@@ -1,0 +1,20 @@
+# Deploy no Render (plano gratuito): https://render.com/deploy?repo=https://github.com/fidamaa/Claude
+services:
+  - type: web
+    name: clash-deck-lab
+    runtime: python
+    plan: free
+    buildCommand: pip install .
+    startCommand: uvicorn crlab.api:production_app --factory --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/archetypes
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.7"
+      - key: CR_API_TOKEN        # chave da API do Clash Royale (cadastrada para o IP 45.79.218.79)
+        sync: false
+      - key: ADMIN_KEY           # senha do botão "Coletar e retreinar agora"
+        generateValue: true
+      - key: AUTO_COLLECT_HOURS
+        value: "6"
+      - key: COLLECT_MAX_PLAYERS
+        value: "300"

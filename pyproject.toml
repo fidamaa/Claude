@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "clash-deck-lab"
+version = "0.1.0"
+description = "Análise explicável de decks de Clash Royale: matchups por arquétipo, níveis, dados reais e geração de decks."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["numpy>=1.24", "fastapi>=0.100", "uvicorn>=0.23", "pydantic>=2"]
+
+[project.optional-dependencies]
+dev = ["pytest>=7", "httpx>=0.24"]
+
+[project.scripts]
+crlab = "crlab.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["crlab*"]
+
+[tool.setuptools.package-data]
+crlab = ["data/*", "web/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

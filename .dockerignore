@@ -1,0 +1,6 @@
+.git
+__pycache__
+*.pyc
+crlab_data
+tests
+*.egg-info

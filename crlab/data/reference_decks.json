@@ -1,0 +1,25 @@
+{
+  "_doc": "Decks conhecidos usados como (1) amostra representativa de cada arquétipo quando não há dados reais, (2) base para calibrar a linha de base das capacidades e (3) sementes do gerador. Lista heurística: substituída pelos decks observados quando há dados.",
+  "decks": [
+    {"name": "Corredor 2.6", "cards": ["Hog Rider", "Musketeer", "Ice Golem", "Ice Spirit", "Skeletons", "Cannon", "Fireball", "The Log"]},
+    {"name": "Corredor Terremoto", "cards": ["Hog Rider", "Earthquake", "Firecracker", "Valkyrie", "Skeletons", "Cannon", "The Log", "Ice Spirit"]},
+    {"name": "LavaLoon", "cards": ["Lava Hound", "Balloon", "Mega Minion", "Minions", "Guards", "Tombstone", "Arrows", "Fireball"]},
+    {"name": "Golem Bruxa Sombria", "cards": ["Golem", "Night Witch", "Baby Dragon", "Lumberjack", "Mega Minion", "Tornado", "Lightning", "Barbarian Barrel"]},
+    {"name": "Gigante Duplo Príncipe", "cards": ["Giant", "Prince", "Dark Prince", "Electro Wizard", "Mega Minion", "Zap", "Fireball", "Ice Spirit"]},
+    {"name": "Gigante Elétrico", "cards": ["Electro Giant", "Lightning", "Tornado", "Bowler", "Golden Knight", "Cannon", "Barbarian Barrel", "Electro Spirit"]},
+    {"name": "Gigante Goblin Sparky", "cards": ["Goblin Giant", "Sparky", "Dark Prince", "Mega Minion", "Rage", "Zap", "Fireball", "Electro Spirit"]},
+    {"name": "X-Besta 3.0", "cards": ["X-Bow", "Tesla", "Archers", "Knight", "Ice Spirit", "Skeletons", "Fireball", "The Log"]},
+    {"name": "Morteiro Ciclo", "cards": ["Mortar", "Miner", "Dart Goblin", "Goblin Gang", "Skeletons", "Spear Goblins", "Fireball", "The Log"]},
+    {"name": "Log Bait", "cards": ["Goblin Barrel", "Princess", "Goblin Gang", "Knight", "Inferno Tower", "Rocket", "Ice Spirit", "The Log"]},
+    {"name": "P.E.K.K.A Bridge Spam", "cards": ["P.E.K.K.A", "Battle Ram", "Bandit", "Royal Ghost", "Electro Wizard", "Magic Archer", "Poison", "Zap"]},
+    {"name": "Megacavaleiro Corredora", "cards": ["Mega Knight", "Ram Rider", "Bandit", "Electro Wizard", "Bats", "Zap", "Poison", "Skeleton Barrel"]},
+    {"name": "Porcos Reais Terremoto", "cards": ["Royal Hogs", "Earthquake", "Royal Recruits", "Flying Machine", "Zappies", "Goblin Cage", "Arrows", "Barbarian Barrel"]},
+    {"name": "Gigante Real Pescador", "cards": ["Royal Giant", "Fisherman", "Hunter", "Electro Spirit", "Mother Witch", "Skeletons", "Lightning", "Barbarian Barrel"]},
+    {"name": "Splashyard", "cards": ["Graveyard", "Poison", "Baby Dragon", "Ice Wizard", "Valkyrie", "Tornado", "Barbarian Barrel", "Tombstone"]},
+    {"name": "Mineiro Veneno Controle", "cards": ["Miner", "Poison", "Bomb Tower", "Valkyrie", "Bats", "Spear Goblins", "The Log", "Musketeer"]},
+    {"name": "Mineiro Destruidores Ciclo", "cards": ["Miner", "Wall Breakers", "Magic Archer", "Skeletons", "Bats", "Bomb Tower", "The Log", "Poison"]},
+    {"name": "Broca Ciclo", "cards": ["Goblin Drill", "Wall Breakers", "Bomber", "Knight", "Tesla", "Skeletons", "Fireball", "The Log"]},
+    {"name": "Três Mosqueteiras", "cards": ["Three Musketeers", "Battle Ram", "Elixir Collector", "Ice Golem", "Minion Horde", "Bandit", "Royal Ghost", "Zap"]},
+    {"name": "Balão Congelamento", "cards": ["Balloon", "Freeze", "Lumberjack", "Bowler", "Tornado", "Electro Wizard", "Barbarian Barrel", "Inferno Dragon"]}
+  ]
+}
