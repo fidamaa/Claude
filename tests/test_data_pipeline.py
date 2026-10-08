@@ -6,7 +6,7 @@ import pytest
 from crlab.datamodel import DataModel, train_model
 from crlab.engine import Engine
 from crlab.ingest.importers import read_any
-from crlab.ingest.official_api import collection_from_player, normalize_battle
+from crlab.ingest.official_api import collection_from_player, default_base_for, normalize_battle
 from crlab.levels import PlayerCollection
 from crlab.ingest.synthetic import generate
 from crlab.store import BattleStore
@@ -79,3 +79,15 @@ def test_import_jsonl_and_csv(tmp_path):
                  f"2026-09-01T12:00:00+00:00,{';'.join(HOG_26)},{';'.join(HOG_26)},0,14,13.5\n", encoding="utf-8")
     rows = read_any(c)
     assert rows[0]["a"]["cards"] == HOG_26 and rows[0]["b"]["level"] == 13.5
+
+
+def _fake_token(cidrs):
+    import base64
+    enc = lambda d: base64.urlsafe_b64encode(json.dumps(d).encode()).decode().rstrip("=")  # noqa: E731
+    return f"{enc({'alg': 'HS512'})}.{enc({'limits': [{'cidrs': cidrs, 'type': 'client'}]})}.sig"
+
+
+def test_base_url_from_token():
+    assert default_base_for(_fake_token(["45.79.218.79"])) == "https://proxy.royaleapi.dev/v1"
+    assert default_base_for(_fake_token(["1.2.3.4"])) == "https://api.clashroyale.com/v1"
+    assert default_base_for("nao-e-jwt") == "https://api.clashroyale.com/v1"

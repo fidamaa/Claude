@@ -271,6 +271,9 @@ def main(argv=None):
     p.add_argument("--host", default="127.0.0.1")
     p.add_argument("--port", type=int, default=8000)
 
+    for stream in (sys.stdout, sys.stderr):  # terminais do Windows (cp1252) não quebram com acentos/símbolos
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(errors="replace")
     args = ap.parse_args(argv)
     cfg = load_settings(args.settings)
     if args.cmd == "serve":

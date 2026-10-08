@@ -57,7 +57,9 @@ crlab data status
 
 * O battlelog da API guarda só as ~25 partidas mais recentes de cada jogador. Para acumular histórico, agende a
   coleta (cron). Partidas vistas pelos dois jogadores são deduplicadas por um id canônico.
-* Com IP dinâmico, use o proxy da RoyaleAPI: `--base-url https://proxy.royaleapi.dev/v1`.
+* Com IP dinâmico, cadastre na chave o IP `45.79.218.79` (proxy da RoyaleAPI). A ferramenta detecta isso pela
+  própria chave e usa `https://proxy.royaleapi.dev/v1` automaticamente.
+* No Windows (PowerShell), defina o token com `$env:CR_API_TOKEN="sua_chave"`.
 * `crlab data synth` gera partidas **sintéticas** só para demonstrar e testar o pipeline. Elas ficam marcadas e
   a interface mostra um aviso sempre que o modelo em uso foi treinado com elas. Use
   `crlab data train --exclude-synthetic` para treinar só com dados reais.

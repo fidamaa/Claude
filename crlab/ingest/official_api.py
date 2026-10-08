@@ -9,6 +9,7 @@
 """
 from __future__ import annotations
 
+import base64
 import json
 import os
 import time
@@ -19,6 +20,8 @@ from collections import deque
 from datetime import datetime, timezone
 
 DEFAULT_BASE = "https://api.clashroyale.com/v1"
+ROYALEAPI_PROXY = "https://proxy.royaleapi.dev/v1"
+ROYALEAPI_PROXY_IP = "45.79.218.79"
 MAX_STD_LEVEL = 16  # escala unificada de níveis; nível_normalizado = level + (16 - maxLevel)
 
 
@@ -26,12 +29,30 @@ class ApiError(RuntimeError):
     pass
 
 
+def token_cidrs(token: str) -> list[str]:
+    """IPs autorizados gravados na chave (lidos do payload do JWT, sem validar assinatura)."""
+    try:
+        payload = token.split(".")[1]
+        claims = json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)))
+    except (IndexError, ValueError):
+        return []
+    return [c for lim in claims.get("limits", []) for c in lim.get("cidrs", [])]
+
+
+def default_base_for(token: str) -> str:
+    """Chave cadastrada só para o IP do proxy da RoyaleAPI -> usa o proxy automaticamente."""
+    cidrs = token_cidrs(token)
+    if cidrs and all(c.split("/")[0] == ROYALEAPI_PROXY_IP for c in cidrs):
+        return ROYALEAPI_PROXY
+    return DEFAULT_BASE
+
+
 class ClashApi:
     def __init__(self, token: str | None = None, base_url: str | None = None, min_interval: float = 0.05):
         self.token = token or os.environ.get("CR_API_TOKEN")
         if not self.token:
             raise ApiError("Token ausente: defina CR_API_TOKEN ou passe --token.")
-        self.base = (base_url or os.environ.get("CR_API_BASE") or DEFAULT_BASE).rstrip("/")
+        self.base = (base_url or os.environ.get("CR_API_BASE") or default_base_for(self.token)).rstrip("/")
         self.min_interval = min_interval
         self._last = 0.0
 
