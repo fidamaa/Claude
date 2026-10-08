@@ -77,3 +77,13 @@ def test_collector_runs_and_swaps_engine(monkeypatch, tmp_path, engine):
     assert res["new_battles"] == 3000 and "engine" in got
     assert got["engine"].data_status()["model"] is True
     assert not col.status["running"] and col.status["last_error"] is None
+
+
+def test_card_images_only_catalog_names(tmp_path, engine):
+    from crlab.images import CardImages, card_slug
+    img = CardImages(engine.catalog, tmp_path)
+    assert card_slug("P.E.K.K.A") == "pekka" and card_slug("X-Bow") == "x-bow" and card_slug("The Log") == "the-log"
+    assert img.valid("s", "hog-rider") and img.valid("l", "knight-ev1")
+    assert not img.valid("s", "hog-rider-ev1")          # Corredor não tem evolução
+    assert not img.valid("s", "../../etc/passwd") and not img.valid("x", "hog-rider")
+    assert img.get("s", "nao-existe") is None
