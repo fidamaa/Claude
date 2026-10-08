@@ -270,6 +270,7 @@ def main(argv=None):
     p = sub.add_parser("serve", help="Inicia a interface web + API REST")
     p.add_argument("--host", default="127.0.0.1")
     p.add_argument("--port", type=int, default=8000)
+    p.add_argument("--collect", action="store_true", help="coleta partidas reais periodicamente (requer CR_API_TOKEN)")
 
     for stream in (sys.stdout, sys.stderr):  # terminais do Windows (cp1252) não quebram com acentos/símbolos
         if hasattr(stream, "reconfigure"):
@@ -280,7 +281,7 @@ def main(argv=None):
         import uvicorn
 
         from .api import create_app
-        uvicorn.run(create_app(cfg), host=args.host, port=args.port)
+        uvicorn.run(create_app(cfg, start_collector=args.collect), host=args.host, port=args.port)
         return
     engine = Engine.from_settings(cfg)
     try:

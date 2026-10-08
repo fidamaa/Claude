@@ -45,6 +45,18 @@ Formato da coleção (`colecao.json`); os níveis usam a escala unificada de 1 a
 `reference_level` é o nível típico dos seus adversários. Se omitido, usa o percentil 75 dos seus níveis.
 Para baixar a coleção automaticamente: `crlab player "#SUATAG" --out colecao.json` (requer token da API).
 
+## Site hospedado (Render, gratuito)
+
+1. Acesse **https://render.com/deploy?repo=https://github.com/fidamaa/Claude** e entre com o GitHub.
+2. Em `CR_API_TOKEN`, cole a chave da API (cadastrada para o IP `45.79.218.79`, do proxy da RoyaleAPI).
+   `ADMIN_KEY` é gerada automaticamente (senha do botão "Coletar e retreinar agora").
+3. Clique em **Apply**. Em alguns minutos o site fica em `https://clash-deck-lab-xxxx.onrender.com`.
+
+O site importa sua conta pela tag (cartas, níveis, evoluções e deck atual), coleta partidas reais
+automaticamente a cada `AUTO_COLLECT_HOURS` horas e retreina o modelo sem sair do ar. No plano gratuito o
+servidor "dorme" após 15 min sem acesso e o disco é temporário: ao acordar (~1 min), ele refaz a coleta.
+Para outro provedor, há um `Dockerfile` (variável `PORT`).
+
 ## Dados reais
 
 ```bash

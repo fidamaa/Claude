@@ -23,6 +23,8 @@ DEFAULT_BASE = "https://api.clashroyale.com/v1"
 ROYALEAPI_PROXY = "https://proxy.royaleapi.dev/v1"
 ROYALEAPI_PROXY_IP = "45.79.218.79"
 MAX_STD_LEVEL = 16  # escala unificada de níveis; nível_normalizado = level + (16 - maxLevel)
+# Modos que não representam o meta competitivo 1x1 (amistosos, duelos de guerra, batalha naval…)
+EXCLUDED_TYPES = {"friendly", "clanMate", "boatBattle", "riverRaceDuel", "riverRaceDuelColosseum", "tutorial"}
 
 
 class ApiError(RuntimeError):
@@ -146,7 +148,7 @@ def parse_battle_time(s: str) -> str:
 
 def normalize_battle(entry: dict, source: str = "official_api") -> dict | None:
     team, opp = entry.get("team", []), entry.get("opponent", [])
-    if len(team) != 1 or len(opp) != 1:
+    if entry.get("type") in EXCLUDED_TYPES or len(team) != 1 or len(opp) != 1:
         return None
     a, b = _side(team[0]), _side(opp[0])
     if len(a["cards"]) != 8 or len(b["cards"]) != 8:
@@ -170,4 +172,9 @@ def collection_from_player(player: dict) -> dict:
         cards[c["name"]] = _norm_level(c)
         if c.get("evolutionLevel", 0) > 0:
             evos.append(c["name"])
-    return {"player": {"tag": player.get("tag"), "name": player.get("name")}, "cards": cards, "evolutions": evos}
+    return {
+        "player": {"tag": player.get("tag"), "name": player.get("name"), "trophies": player.get("trophies"),
+                   "exp_level": player.get("expLevel"), "arena": (player.get("arena") or {}).get("name")},
+        "cards": cards, "evolutions": evos,
+        "current_deck": [c["name"] for c in player.get("currentDeck", [])],
+    }

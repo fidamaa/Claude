@@ -4,33 +4,57 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Clash Deck Lab</title>
-<link rel="icon" href="data:,">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚔️</text></svg>">
 <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-<header>
-  <h1>Clash Deck Lab</h1>
-  <nav>
-    <button data-tab="analyze" class="active">Analisar deck</button>
-    <button data-tab="build">Criar decks</button>
-    <button data-tab="collection">Minha coleção</button>
-    <button data-tab="data">Dados e confiança</button>
-  </nav>
-  <div id="data-banner"></div>
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand">
+      <div class="logo">⚔️</div>
+      <div>
+        <h1>Clash Deck Lab</h1>
+        <div class="tagline">Matchups por arquétipo, níveis reais e dados de partidas — com explicação</div>
+      </div>
+      <span id="status-pill" class="status-pill">carregando…</span>
+    </div>
+    <nav>
+      <button data-tab="analyze" class="active">Analisar deck</button>
+      <button data-tab="build">Criar decks</button>
+      <button data-tab="collection">Minha coleção</button>
+      <button data-tab="data">Dados e confiança</button>
+    </nav>
+  </div>
 </header>
 
 <main>
+  <!-- importação por tag (compartilhada) -->
+  <div class="hero" id="hero">
+    <div class="player-card" id="player-card">
+      <div><b>Importe sua conta</b><br><span class="muted">Cartas, níveis, evoluções e deck atual direto do jogo.</span></div>
+    </div>
+    <div class="row">
+      <input id="tag-input" placeholder="#SUATAG" autocomplete="off" maxlength="15">
+      <button id="btn-tag" class="gold">Importar pela tag</button>
+      <span id="tag-note" class="muted"></span>
+    </div>
+  </div>
+
   <!-- ANALISAR -->
   <section id="tab-analyze" class="tab active">
     <div class="panel">
-      <h2>Deck (8 cartas)</h2>
-      <div id="deck-slots" class="slots"></div>
-      <div class="row">
-        <input id="analyze-search" placeholder="Buscar carta (pt ou en)…" autocomplete="off">
-        <label><input type="checkbox" id="analyze-use-col"> usar níveis da minha coleção</label>
+      <div class="row" style="margin-top:0">
+        <h2 style="margin:0">Seu deck</h2><span class="spacer"></span>
+        <label class="check"><input type="checkbox" id="analyze-use-col"> usar meus níveis</label>
         <button id="btn-paste">Colar lista</button>
         <button id="btn-clear">Limpar</button>
-        <button id="btn-analyze" class="primary">Analisar</button>
+        <button id="btn-analyze" class="primary">Analisar deck</button>
+      </div>
+      <div id="deck-slots" class="slots"></div>
+      <div class="deck-meta" id="deck-meta"></div>
+      <div class="row">
+        <input id="analyze-search" placeholder="Buscar carta (português ou inglês)…" autocomplete="off" style="flex:1;min-width:200px">
+        <label class="check"><input type="checkbox" id="analyze-owned"> só cartas que possuo</label>
       </div>
       <div id="analyze-picker" class="picker"></div>
     </div>
@@ -40,23 +64,23 @@
   <!-- CRIAR -->
   <section id="tab-build" class="tab">
     <div class="panel">
-      <h2>Gerar decks a partir da coleção</h2>
-      <p class="muted">A busca avalia milhares de combinações com o mesmo motor da análise e devolve as melhores
-        opções distintas, comparadas lado a lado.</p>
+      <h2>Gerar decks a partir da sua coleção</h2>
+      <p class="muted">A busca testa milhares de combinações com o mesmo motor da análise e devolve as melhores opções
+        <b>distintas</b>, comparadas lado a lado — não são decks aleatórios.</p>
       <div class="grid2">
-        <label>Usar coleção salva <input type="checkbox" id="build-use-col" checked></label>
         <label>Estilo desejado <select id="build-style"><option value="">qualquer</option></select></label>
         <label>Custo médio máximo <input type="number" step="0.1" id="build-max" placeholder="ex.: 3.5"></label>
-        <label>Custo médio mínimo <input type="number" step="0.1" id="build-min"></label>
+        <label>Custo médio mínimo <input type="number" step="0.1" id="build-min" placeholder="ex.: 2.8"></label>
         <label>Quantidade de decks <input type="number" id="build-top" value="5" min="1" max="10"></label>
       </div>
+      <label class="check"><input type="checkbox" id="build-use-col" checked> usar minha coleção e níveis</label>
       <div class="row">
         <select id="build-mode">
-          <option value="wincon">Adicionar condição de vitória desejada</option>
-          <option value="must">Adicionar carta obrigatória</option>
-          <option value="exclude">Adicionar carta a evitar</option>
+          <option value="wincon">+ Condição de vitória desejada</option>
+          <option value="must">+ Carta obrigatória</option>
+          <option value="exclude">+ Carta a evitar</option>
         </select>
-        <input id="build-search" placeholder="Buscar carta…" autocomplete="off">
+        <input id="build-search" placeholder="Buscar carta…" autocomplete="off" style="flex:1;min-width:180px">
       </div>
       <div id="build-picker" class="picker small"></div>
       <div class="chips-group">
@@ -73,17 +97,18 @@
   <section id="tab-collection" class="tab">
     <div class="panel">
       <h2>Minha coleção</h2>
-      <p class="muted">Informe o nível (1–16) das cartas que você possui. Deixe em branco as que não possui.
-        Marque as evoluções desbloqueadas. Os dados ficam salvos apenas neste navegador.</p>
+      <p class="muted">Use "Importar pela tag" acima ou preencha manualmente: nível (1–16) de cada carta que você possui;
+        em branco = não possui. Fica salvo apenas neste navegador.</p>
       <div class="row">
-        <label>Nível de referência dos adversários <input type="number" id="col-ref" placeholder="automático (p75)"></label>
-        <label>Preencher todas com <input type="number" id="col-fill" placeholder="nível"></label>
+        <label class="check">Nível de referência <input type="number" id="col-ref" placeholder="auto" style="width:80px"></label>
+        <label class="check">Preencher todas com <input type="number" id="col-fill" placeholder="nível" style="width:80px"></label>
         <button id="btn-fill">Aplicar</button>
-        <button id="btn-export">Exportar JSON</button>
+        <span class="spacer"></span>
+        <button id="btn-export">Exportar</button>
         <button id="btn-import">Importar JSON</button>
-        <input id="col-filter" placeholder="Filtrar…">
+        <button id="btn-col-clear">Limpar coleção</button>
       </div>
-      <p class="muted">Dica: <code>crlab player "#SUA_TAG" --out colecao.json</code> baixa sua coleção pela API oficial.</p>
+      <div class="row"><input id="col-filter" placeholder="Filtrar cartas…" style="flex:1"><span id="col-count" class="muted"></span></div>
       <div id="col-table"></div>
     </div>
   </section>
@@ -91,21 +116,32 @@
   <!-- DADOS -->
   <section id="tab-data" class="tab">
     <div class="panel">
-      <h2>Dados, modelo e confiança</h2>
+      <h2>Dados reais e modelo</h2>
       <div id="data-status"></div>
-      <h3>Como os números são produzidos</h3>
-      <ol class="muted">
+    </div>
+    <div class="panel">
+      <h2>Coleta automática</h2>
+      <div id="collector-status"></div>
+      <details style="margin-top:10px"><summary class="muted">Administração (coletar agora)</summary>
+        <div class="row"><input id="admin-key" type="password" placeholder="ADMIN_KEY"><button id="btn-refresh">Coletar e retreinar agora</button></div>
+      </details>
+    </div>
+    <div class="panel">
+      <h2>Como os números são produzidos</h2>
+      <ol class="steps">
         <li><b>Heurística explicável</b>: capacidades do deck (defesa aérea, resposta a tanques, ciclo…) comparadas ao que
           cada arquétipo exige, mais sinergia, coerência e força teórica das cartas. Limitada a 35–65%.</li>
-        <li><b>Modelo estatístico de cartas</b> (quando há partidas): regressão logística com efeito de cada carta e
-          interação carta × arquétipo adversário, ponderada por recência e validada nos dados mais recentes.</li>
-        <li><b>Partidas do deck exato</b> atualizam a estimativa como uma posterior Beta: 90% em 20 partidas pesa
-          muito menos que 56% em 100.000.</li>
-        <li><b>Níveis</b>: cada nível de diferença em relação à referência desloca a chance de vitória (γ calibrável).</li>
+        <li><b>Modelo estatístico de cartas</b> (com partidas reais): regressão logística com o efeito de cada carta e a
+          interação carta × arquétipo adversário, ponderada por recência e validada nas partidas mais recentes.</li>
+        <li><b>Partidas do deck exato</b> atualizam a estimativa como posterior Beta: 90% em 20 partidas pesa muito menos
+          que 56% em 100.000.</li>
+        <li><b>Níveis</b>: cada nível de diferença em relação à referência desloca a chance de vitória (γ calibrado nos dados).</li>
+        <li><b>Confiança</b>: alta / média / baixa conforme a quantidade de dados; "heurística" quando não há dados.</li>
       </ol>
     </div>
   </section>
 </main>
+<footer>Clash Deck Lab · ferramenta independente, não afiliada à Supercell. Dados via API oficial do Clash Royale.</footer>
 
 <div id="toast"></div>
 <script src="/static/app.js"></script>
