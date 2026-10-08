@@ -7,7 +7,7 @@ from pathlib import Path
 
 import numpy as np
 from fastapi import FastAPI, Header, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -16,6 +16,7 @@ from .builder import BuildRequest, DeckBuilder, parse_style
 from .catalog import UnknownCardError
 from .collector import Collector
 from .engine import DeckError, Engine
+from .images import CardImages, card_slug
 from .levels import PlayerCollection
 from .optimizer import suggest_swaps
 from .settings import load_settings
@@ -97,9 +98,24 @@ def create_app(cfg: dict | None = None, engine: Engine | None = None, start_coll
         except (UnknownCardError, DeckError) as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
 
+    images = CardImages(eng().catalog, Path(cfg["data"]["db_path"]).parent / "img")
+
     @app.get("/api/cards")
     def cards():
-        return [c.to_dict() for c in eng().catalog.cards]
+        out = []
+        for c in eng().catalog.cards:
+            d = c.to_dict()
+            d["slug"] = card_slug(c.key)
+            out.append(d)
+        return out
+
+    @app.get("/img/card/{size}/{name}.png")
+    def card_image(size: str, name: str):
+        data = images.get(size, name)
+        if data is None:
+            raise HTTPException(status_code=404, detail="Imagem indisponível.")
+        return Response(content=data, media_type="image/png",
+                        headers={"Cache-Control": "public, max-age=604800, immutable"})
 
     @app.get("/api/archetypes")
     def archetypes():
