@@ -15,6 +15,7 @@ explicações. Ela não entrega uma nota única de 0 a 100. Ela tenta responder:
 | **Níveis e evoluções** | Diferencia força teórica, força no nível do jogador, desempenho no meta (dados) e compatibilidade com o deck |
 | **Otimização** | "Trocar A por B melhora contra X (+3,1 p.p.), mas piora contra Y (−2,0 p.p.)" e as 3 melhores substitutas por carta, opcionalmente mantendo a condição de vitória ou mirando um arquétipo |
 | **Criar decks** | Busca combinatória sobre a coleção do jogador com cartas obrigatórias/proibidas, condição de vitória, estilo e faixa de elixir, e devolve os K melhores decks distintos, comparados lado a lado |
+| **Evoluções e Heróis** | Respeita as posições do jogo (1ª Evo, 2ª Herói, 3ª Evo ou Herói), usa só as formas que o jogador desbloqueou e mostra quanto cada desbloqueio ou upgrade melhoraria o deck |
 | **Meta e jogadores** | Decks e cartas em alta nas partidas coletadas; consulta do deck atual e dos decks recentes de qualquer jogador pela tag |
 | **Copiar para o jogo** | Botão que abre o Clash Royale com o deck pronto para copiar (link oficial `link.clashroyale.com`) |
 | **Dados reais** | Coleta pela API oficial, importação de JSONL/CSV, modelo estatístico com validação temporal, janela de período e ponderação por recência |
@@ -127,12 +128,25 @@ lote. Depois, o gerador testa todas as trocas 1-por-1 até convergir e aplica pe
 locais. Por fim, escolhe os melhores decks com núcleos de vitória diferentes e faz a análise completa de cada um.
 São ~10⁴–10⁵ decks avaliados em menos de 1 s com uma coleção típica.
 
+## Evoluções e Heróis
+
+* Posições especiais: a 1ª aceita carta normal ou **Evolução**; a 2ª, normal ou **Herói**; a 3ª, normal, Evo ou
+  Herói. Logo: no máximo 2 Evos, 2 Heróis e 3 formas especiais por deck (`crlab/levels.py`).
+* A análise e o gerador escolhem automaticamente a melhor forma disponível para cada posição (ou respeitam a escolha
+  do usuário, validando a posição). Com coleção, só entram Evos/Heróis desbloqueados.
+* Efeito nos matchups: prior heurístico (níveis-equivalentes, `evo_bonus_levels`/`hero_bonus_levels`) e, com dados,
+  um efeito aprendido por carta (`bt_ev`, `bt_hv`) a partir das partidas em que a forma foi usada.
+* "Para ficar mais forte": ganho estimado de desbloquear cada Evo/Herói do deck e de upar cartas abaixo do nível;
+  o gerador mostra também 1–2 decks extras que ficariam melhores com upgrades/desbloqueios.
+* Como a API oficial marca Heróis ainda não está confirmado; a importação aceita os campos prováveis e a resposta de
+  `/api/player/{tag}` inclui `card_fields` para diagnóstico. Os Heróis também podem ser marcados na aba Coleção.
+
 ## Limitações conhecidas (MVP)
 
 * Sem dados, as estimativas são **heurísticas**. Os atributos do catálogo (`crlab/data/cards.csv`), a tabela de
   sinergias e os decks de referência são priors escritos à mão e foram marcados como tal. No modo heurístico, a
   busca tende a preferir decks "versáteis" (ex.: Mineiro + Veneno + Dragão Infernal). Dados reais corrigem isso.
-* O catálogo tem 110 cartas. Cartas lançadas depois dele aparecem nas partidas importadas e são descartadas do
+* O catálogo tem 121 cartas; as 11 mais recentes têm atributos aproximados (marcadas no CSV). Cartas lançadas depois dele aparecem nas partidas importadas e são descartadas do
   treino (a contagem é informada). Basta adicionar uma linha ao CSV.
 * A normalização de nível da API usa `nível + (16 − maxLevel)`. Como o modelo usa diferenças de nível, um
   deslocamento constante não afeta o resultado.

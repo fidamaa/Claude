@@ -26,7 +26,9 @@ CREATE TABLE IF NOT EXISTS battles (
     evo_b TEXT,
     crowns_a INTEGER,
     crowns_b INTEGER,
-    result REAL NOT NULL
+    result REAL NOT NULL,
+    hero_a TEXT,
+    hero_b TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_battles_played ON battles(played_at);
 CREATE INDEX IF NOT EXISTS idx_battles_source ON battles(source);
@@ -48,11 +50,16 @@ class BattleStore:
     def __init__(self, path: str | Path):
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.conn = sqlite3.connect(self.path)
+        self.conn = sqlite3.connect(self.path, check_same_thread=False)
         self.conn.executescript(SCHEMA)
+        cols = {r[1] for r in self.conn.execute("PRAGMA table_info(battles)")}
+        for col in ("hero_a", "hero_b"):  # migração de bancos antigos
+            if col not in cols:
+                self.conn.execute(f"ALTER TABLE battles ADD COLUMN {col} TEXT")
+        self.conn.commit()
 
     def insert(self, battles: list[dict]) -> int:
-        """battles: [{played_at, source, mode, trophies, result, a:{cards, level, evolutions, crowns, tag}, b:{...}}]
+        """battles: [{played_at, source, mode, trophies, result, a:{cards, level, evolutions, heroes, crowns, tag}, b:{...}}]
         result: 1 = A venceu, 0 = B venceu, 0.5 = empate."""
         rows = []
         for bt in battles:
@@ -64,9 +71,12 @@ class BattleStore:
                 bt.get("mode"), bt.get("trophies"), deck_key(a["cards"]), deck_key(b["cards"]),
                 a.get("level"), b.get("level"), deck_key(a.get("evolutions", [])), deck_key(b.get("evolutions", [])),
                 a.get("crowns"), b.get("crowns"), float(bt["result"]),
+                deck_key(a.get("heroes", [])), deck_key(b.get("heroes", [])),
             ))
         before = self.count()
-        self.conn.executemany("INSERT OR IGNORE INTO battles VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)", rows)
+        self.conn.executemany(
+            "INSERT OR IGNORE INTO battles (battle_id, played_at, source, mode, trophies, deck_a, deck_b, level_a, level_b, "
+            "evo_a, evo_b, crowns_a, crowns_b, result, hero_a, hero_b) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", rows)
         self.conn.commit()
         return self.count() - before
 
@@ -75,7 +85,8 @@ class BattleStore:
 
     def load(self, days: int | None = None, sources: list[str] | None = None, mode: str | None = None,
              min_trophies: int | None = None, until: str | None = None) -> list[tuple]:
-        q = ("SELECT played_at, source, mode, trophies, deck_a, deck_b, level_a, level_b, evo_a, evo_b, result "
+        q = ("SELECT played_at, source, mode, trophies, deck_a, deck_b, level_a, level_b, evo_a, evo_b, result, "
+             "hero_a, hero_b "
              "FROM battles WHERE 1=1")
         args: list = []
         end = datetime.fromisoformat(until) if until else None

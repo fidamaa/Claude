@@ -129,6 +129,18 @@ def _norm_level(card: dict) -> float | None:
     return card["level"] + (MAX_STD_LEVEL - card.get("maxLevel", MAX_STD_LEVEL))
 
 
+def _is_evo(card: dict) -> bool:
+    return int(card.get("evolutionLevel") or 0) > 0 and not _is_hero(card)
+
+
+def _is_hero(card: dict) -> bool:
+    """A API ainda não documenta publicamente como marca Heróis; aceita os campos prováveis.
+    (Se o formato for outro, o jogador pode marcar seus Heróis manualmente na Coleção.)"""
+    if card.get("isHero") or card.get("hero") or int(card.get("heroLevel") or 0) > 0:
+        return True
+    return str(card.get("variant", "")).lower() == "hero"
+
+
 def _side(p: dict) -> dict:
     cards = p.get("cards", [])
     levels = [lv for lv in (_norm_level(c) for c in cards) if lv is not None]
@@ -136,7 +148,8 @@ def _side(p: dict) -> dict:
         "tag": p.get("tag"),
         "cards": [c["name"] for c in cards],
         "level": sum(levels) / len(levels) if levels else None,
-        "evolutions": [c["name"] for c in cards if c.get("evolutionLevel", 0) > 0],
+        "evolutions": [c["name"] for c in cards if _is_evo(c)],
+        "heroes": [c["name"] for c in cards if _is_hero(c)],
         "crowns": p.get("crowns", 0),
         "trophies": p.get("startingTrophies"),
     }
@@ -167,14 +180,18 @@ def normalize_battle(entry: dict, source: str = "official_api") -> dict | None:
 
 def collection_from_player(player: dict) -> dict:
     """Converte /players/{tag} no formato de coleção do crlab (cartas, níveis, evoluções)."""
-    cards, evos = {}, []
+    cards, evos, heroes, fields = {}, [], [], set()
     for c in player.get("cards", []):
         cards[c["name"]] = _norm_level(c)
-        if c.get("evolutionLevel", 0) > 0:
+        fields |= set(c)
+        if _is_evo(c):
             evos.append(c["name"])
+        if _is_hero(c):
+            heroes.append(c["name"])
     return {
         "player": {"tag": player.get("tag"), "name": player.get("name"), "trophies": player.get("trophies"),
                    "exp_level": player.get("expLevel"), "arena": (player.get("arena") or {}).get("name")},
-        "cards": cards, "evolutions": evos,
+        "cards": cards, "evolutions": evos, "heroes": heroes,
+        "card_fields": sorted(fields),  # diagnóstico: campos que a API devolve por carta
         "current_deck": [c["name"] for c in player.get("currentDeck", [])],
     }

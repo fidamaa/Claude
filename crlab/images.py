@@ -25,10 +25,13 @@ class CardImages:
         self.cache = Path(cache_dir)
         self.slugs = {card_slug(c.key) for c in catalog.cards}
         self.evo_slugs = {card_slug(c.key) for c in catalog.cards if c.evo}
+        self.hero_slugs = {card_slug(c.key) for c in catalog.cards if c.has("hero")}
 
     def valid(self, size: str, name: str) -> bool:
         if size not in SIZES:
             return False
+        if name.endswith("-hero"):
+            return name[:-5] in self.hero_slugs
         base = name[:-4] if name.endswith("-ev1") else name
         return base in self.slugs and (name == base or base in self.evo_slugs)
 

@@ -132,6 +132,33 @@ details.more .row { margin-top: 10px; }
 .contrib i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--meter); border-radius: 3px; }
 .contrib-v { font-size: 11px; color: var(--muted); text-align: center; font-variant-numeric: tabular-nums; font-weight: 600; }
 
+/* posições especiais (1ª Evo, 2ª Herói, 3ª Evo/Herói) */
+.slot-label { font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .5px; text-align: center; color: var(--muted); height: 15px; }
+.cell.special .slot-label { color: #7c3aed; }
+.cell.special:nth-child(2) .slot-label { color: #c2410c; }
+.cell.special:nth-child(3) .slot-label { background: linear-gradient(90deg, #7c3aed, #c2410c); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.cell.special .ctile:not(.empty) { box-shadow: inset 0 0 0 2px color-mix(in srgb, #8b5cf6 22%, transparent); border-radius: 14px; }
+.form-pick { display: flex; gap: 2px; justify-content: center; background: var(--panel-2); border: 1px solid var(--border); border-radius: 9px; padding: 2px; margin: 0 2px; }
+.form-pick button { flex: 1; padding: 3px 4px; font-size: 10.5px; font-weight: 800; border: 0; border-radius: 7px; background: transparent; color: var(--text-2); min-width: 0; }
+.form-pick button.on { background: var(--panel); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,.15); }
+.form-pick button.on.evo { background: linear-gradient(135deg, #8b5cf6, #6d28d9); color: #fff; }
+.form-pick button.on.hero { background: linear-gradient(135deg, #f59e0b, #c2410c); color: #fff; }
+.form-pick button:disabled { opacity: .35; cursor: not-allowed; }
+.slot-label .s, .form-pick .s { display: none; }
+@media (max-width: 640px) {
+  .slot-label .l, .form-pick .l { display: none; } .slot-label .s, .form-pick .s { display: inline; }
+  .form-pick button { padding: 3px 2px; font-size: 10px; }
+  .badge.hero, .badge.evo { font-size: 9px; padding: 1px 4px; }
+}
+.badge.hero { background: linear-gradient(135deg, #f59e0b, #c2410c); }
+.evo-toggle.hero.on { background: linear-gradient(135deg, #f59e0b, #c2410c); border-color: #c2410c; color: #fff; }
+.imp { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--border); }
+.imp:last-of-type { border-bottom: 0; }
+.imp .imp-txt { flex: 1; font-size: 13px; color: var(--text-2); }
+.pot-head { margin: 10px 4px 0; } .pot-head h2 { display: flex; align-items: center; gap: 8px; margin-bottom: 2px; }
+.deck-result.potential { border-style: dashed; }
+.deck-result.potential .rank { color: var(--ok); font-size: 26px; }
+
 /* mini carta */
 .mini { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 600; }
 .mini img { width: 30px; height: 36px; object-fit: contain; }
