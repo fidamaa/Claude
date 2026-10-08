@@ -4,15 +4,18 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Clash Deck Lab</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚔️</text></svg>">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5z' fill='%232a5bd7'/%3E%3Cpath d='M12 6v12M8 10h8' stroke='%23fff' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Lilita+One&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
 <header class="topbar">
   <div class="topbar-inner">
     <div class="brand">
-      <div class="logo">⚔️</div>
-      <h1>Clash Deck Lab</h1>
+      <span class="logo" data-icon="shield"></span>
+      <h1 class="display">Clash Deck Lab</h1>
       <span id="status-pill" class="status-pill">…</span>
       <div class="account" id="account">
         <input id="tag-input" placeholder="#SUATAG" autocomplete="off" maxlength="15" aria-label="Tag do jogador">
@@ -22,6 +25,7 @@
     <nav>
       <button data-tab="analyze" class="active">Analisar</button>
       <button data-tab="build">Criar decks</button>
+      <button data-tab="meta">Meta</button>
       <button data-tab="collection">Coleção</button>
       <button data-tab="data">Dados</button>
     </nav>
@@ -31,58 +35,96 @@
 <main>
   <!-- ANALISAR -->
   <section id="tab-analyze" class="tab active">
-    <div class="panel">
-      <div class="panel-head">
-        <h2>Seu deck</h2>
-        <div class="deck-meta" id="deck-meta"></div>
-        <span class="spacer"></span>
-        <label class="check" data-tip="Considera os níveis e evoluções da sua coleção"><input type="checkbox" id="analyze-use-col"> meus níveis</label>
-        <button id="btn-clear" class="ghost">Limpar</button>
-        <button id="btn-paste" class="ghost">Colar lista</button>
-        <button id="btn-analyze" class="primary">Analisar</button>
+    <div class="layout">
+      <div class="col-left">
+        <div class="panel">
+          <div class="panel-head">
+            <h2>Seu deck</h2><span class="spacer"></span>
+            <button id="btn-clear" class="icon-btn" data-tip="Limpar deck" aria-label="Limpar deck"><span data-icon="trash"></span></button>
+            <button id="btn-paste" class="icon-btn" data-tip="Colar lista de cartas" aria-label="Colar lista"><span data-icon="clipboard"></span></button>
+            <button id="btn-copy-deck" class="icon-btn" data-tip="Abrir este deck no Clash Royale" aria-label="Abrir no jogo"><span data-icon="external"></span></button>
+            <button id="btn-analyze" class="primary">Analisar</button>
+          </div>
+          <div id="deck-slots" class="slots"></div>
+          <div class="deck-foot">
+            <div class="deck-meta" id="deck-meta"></div>
+            <label class="switch" data-tip="Considera os níveis e evoluções da sua coleção"><input type="checkbox" id="analyze-use-col"><span></span>meus níveis</label>
+          </div>
+        </div>
+        <div id="result-left"></div>
       </div>
-      <div id="deck-slots" class="slots big"></div>
-      <p class="muted hint">Toque em uma carta para trocá-la.</p>
+      <div class="col-right" id="result-right"></div>
     </div>
-    <div id="analyze-result"></div>
+    <div id="result-bottom"></div>
   </section>
 
   <!-- CRIAR -->
   <section id="tab-build" class="tab">
-    <div class="panel">
-      <div class="panel-head"><h2>Criar decks com a sua coleção</h2></div>
-      <div class="form-row">
-        <label>Estilo<select id="build-style"><option value="">Qualquer</option></select></label>
-        <label>Elixir mín.<input type="number" step="0.1" id="build-min" placeholder="—"></label>
-        <label>Elixir máx.<input type="number" step="0.1" id="build-max" placeholder="—"></label>
-        <label>Decks<input type="number" id="build-top" value="5" min="1" max="10"></label>
-        <label class="check self-end"><input type="checkbox" id="build-use-col" checked> minha coleção</label>
+    <div class="layout build-layout">
+      <div class="col-left">
+        <div class="panel sticky">
+          <div class="panel-head"><h2>Criar decks</h2></div>
+          <div class="form-grid">
+            <label>Estilo<select id="build-style"><option value="">Qualquer</option></select></label>
+            <label>Quantidade<select id="build-top"></select></label>
+            <label>Elixir mínimo<select id="build-min"></select></label>
+            <label>Elixir máximo<select id="build-max"></select></label>
+          </div>
+          <label class="switch"><input type="checkbox" id="build-use-col" checked><span></span>usar minha coleção e níveis</label>
+          <div class="constraints">
+            <div class="cons"><div class="cons-h"><span data-icon="crown"></span>Condição de vitória</div><div id="chips-wincon" class="chips"></div></div>
+            <div class="cons"><div class="cons-h"><span data-icon="check"></span>Obrigatórias</div><div id="chips-must" class="chips"></div></div>
+            <div class="cons"><div class="cons-h"><span data-icon="ban"></span>Evitar</div><div id="chips-exclude" class="chips"></div></div>
+          </div>
+          <button id="btn-build" class="primary wide">Gerar decks</button>
+          <p class="muted small">Cartas muito abaixo do seu nível só entram se compensarem.</p>
+        </div>
       </div>
-      <div class="constraints">
-        <div class="cons" data-mode="wincon"><div class="cons-h">🏆 Condição de vitória</div><div id="chips-wincon" class="chips"></div></div>
-        <div class="cons" data-mode="must"><div class="cons-h">✅ Obrigatórias</div><div id="chips-must" class="chips"></div></div>
-        <div class="cons" data-mode="exclude"><div class="cons-h">⛔ Evitar</div><div id="chips-exclude" class="chips"></div></div>
+      <div class="col-right" id="build-result">
+        <div class="panel empty-state"><span data-icon="sparkles"></span><p>Escolha as restrições (opcional) e clique em <b>Gerar decks</b>.</p></div>
       </div>
-      <div class="row" style="justify-content:flex-end;margin-bottom:0"><button id="btn-build" class="primary">Gerar decks</button></div>
     </div>
-    <div id="build-result"></div>
+  </section>
+
+  <!-- META -->
+  <section id="tab-meta" class="tab">
+    <div class="layout meta-layout">
+      <div class="col-left">
+        <div class="panel">
+          <div class="panel-head"><h2>Decks em alta</h2><span class="spacer"></span>
+            <div class="seg" id="meta-sort"><button data-v="games" class="on">Mais usados</button><button data-v="winrate">Mais vitórias</button></div></div>
+          <p class="muted small" id="meta-note"></p>
+          <div id="meta-decks"></div>
+        </div>
+      </div>
+      <div class="col-right">
+        <div class="panel">
+          <div class="panel-head"><h2>Ver jogador</h2></div>
+          <div class="row"><input id="lookup-tag" placeholder="#TAG de qualquer jogador" class="grow"><button id="btn-lookup" class="primary">Buscar</button></div>
+          <div id="lookup-result"><p class="muted small">Veja o deck atual e os decks recentes de qualquer jogador.</p></div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h2>Cartas mais usadas</h2></div>
+          <div id="meta-cards"></div>
+        </div>
+      </div>
+    </div>
   </section>
 
   <!-- COLEÇÃO -->
   <section id="tab-collection" class="tab">
     <div class="panel">
       <div class="panel-head">
-        <h2>Coleção</h2><span id="col-count" class="muted"></span><span class="spacer"></span>
+        <h2>Coleção</h2><div class="deck-meta" id="col-stats"></div><span class="spacer"></span>
         <button id="btn-export" class="ghost">Exportar</button>
-        <button id="btn-import" class="ghost">Importar JSON</button>
+        <button id="btn-import" class="ghost">Importar</button>
         <button id="btn-col-clear" class="ghost">Limpar</button>
       </div>
-      <div class="row">
-        <input id="col-filter" placeholder="Filtrar…" class="grow">
-        <label class="check"><input type="checkbox" id="col-owned"> só as que possuo</label>
-        <label class="check">Todas no nível <input type="number" id="col-fill" style="width:70px"></label>
-        <button id="btn-fill" class="ghost">Aplicar</button>
-        <label class="check">Referência <input type="number" id="col-ref" placeholder="auto" style="width:70px" title="Nível típico dos seus adversários"></label>
+      <div class="toolbar">
+        <input id="col-filter" placeholder="Filtrar cartas…" class="grow">
+        <label class="inline">Definir todas<select id="col-fill"></select></label>
+        <label class="inline" data-tip="Nível típico dos seus adversários (automático = percentil 75 dos seus níveis)">Referência<select id="col-ref"></select></label>
+        <label class="switch"><input type="checkbox" id="col-owned"><span></span>só as que possuo</label>
       </div>
       <div id="col-table"></div>
     </div>
@@ -91,22 +133,28 @@
   <!-- DADOS -->
   <section id="tab-data" class="tab">
     <div id="data-status"></div>
-    <div class="panel">
-      <div class="panel-head"><h2>Coleta automática</h2><span class="spacer"></span><span id="collector-pill"></span></div>
-      <div id="collector-status"></div>
-      <details class="picker-box"><summary>Coletar agora (admin)</summary>
-        <div class="row"><input id="admin-key" type="password" placeholder="ADMIN_KEY"><button id="btn-refresh" class="ghost">Coletar e retreinar</button></div>
-      </details>
+    <div class="layout">
+      <div class="col-left">
+        <div class="panel">
+          <div class="panel-head"><h2>Coleta automática</h2><span class="spacer"></span><span id="collector-pill"></span></div>
+          <div id="collector-status"></div>
+          <details class="more"><summary>Coletar agora (admin)</summary>
+            <div class="row"><input id="admin-key" type="password" placeholder="ADMIN_KEY" class="grow"><button id="btn-refresh" class="ghost">Coletar e retreinar</button></div>
+          </details>
+        </div>
+      </div>
+      <div class="col-right">
+        <div class="panel">
+          <h2>Como as estimativas funcionam</h2>
+          <ol class="steps">
+            <li><b>Heurística</b>: capacidades do deck comparadas ao que cada arquétipo exige (limitada a 35–65%).</li>
+            <li><b>Modelo de cartas</b>: aprende com partidas reais o efeito de cada carta contra cada arquétipo.</li>
+            <li><b>Deck exato</b>: partidas do próprio deck refinam a estimativa, pesando pelo tamanho da amostra.</li>
+            <li><b>Níveis</b>: cada nível de diferença em relação à referência desloca a chance de vitória.</li>
+          </ol>
+        </div>
+      </div>
     </div>
-    <details class="panel">
-      <summary><b>Como as estimativas funcionam</b></summary>
-      <ol class="steps">
-        <li><b>Heurística</b>: capacidades do deck vs. o que cada arquétipo exige (limitada a 35–65%).</li>
-        <li><b>Modelo de cartas</b>: aprende com partidas reais o efeito de cada carta contra cada arquétipo.</li>
-        <li><b>Deck exato</b>: partidas do próprio deck refinam a estimativa, pesando pelo tamanho da amostra.</li>
-        <li><b>Níveis</b>: cada nível de diferença desloca a chance de vitória.</li>
-      </ol>
-    </details>
   </section>
 </main>
 <footer>Conteúdo de fã não oficial, não afiliado à Supercell. Arte das cartas © Supercell (via RoyaleAPI). Dados pela API oficial do Clash Royale.</footer>
@@ -121,7 +169,7 @@
       <input id="m-search" placeholder="Buscar carta…" autocomplete="off">
       <div class="seg" id="m-elixir"></div>
       <div class="seg" id="m-type"></div>
-      <label class="check"><input type="checkbox" id="m-owned"> só as minhas</label>
+      <label class="switch"><input type="checkbox" id="m-owned"><span></span>só as minhas</label>
     </div>
     <div id="m-grid" class="img-grid"></div>
   </div>
