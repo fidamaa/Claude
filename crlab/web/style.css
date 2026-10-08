@@ -81,3 +81,4 @@ details { margin: 8px 0; } summary { cursor: pointer; font-weight: 600; }
   .cap { grid-template-columns: 1fr 44px; } .cap .bar { grid-column: 1 / -1; }
   main { padding: 10px 16px; }
 }
+table.cmp td:nth-child(2) { min-width: 280px; }

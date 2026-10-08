@@ -133,7 +133,7 @@ function renderAnalysis(r, withSuggest) {
       <div class="name">${esc(m.name)}</div>${probBar(m.win_prob, m.interval, m.label)}
       <div><b>${pct(m.win_prob)}</b></div>
       <div class="why"><span class="${labelClass(m.label)}">${esc(m.label)}</span>
-        <span class="conf">${esc(m.confidence)}</span> ${esc(m.source)}${extra}${ci}<br>${esc(m.explanation)}</div>
+        <span class="conf">confiança: ${esc(m.confidence)}</span> fonte: ${esc(m.source)}${extra}${ci}<br>${esc(m.explanation)}</div>
     </div>`;
   }).join("");
   const caps = r.capabilities.map((c) => `<div class="cap"><span>${esc(c.name)}</span>
@@ -247,7 +247,7 @@ $("#btn-build").addEventListener("click", async () => {
       ${state.archetypes.map((a) => { const p = c.by_archetype[a.key]; return `<td style="color:${p >= 0.53 ? "var(--vgood)" : p < 0.47 ? "var(--vbad)" : "inherit"}">${(100 * p).toFixed(0)}</td>`; }).join("")}</tr>`).join("");
     const details = r.decks.map((d) => `<details class="panel"><summary>${esc(d.why)}</summary>${renderAnalysis(d.analysis, false)}</details>`).join("");
     $("#build-result").innerHTML = `<div class="panel"><h2>Comparação</h2><p class="muted">${esc(r.note)}</p>
-      <div class="table-wrap"><table><tr><th></th><th>Deck</th><th>Elixir</th><th>Média</th><th>Pior</th><th>Desvio</th><th>Nível</th><th>Conf.</th>${heads}</tr>${rows}</table></div></div>${details}`;
+      <div class="table-wrap"><table class="cmp"><tr><th></th><th>Deck</th><th>Elixir</th><th>Média</th><th>Pior</th><th>Desvio</th><th>Nível</th><th>Conf.</th>${heads}</tr>${rows}</table></div></div>${details}`;
   } catch (e) { $("#build-result").innerHTML = ""; toast("Erro: " + e.message); }
   finally { btn.disabled = false; }
 });
