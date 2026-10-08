@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import csv
 import difflib
+import json
+import os
 import unicodedata
 from dataclasses import dataclass
 from functools import cached_property
@@ -142,6 +144,7 @@ class Card:
 
 class Catalog:
     def __init__(self, cards: list[Card]):
+        self.meta: dict = {}
         self.cards = cards
         self.n = len(cards)
         self.by_key = {c.key: c for c in cards}
@@ -155,20 +158,40 @@ class Catalog:
                     self._lookup.setdefault(normalize(a), self.by_key[key].idx)
 
     @classmethod
-    def load(cls, path: Path | None = None) -> "Catalog":
+    def load(cls, path: Path | None = None, extra_dir: Path | None = None) -> "Catalog":
+        """Catálogo base (data/cards.csv) + cartas e marcações sincronizadas da API oficial
+        (extra_dir/cards_extra.csv e extra_dir/card_meta.json), quando existirem."""
         path = path or DATA_DIR / "cards.csv"
-        with open(path, encoding="utf-8") as fh:
-            rows = [line for line in fh if line.strip() and not line.startswith("#")]
-        cards = []
-        for i, row in enumerate(csv.DictReader(rows, delimiter=";")):
+        rows = []
+        files = [path]
+        if extra_dir is not None and (Path(extra_dir) / "cards_extra.csv").exists():
+            files.append(Path(extra_dir) / "cards_extra.csv")
+        for fpath in files:
+            with open(fpath, encoding="utf-8") as fh:
+                lines = [line for line in fh if line.strip() and not line.startswith("#")]
+            rows += list(csv.DictReader(lines, delimiter=";"))
+        meta = {}
+        if extra_dir is not None and (Path(extra_dir) / "card_meta.json").exists():
+            meta = json.loads((Path(extra_dir) / "card_meta.json").read_text(encoding="utf-8"))
+        evo_extra, hero_extra = set(meta.get("evo", [])), set(meta.get("hero", []))
+        cards, seen = [], set()
+        for row in rows:
+            if row["key"] in seen:
+                continue
+            seen.add(row["key"])
+            tags = set((row["tags"] or "").split())
+            if row["key"] in hero_extra:
+                tags.add("hero")
             cards.append(Card(
-                idx=i, key=row["key"], name_pt=row["name_pt"], elixir=int(row["elixir"]),
+                idx=len(cards), key=row["key"], name_pt=row["name_pt"], elixir=int(row["elixir"]),
                 type=row["type"], rarity=row["rarity"],
                 hp=float(row["hp"]) / 10, dpsg=float(row["dpsg"]) / 10, dpsa=float(row["dpsa"]) / 10,
-                spl=float(row["spl"]) / 10, tier=float(row["tier"]), evo=row["evo"] == "1",
-                tags=frozenset((row["tags"] or "").split()),
+                spl=float(row["spl"]) / 10, tier=float(row["tier"]), evo=row["evo"] == "1" or row["key"] in evo_extra,
+                tags=frozenset(tags),
             ))
-        return cls(cards)
+        cat = cls(cards)
+        cat.meta = meta
+        return cat
 
     def find(self, name: str) -> Card | None:
         idx = self._lookup.get(normalize(name))
@@ -212,8 +235,19 @@ class Catalog:
 _CATALOG: Catalog | None = None
 
 
+def extra_dir() -> Path:
+    """Pasta com as cartas sincronizadas da API (mesma pasta dos dados do servidor)."""
+    return Path(os.environ.get("CRLAB_DATA_DIR", "crlab_data"))
+
+
 def get_catalog() -> Catalog:
     global _CATALOG
     if _CATALOG is None:
-        _CATALOG = Catalog.load()
+        _CATALOG = Catalog.load(extra_dir=extra_dir())
     return _CATALOG
+
+
+def reload_catalog() -> Catalog:
+    global _CATALOG
+    _CATALOG = None
+    return get_catalog()

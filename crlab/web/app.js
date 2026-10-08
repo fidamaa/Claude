@@ -11,7 +11,7 @@ const norm = (s) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().rep
 
 const state = { cards: [], byKey: {}, archetypes: [], archName: {}, deck: Array(8).fill(null), forms: Array(8).fill("normal"),
   contrib: null, meta: null, metaSort: "games",
-  build: { wincon: [], must: [], exclude: [] } };
+  build: { wincon: [], must: [], exclude: [] }, buildForms: {} };
 const COL_KEY = "crlab.collection.v1", PLAYER_KEY = "crlab.player.v1", DECK_KEY = "crlab.deck.v2";
 // Posições especiais do jogo: 1ª Evo, 2ª Herói, 3ª Evo ou Herói (todas aceitam carta normal).
 const SLOT_FORMS = [["normal", "evo"], ["normal", "hero"], ["normal", "evo", "hero"]];
@@ -219,7 +219,7 @@ function tile(c, { size = "s", inDeck = false, extraTip = "", form = "normal", s
   else if (showLevel && lvl != null) badge = `<span class="badge ${ref && lvl < ref - 0.5 ? "low" : ""}">${num(lvl)}</span>`;
   const fb = form !== "normal" ? ` data-fallback="${imgUrl(c, size)}"` : "";
   const tip = `${c.name_pt}  ·  ${c.elixir} de elixir${lvl != null ? "  ·  nível " + lvl : ""}${extraTip ? "\n" + extraTip : ""}`;
-  return `<div class="ctile r-${esc(c.rarity)} ${inDeck ? "in" : ""}" data-key="${esc(c.key)}" data-tip="${esc(tip)}">
+  return `<div class="ctile r-${esc(c.rarity)} ${inDeck ? "in" : ""}" data-key="${esc(c.key)}" data-form="${esc(form)}" data-tip="${esc(tip)}">
     <div class="art" data-initial="${esc(c.name_pt.slice(0, 1))}"><img src="${imgUrl(c, size, form)}"${fb} alt="${esc(c.name_pt)}" loading="lazy"></div>
     <span class="drop"><span>${num(c.elixir)}</span></span>${badge}<span class="nm">${esc(c.name_pt)}</span></div>`;
 }
@@ -242,11 +242,11 @@ function matches(card, q) {
 }
 
 // ------------------------------------------------------------------ seletor de cartas (janela)
-const picker = { mode: "deck", slot: null, elixir: "all", type: "all" };
+const picker = { mode: "deck", slot: null, elixir: "all", type: "all", form: "all" };
 const MODE_TITLE = { wincon: "Condições de vitória", must: "Cartas obrigatórias", exclude: "Cartas a evitar" };
 function openPicker(mode, slot = null) {
-  Object.assign(picker, { mode, slot, elixir: "all", type: "all" });
-  $$("#m-elixir button, #m-type button").forEach((b) => b.classList.toggle("on", b.dataset.v === "all"));
+  Object.assign(picker, { mode, slot, elixir: "all", type: "all", form: "all" });
+  $$("#m-elixir button, #m-type button, #m-form button").forEach((b) => b.classList.toggle("on", b.dataset.v === "all"));
   $("#m-search").value = "";
   const hasCol = hasCollection();
   $("#m-owned").checked = hasCol && (mode === "deck" ? $("#analyze-use-col").checked : $("#build-use-col").checked);
@@ -274,12 +274,48 @@ function renderModal() {
     ? (picker.slot != null && state.deck[picker.slot] ? `Trocar ${state.byKey[state.deck[picker.slot]].name_pt}${slotTxt}` : `Montar deck · ${deckKeys().length}/8${slotTxt}`)
     : MODE_TITLE[picker.mode];
   $("#modal-remove").hidden = !(picker.mode === "deck" && picker.slot != null && state.deck[picker.slot]);
-  $("#m-grid").innerHTML = list.map((c) => tile(c, { inDeck: sel.includes(c.key) })).join("") || "<p class='muted'>Nenhuma carta com esses filtros.</p>";
-  $$("#m-grid .ctile").forEach((el) => el.addEventListener("click", () => pickCard(el.dataset.key)));
+  // Cada forma (Normal, Evo, Herói) é uma opção separada. Com "só as minhas", só as formas desbloqueadas.
+  const owned = $("#m-owned").checked;
+  const variants = [];
+  for (const c of list) {
+    const forms = ["normal"];
+    if (picker.mode !== "exclude") {
+      if (c.evo && (!owned || col.evolutions.includes(c.key))) forms.push("evo");
+      if (c.hero && (!owned || (col.heroes || []).includes(c.key))) forms.push("hero");
+    }
+    for (const f of forms) if (picker.form === "all" || picker.form === f) variants.push([c, f]);
+  }
+  const isSel = (c, f) => {
+    if (picker.mode === "deck") { const i = state.deck.indexOf(c.key); return i >= 0 && (state.forms[i] || "normal") === f; }
+    if (!sel.includes(c.key)) return false;
+    const want = state.buildForms[c.key];
+    return want ? want === f : f === "normal";
+  };
+  $("#m-grid").innerHTML = variants.map(([c, f]) => tile(c, { inDeck: isSel(c, f), form: f })).join("")
+    || "<p class='muted'>Nenhuma carta com esses filtros.</p>";
+  $$("#m-grid .ctile").forEach((el) => el.addEventListener("click", () => pickCard(el.dataset.key, el.dataset.form)));
 }
-function pickCard(k) {
+// Coloca a carta k na posição i com a forma f; se a posição não aceita a forma, usa uma posição
+// especial compatível (trocando de lugar a carta que estava lá).
+function placeWithForm(k, i, f) {
+  if (f === "normal" || (i < 3 && SLOT_FORMS[i].includes(f))) { state.deck[i] = k; state.forms[i] = f; return; }
+  const target = [0, 1, 2].find((j) => SLOT_FORMS[j].includes(f) && (state.forms[j] === "normal" || !state.deck[j]))
+    ?? [0, 1, 2].find((j) => SLOT_FORMS[j].includes(f));
+  const prev = state.deck[target];
+  state.deck[target] = k; state.forms[target] = f;
+  if (target !== i) { state.deck[i] = prev; state.forms[i] = "normal"; }
+}
+function pickCard(k, f = "normal") {
   if (picker.mode === "deck") {
     const i = state.deck.indexOf(k);
+    if (f !== "normal") {
+      // forma escolhida explicitamente (Evo/Herói): posiciona onde a regra permite
+      if (i >= 0) { state.deck[i] = null; state.forms[i] = "normal"; }
+      const pos = picker.slot != null ? picker.slot : state.deck.indexOf(null);
+      if (pos < 0) return toast("Deck completo. Remova uma carta primeiro.");
+      placeWithForm(k, pos, f);
+      saveDeck(); deckChanged(); closePicker(); return;
+    }
     if (picker.slot != null) {
       // posição escolhida: coloca (ou troca de lugar, se a carta já está no deck)
       if (i >= 0) {
@@ -301,7 +337,12 @@ function pickCard(k) {
     for (const m of ["wincon", "must", "exclude"]) if (m !== picker.mode) state.build[m] = state.build[m].filter((x) => x !== k);
     const arr = state.build[picker.mode];
     const i = arr.indexOf(k);
-    if (i >= 0) arr.splice(i, 1); else arr.push(k);
+    const cur = state.buildForms[k] || "normal";
+    if (i >= 0 && cur === f) { arr.splice(i, 1); delete state.buildForms[k]; }
+    else {
+      if (i < 0) arr.push(k);
+      if (f === "normal") delete state.buildForms[k]; else state.buildForms[k] = f;
+    }
   }
   renderModal();
 }
@@ -316,6 +357,7 @@ function pickCard(k) {
   };
   seg($("#m-elixir"), [["all", `${icon("drop")} Todos`], ["1", "1"], ["2", "2"], ["3", "3"], ["4", "4"], ["5", "5"], ["6", "6+"]], "elixir");
   seg($("#m-type"), [["all", "Todas"], ["troop", "Tropas"], ["spell", "Feitiços"], ["building", "Construções"]], "type");
+  seg($("#m-form"), [["all", "Todas as formas"], ["normal", "Normal"], ["evo", "Evo"], ["hero", "Herói"]], "form");
   $("#m-search").addEventListener("input", renderModal);
   $("#m-owned").addEventListener("change", renderModal);
   $("#modal-done").addEventListener("click", closePicker);
@@ -353,7 +395,9 @@ async function importTag(rawTag) {
     $("#analyze-use-col").checked = true;
     renderAccount(); renderSlots(); renderChips();
     if ($("#tab-collection").classList.contains("active")) renderCollection();
-    toast(`Conta importada: ${Object.keys(col.cards).length} cartas${deck.length === 8 ? " e deck atual" : ""}.`);
+    const unknown = r.unknown_cards || [];
+    toast(`Conta importada: ${Object.keys(col.cards).length} cartas, ${col.evolutions.length} Evos, ${col.heroes.length} Heróis${deck.length === 8 ? " e deck atual" : ""}.`
+      + (unknown.length ? ` Cartas ainda não reconhecidas: ${unknown.join(", ")}` : ""), unknown.length ? 9000 : 4000);
   } catch (e) { toast("Erro: " + e.message, 6000); }
 }
 
@@ -531,6 +575,7 @@ function renderAnalysis(r, body) {
       ${notice}
     </div>
     ${improvementsPanel(r)}
+    ${rolesPanel(r)}
     <div class="panel"><h2>Perfil do deck</h2>${profile(r.capabilities)}</div>`;
 
   const syn = r.synergies.filter((s) => s.value > 0).slice(0, 5).map((s) =>
@@ -570,6 +615,19 @@ function renderAnalysis(r, body) {
     <div class="table-wrap"><table><tr><th>Fator (índice ${r.factors.index ?? "—"})</th><th>Valor</th><th>Peso</th></tr>${factors}</table></div></div>
   </details>`;
   bindSuggest(body);
+}
+
+function rolesPanel(r) {
+  if (!r.roles) return "";
+  const chip = (x) => {
+    const names = x.cards.map((k) => (state.byKey[k] ? state.byKey[k].name_pt : k)).join(", ");
+    const cls = x.ok ? "good" : x.required ? "bad" : "neutral";
+    const tip = x.ok ? names : x.required ? "Falta no deck" : "Opcional — nenhuma carta";
+    return `<span class="tag ${cls}" data-tip="${esc(tip)}">${icon(x.ok ? "check" : "alert")} ${esc(x.name)}</span>`;
+  };
+  return `<div class="panel"><h2>Funções do deck</h2>
+    <div class="sub">Essenciais</div><div class="tags">${r.roles.filter((x) => x.required).map(chip).join("")}</div>
+    <div class="sub" style="margin-top:10px">Extras</div><div class="tags">${r.roles.filter((x) => !x.required).map(chip).join("")}</div></div>`;
 }
 
 function improvementsPanel(r) {
@@ -683,9 +741,12 @@ $("#lookup-tag").addEventListener("keydown", (e) => { if (e.key === "Enter") loo
 function renderChips() {
   for (const k of ["wincon", "must", "exclude"]) {
     const el = $("#chips-" + k);
-    el.innerHTML = state.build[k].map((c) => tile(state.byKey[c], { extraTip: "Clique para remover", showLevel: false })).join("")
+    el.innerHTML = state.build[k].map((c) => tile(state.byKey[c], { extraTip: "Clique para remover", showLevel: false,
+      form: state.buildForms[c] || "normal" })).join("")
       + `<button class="add-tile" data-tip="Adicionar">+</button>`;
-    $$(".ctile", el).forEach((t) => t.addEventListener("click", () => { state.build[k] = state.build[k].filter((x) => x !== t.dataset.key); renderChips(); }));
+    $$(".ctile", el).forEach((t) => t.addEventListener("click", () => {
+      state.build[k] = state.build[k].filter((x) => x !== t.dataset.key); delete state.buildForms[t.dataset.key]; renderChips();
+    }));
     $(".add-tile", el).addEventListener("click", () => openPicker(k));
   }
 }
@@ -703,6 +764,7 @@ $("#btn-build").addEventListener("click", async () => {
       style: $("#build-style").value || null,
       max_avg_elixir: parseFloat($("#build-max").value) || null, min_avg_elixir: parseFloat($("#build-min").value) || null,
       top_k: parseInt($("#build-top").value) || 5,
+      forced_forms: Object.fromEntries(Object.entries(state.buildForms).filter(([k]) => state.build.must.includes(k) || state.build.wincon.includes(k))),
     };
     if ($("#build-use-col").checked) {
       body.collection = collectionPayload();

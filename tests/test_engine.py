@@ -75,3 +75,10 @@ def test_batch_matches_single(engine):
     single = engine.evaluate([idx])["p"][0]
     batch = engine.evaluate(np.array([idx, idx[::-1]]))["p"]
     assert np.allclose(batch[0], single) and np.allclose(batch[1], single)
+
+
+def test_deck_roles(engine):
+    r = engine.analyze(["Hog Rider", "Musketeer", "Ice Golem", "Skeletons", "Ice Spirit", "Cannon", "Fireball", "The Log"])
+    roles = {x["role"]: x for x in r["roles"]}
+    assert all(x["ok"] for x in r["roles"] if x["required"])
+    assert "Hog Rider" in roles["wincon"]["cards"] and roles["spell2"]["ok"]

@@ -22,6 +22,7 @@ from .explain import DIM_BAD, DIM_GOOD, DIM_PT, VULNERABILITIES, fmt_pct, join_p
 from .features import FeatureExtractor, SynergyModel
 import copy
 
+from .roles import deck_roles
 from .levels import EVO, FORM_CODES, FORM_NAMES, HERO, NORMAL, SLOT_ALLOWED, LevelModel, PlayerCollection, arrange_slots, forms_valid
 from .settings import load_settings
 from .stats import CONFIDENCE_TEXT, beta_posterior, confidence_level, logit, matchup_label, sigmoid
@@ -80,6 +81,10 @@ class Engine:
         self.gamma = self.cfg["levels"]["gamma_per_level"]
 
     def attach_model(self, model: DataModel):
+        if model.n != self.catalog.n:  # catálogo mudou (cartas novas): modelo precisa ser retreinado
+            self.model = None
+            self._model_note = "O catálogo de cartas mudou desde o último treino; o modelo será retreinado na próxima coleta."
+            return
         self.model = model
         self.__dict__.pop("_opp_cache", None)
         n_arch = model.arch_games
@@ -199,11 +204,28 @@ class Engine:
         support = m.card_arch_games[idx].min(1)  # B x K: carta menos observada limita a confiança
         return out, support
 
+    def _forced_values(self, col, force: dict | None):
+        """Valores de formas para escolha (sel) e para bônus (real), aplicando formas exigidas pelo usuário."""
+        real = self.levels.form_values(col)
+        if not force:
+            return real, real
+        ev, hv = real[0].copy(), real[1].copy()
+        theo_ev, theo_hv = self.levels.form_values(None)
+        sel_ev, sel_hv = ev.copy(), hv.copy()
+        for i, f in force.items():
+            if f == EVO:
+                ev[i] = max(ev[i], theo_ev[i]); sel_ev[i] = 1e3; sel_hv[i] = 0.0  # noqa: E702
+            elif f == HERO:
+                hv[i] = max(hv[i], theo_hv[i]); sel_hv[i] = 1e3; sel_ev[i] = 0.0  # noqa: E702
+            else:
+                sel_ev[i] = sel_hv[i] = 0.0
+        return (sel_ev, sel_hv), (ev, hv)
+
     def evaluate(self, idx, col: PlayerCollection | None = None, detail: bool = False, fast: bool = False,
-                 forms=None) -> dict:
+                 forms=None, force: dict | None = None) -> dict:
         idx = np.atleast_2d(np.asarray(idx))
-        values = self.levels.form_values(col)
-        forms = self.levels.auto_forms(idx, col, values) if forms is None else np.atleast_2d(np.asarray(forms))
+        sel, values = self._forced_values(col, force)
+        forms = self.levels.auto_forms(idx, col, sel) if forms is None else np.atleast_2d(np.asarray(forms))
         form_bonus = self.levels.form_bonus(idx, forms, col, values)
         primary, labels = self.clf.classify_batch(idx)
         caps = self.fx.capabilities(idx)
@@ -316,7 +338,7 @@ class Engine:
         return [t for _, t in dpos[:top]], [t for _, t in dneg[:top]]
 
     # ---------------------------------------------------------------- análise completa
-    def analyze(self, names_or_idx, col: PlayerCollection | None = None, forms=None) -> dict:
+    def analyze(self, names_or_idx, col: PlayerCollection | None = None, forms=None, force: dict | None = None) -> dict:
         """forms: None (escolha automática das melhores Evos/Heróis disponíveis) ou uma forma por
         posição, na ordem do deck: "normal" | "evo" | "hero"."""
         idx = (self.parse_deck(names_or_idx) if isinstance(names_or_idx[0], str) else list(names_or_idx))
@@ -324,10 +346,10 @@ class Engine:
         codes = self.parse_forms(idx, forms, col, warnings)
         forms_auto = codes is None
         if forms_auto:
-            codes = [int(x) for x in self.levels.auto_forms([idx], col)[0]]
+            codes = [int(x) for x in self.levels.auto_forms([idx], col, self._forced_values(col, force)[0])[0]]
         idx, codes = arrange_slots(idx, codes) if forms_auto else (idx, codes)
         cards = [self.catalog.cards[i] for i in idx]
-        ev = self.evaluate([idx], col, detail=True, forms=[codes])
+        ev = self.evaluate([idx], col, detail=True, forms=[codes], force=force)
         matchups = self.finalize_matchups(idx, ev)
         for a, m in enumerate(matchups):
             pos, neg = self.matchup_reasons(ev, a)
@@ -379,6 +401,7 @@ class Engine:
             "levels": self._level_summary(idx, col, ev, codes),
             "slots": [{"card": self.catalog.cards[i].key, "form": FORM_NAMES[f]} for i, f in zip(idx, codes)],
             "forms_auto": forms_auto,
+            "roles": deck_roles(self.catalog, idx),
             "improvements": self._improvements(idx, codes, col, ev) if col is not None else None,
             "warnings": warnings,
             "factors": factors,
@@ -582,7 +605,7 @@ class Engine:
     # ---------------------------------------------------------------- status
     def data_status(self) -> dict:
         if self.model is None:
-            return {"model": False, "note": "Nenhum modelo treinado: todas as estimativas são heurísticas."}
+            return {"model": False, "note": getattr(self, "_model_note", None) or "Nenhum modelo treinado: todas as estimativas são heurísticas."}
         info = dict(self.model.info)
         info["model"] = True
         if self.model.is_synthetic:

@@ -19,6 +19,7 @@ import numpy as np
 from .archetypes import A_INDEX, ARCH_PT, ARCHETYPES
 from .engine import DeckError, Engine
 from .levels import PlayerCollection
+from .roles import missing_required, required_matrix
 
 
 @dataclass
@@ -32,6 +33,7 @@ class BuildRequest:
     min_avg_elixir: float | None = None
     top_k: int | None = None
     potential: bool = True                  # incluir decks extras "se você upar/desbloquear"
+    forced_forms: dict = field(default_factory=dict)  # idx -> 0 normal / 1 evo / 2 hero exigidos pelo usuário
 
 
 class DeckBuilder:
@@ -40,10 +42,11 @@ class DeckBuilder:
         self.cat = engine.catalog
         self.bcfg = engine.cfg["builder"]
         self.f = self.cat.features
+        self.roles_R = required_matrix(self.cat)
 
     # ---------------------------------------------------------------- objetivo
     def _score(self, decks: np.ndarray, req: BuildRequest, col) -> np.ndarray:
-        ev = self.engine.evaluate(decks, col, fast=True)
+        ev = self.engine.evaluate(decks, col, fast=True, force=req.forced_forms or None)
         s = ev["score"].copy()
         f = self.f
         champs = f["champ"][decks].sum(1)
@@ -56,6 +59,9 @@ class DeckBuilder:
                 s -= 0.5 * np.maximum(avg - req.max_avg_elixir, 0)
             if req.min_avg_elixir:
                 s -= 0.5 * np.maximum(req.min_avg_elixir - avg, 0)
+        if decks.shape[1] == 8:
+            # Funções essenciais do Draft (filtro leve: só desempata a favor de decks completos)
+            s -= self.bcfg.get("role_penalty", 0.01) * missing_required(self.roles_R, decks)
         if req.win_conditions:
             has = np.isin(decks, req.win_conditions).any(1)
             s[~has] -= 10
@@ -173,7 +179,7 @@ class DeckBuilder:
         chosen = self._select_diverse(ranked, must, req, top_k * 2)
         results = []
         for deck, s in chosen:
-            rep = self.engine.analyze(list(deck), col)
+            rep = self.engine.analyze(list(deck), col, force=req.forced_forms or None)
             results.append({"score_search": round(s, 4), "analysis": rep})
         # reordena com a análise completa (inclui partidas do deck exato)
         results.sort(key=lambda r: -r["analysis"]["overall"]["score"])
@@ -230,21 +236,29 @@ class DeckBuilder:
             pot.levels[i] = max(pot.levels[i], col.reference_level)
         pot.evolutions |= {i for i in pot.levels if cat.cards[i].evo}
         pot.heroes |= {i for i in pot.levels if cat.cards[i].has("hero")}
-        seen = self._search(req, pot, pool, must, wcs, rng, light=True)
+        seen = self._search(req, pot, pool, must, wcs, rng, light=False)
         shown_idx = [{cat.by_key[k].idx for k in d} for d in shown]
-        cands = [d for d, _s in sorted(seen.items(), key=lambda kv: -kv[1])[:80]
+        cands = [d for d, _s in sorted(seen.items(), key=lambda kv: -kv[1])[:200]
                  if all(len(set(d) - sd) >= 2 for sd in shown_idx)]
         if not cands:
             return []
         arr = np.array(cands)
-        gain = self.engine.evaluate(arr, pot)["ev"] - self.engine.evaluate(arr, col)["ev"]  # em lote
+        force = req.forced_forms or None
+        now_ev = self.engine.evaluate(arr, col, force=force)
+        fut_ev = self.engine.evaluate(arr, pot, force=force)
+        gain = fut_ev["ev"] - now_ev["ev"]
+        primary = fut_ev["primary"]
+        per_arch: dict[int, int] = {}
         out = []
-        for j in np.argsort(-gain):
+        limit, cap = self.bcfg.get("potential_k", 5), self.bcfg.get("potential_per_archetype", 2)
+        # ordena pelo resultado com as melhorias (o deck "pronto"), exigindo ganho real
+        for j in np.argsort(-fut_ev["score"]):
             deck = cands[j]
-            if gain[j] < 0.01 or any(len(set(deck) - sd) < 2 for sd in shown_idx):
+            a = int(primary[j])
+            if gain[j] < 0.01 or per_arch.get(a, 0) >= cap or any(len(set(deck) - sd) < 2 for sd in shown_idx):
                 continue
-            now = self.engine.analyze(list(deck), col)
-            future = self.engine.analyze(list(deck), pot)
+            now = self.engine.analyze(list(deck), col, force=force)
+            future = self.engine.analyze(list(deck), pot, force=force)
             ups = [{"card": cat.cards[i].key, "from": col.levels[i], "to": col.reference_level}
                    for i in deck if col.levels.get(i, col.reference_level) < col.reference_level - 0.5]
             unlocks = [{"card": sl["card"], "kind": sl["form"]} for sl in future["slots"]
@@ -255,7 +269,8 @@ class DeckBuilder:
             out.append({"analysis": now, "potential_ev": future["overall"]["ev"], "potential_slots": future["slots"],
                         "gain": round(future["overall"]["ev"] - now["overall"]["ev"], 4), "upgrades": ups, "unlocks": unlocks})
             shown_idx.append(set(deck))
-            if len(out) >= self.bcfg.get("potential_k", 2):
+            per_arch[a] = per_arch.get(a, 0) + 1
+            if len(out) >= limit:
                 break
         return out
 

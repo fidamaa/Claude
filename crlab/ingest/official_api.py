@@ -129,16 +129,46 @@ def _norm_level(card: dict) -> float | None:
     return card["level"] + (MAX_STD_LEVEL - card.get("maxLevel", MAX_STD_LEVEL))
 
 
+# Capacidades do catálogo: nome -> (tem Evo, tem Herói). Registrado pela API/coletor ao iniciar.
+CAPS: dict[str, tuple[bool, bool]] = {}
+
+
+def register_catalog(catalog) -> None:
+    CAPS.clear()
+    for c in catalog.cards:
+        CAPS[c.key] = (bool(c.evo), c.has("hero"))
+
+
+def card_forms(card: dict) -> tuple[bool, bool]:
+    """(Evo desbloqueada/usada, Herói desbloqueado/usado) de uma carta da API oficial.
+
+    A API usa o mesmo campo `evolutionLevel` para Evolução e Herói. Interpretação:
+      * campos explícitos de Herói (isHero, heroLevel...) têm prioridade;
+      * carta só com Evo  -> evolutionLevel > 0 significa Evo;
+      * carta só com Herói -> evolutionLevel > 0 significa Herói;
+      * carta com as duas -> bit 1 = Evo, bit 2 = Herói (1 = Evo, 2 = Herói, 3 = ambos).
+    O endpoint /api/player/{tag}/raw mostra os valores crus para confirmar."""
+    lvl = int(card.get("evolutionLevel") or 0)
+    explicit_hero = bool(card.get("isHero") or card.get("hero") or int(card.get("heroLevel") or 0) > 0
+                         or str(card.get("variant", "")).lower() == "hero")
+    can_evo, can_hero = CAPS.get(card.get("name", ""), (True, False))
+    if explicit_hero:
+        return (can_evo and lvl > 0 and not can_hero) or bool(lvl & 1 and can_evo and can_hero), True
+    if lvl <= 0:
+        return False, False
+    if can_evo and can_hero:
+        return bool(lvl & 1), bool(lvl & 2)
+    if can_hero:
+        return False, True
+    return True, False
+
+
 def _is_evo(card: dict) -> bool:
-    return int(card.get("evolutionLevel") or 0) > 0 and not _is_hero(card)
+    return card_forms(card)[0]
 
 
 def _is_hero(card: dict) -> bool:
-    """A API ainda não documenta publicamente como marca Heróis; aceita os campos prováveis.
-    (Se o formato for outro, o jogador pode marcar seus Heróis manualmente na Coleção.)"""
-    if card.get("isHero") or card.get("hero") or int(card.get("heroLevel") or 0) > 0:
-        return True
-    return str(card.get("variant", "")).lower() == "hero"
+    return card_forms(card)[1]
 
 
 def _side(p: dict) -> dict:
